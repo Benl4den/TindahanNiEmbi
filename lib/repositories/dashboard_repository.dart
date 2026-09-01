@@ -1,0 +1,58 @@
+import 'package:sqflite/sqflite.dart';
+
+class DashboardSummary {
+  const DashboardSummary({
+    required this.products,
+    required this.lowStock,
+    required this.outOfStock,
+    required this.outstandingCentavos,
+    required this.stockOutToday,
+    required this.inventoryValueCentavos,
+  });
+  final int products,
+      lowStock,
+      outOfStock,
+      outstandingCentavos,
+      stockOutToday,
+      inventoryValueCentavos;
+}
+
+class DashboardRepository {
+  const DashboardRepository(this.db);
+  final Database db;
+  Future<DashboardSummary> summary({DateTime? now}) async {
+    final date = (now ?? DateTime.now()).toLocal(),
+        start = DateTime(
+          date.year,
+          date.month,
+          date.day,
+        ).toUtc().toIso8601String(),
+        end = DateTime(
+          date.year,
+          date.month,
+          date.day + 1,
+        ).toUtc().toIso8601String();
+    final p = (await db.rawQuery(
+      '''SELECT COUNT(*) products,SUM(CASE WHEN current_quantity>0 AND current_quantity<=minimum_stock_level THEN 1 ELSE 0 END) low_stock,SUM(CASE WHEN current_quantity=0 THEN 1 ELSE 0 END) out_stock,COALESCE(SUM(current_quantity*purchase_price_centavos),0) value FROM products WHERE is_archived=0''',
+    )).single;
+    final debt =
+        (await db.rawQuery(
+              'SELECT COALESCE(SUM(amount_change_centavos),0) value FROM customer_ledger_entries',
+            )).single['value']!
+            as int;
+    final out =
+        (await db.rawQuery(
+              "SELECT COALESCE(SUM(-m.quantity_change),0) value FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id WHERE m.quantity_change<0 AND t.type IN('UTANG','CASH_SALE') AND t.occurred_at>=? AND t.occurred_at<?",
+              [start, end],
+            )).single['value']!
+            as int;
+    return DashboardSummary(
+      products: p['products']! as int,
+      lowStock: (p['low_stock'] as int?) ?? 0,
+      outOfStock: (p['out_stock'] as int?) ?? 0,
+      outstandingCentavos: debt,
+      stockOutToday: out,
+      inventoryValueCentavos: p['value']! as int,
+    );
+  }
+}
