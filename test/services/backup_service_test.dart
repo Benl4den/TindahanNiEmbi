@@ -55,6 +55,7 @@ void main() {
     final manifest = await service.validate(target);
     expect(manifest.schemaVersion, AppDatabase.schemaVersion);
     expect(manifest.imageCount, 1);
+    expect(await service.lastSuccessfulBackup(), isNotNull);
     final archive = ZipDecoder().decodeBytes(await File(target).readAsBytes());
     expect(archive.any((f) => f.name == 'database/tindahan.db'), isTrue);
     expect(archive.any((f) => f.name == 'images/photo.jpg'), isTrue);
@@ -141,4 +142,25 @@ void main() {
       throwsA(isA<InvalidBackupException>()),
     );
   });
+
+  test(
+    'backup rotation deletes only excess recognized backup copies',
+    () async {
+      for (var i = 0; i < 6; i++) {
+        final file = File('${temp.path}/TindahanNiEmbi_$i.tnebackup.zip');
+        await file.writeAsBytes([i]);
+        await file.setLastModified(DateTime(2026, 1, i + 1));
+      }
+      final unrelated = File('${temp.path}/important.db');
+      await unrelated.writeAsBytes([9]);
+      final service = BackupService(
+        app,
+        documentsDirectory: temp,
+        keepLocalBackups: 3,
+      );
+      await service.rotateLocalBackups();
+      expect(await service.localBackups(), hasLength(3));
+      expect(await unrelated.exists(), isTrue);
+    },
+  );
 }

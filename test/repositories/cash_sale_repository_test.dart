@@ -6,9 +6,12 @@ import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/database/migrations/migration_v1.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
+import 'package:tindahan_ni_embi/models/customer.dart';
 import 'package:tindahan_ni_embi/repositories/cash_sale_repository.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
+import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -36,13 +39,13 @@ void main() {
   });
   tearDown(() => app.close());
   test('V2 installed and cash sale atomically snapshots and deducts', () async {
-    expect(AppDatabase.schemaVersion, 5);
+    expect(AppDatabase.schemaVersion, 8);
     expect(
       (await db.query(
         'schema_migrations',
         orderBy: 'version',
       )).map((x) => x['version']),
-      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6, 7, 8],
     );
     final id = await CashSaleRepository(db)
         .save([UtangItemDraft(productId: p.id, quantity: 2)]);
@@ -119,6 +122,31 @@ void main() {
     expect(item['unit_price_centavos'], 900);
   });
 
+  test(
+    'Sales history combines cash and UTANG without duplicating data',
+    () async {
+      final cash = CashSaleRepository(db);
+      await cash.save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      final customer = await SqliteCustomerRepository(db)
+          .create(const CustomerDraft(fullName: 'Maria'));
+      await UtangRepository(db).save(
+        UtangDraft(
+          customerId: customer.id,
+          items: [UtangItemDraft(productId: p.id, quantity: 2)],
+        ),
+      );
+      final all = await cash.history();
+      expect(all, hasLength(2));
+      expect(all.map((x) => x.type).toSet(), {'CASH', 'UTANG'});
+      expect((await cash.history(type: 'UTANG')).single.customerName, 'Maria');
+      expect(
+        (await cash.utangItems(all.firstWhere((x) => x.isUtang).id))
+            .single['product_name_snapshot'],
+        'Kape',
+      );
+    },
+  );
+
   test('existing V1 database upgrades safely to V2', () async {
     final directory = await Directory.systemTemp.createTemp(
       'tindahan_upgrade_',
@@ -143,7 +171,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       )).map((row) => row['version']),
-      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6, 7, 8],
     );
     expect(
       await upgradedDb.rawQuery(

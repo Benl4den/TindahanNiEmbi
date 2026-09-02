@@ -29,7 +29,10 @@ class InventoryRepository {
 
   Future<int> inventoryValueCentavos() async {
     final rows = await _database.rawQuery(
-      'SELECT COALESCE(SUM(current_quantity * purchase_price_centavos), 0) value FROM products WHERE is_archived = 0',
+      '''SELECT COALESCE(SUM(p.current_quantity * p.purchase_price_centavos), 0) value
+         FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
+           SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+           WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
     );
     return rows.single['value']! as int;
   }
@@ -84,6 +87,18 @@ class InventoryRepository {
       );
       if (products.isEmpty) {
         throw const InvalidInventoryOperation('Product not found.');
+      }
+      if (type == 'STOCK_IN') {
+        final consigned = await txn.rawQuery(
+          '''SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+             WHERE m.product_id=? AND m.archived_at IS NULL AND g.code='CONSIGNMENT' LIMIT 1''',
+          [productId],
+        );
+        if (consigned.isNotEmpty) {
+          throw const InvalidInventoryOperation(
+            'Use Receive Consignment for this product.',
+          );
+        }
       }
       final before = products.single['current_quantity']! as int;
       final after = before + quantityChange;

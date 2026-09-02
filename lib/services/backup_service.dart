@@ -43,9 +43,14 @@ class BackupManifest {
 }
 
 class BackupService {
-  BackupService(this.appDatabase, {this.documentsDirectory});
+  BackupService(
+    this.appDatabase, {
+    this.documentsDirectory,
+    this.keepLocalBackups = 5,
+  });
   final AppDatabase appDatabase;
   final Directory? documentsDirectory;
+  final int keepLocalBackups;
   Future<Directory> get _documents async =>
       documentsDirectory ?? await getApplicationDocumentsDirectory();
   Future<String> create({String? outputPath}) async {
@@ -76,6 +81,7 @@ class BackupService {
       );
       await File(path.join(temp.path, 'manifest.json'))
           .writeAsString(jsonEncode(manifest.toJson()));
+      final localTarget = outputPath == null;
       final target =
           outputPath ??
           path.join(
@@ -83,6 +89,8 @@ class BackupService {
             'TindahanNiEmbi_${DateTime.now().millisecondsSinceEpoch}.tnebackup.zip',
           );
       await ZipFileEncoder().zipDirectory(temp, filename: target);
+      await validate(target);
+      if (localTarget) await rotateLocalBackups();
       await db.insert('activity_logs', {
         'event_type': 'BACKUP_CREATED',
         'description': 'Backup created',
@@ -92,6 +100,76 @@ class BackupService {
       return target;
     } finally {
       if (await temp.exists()) await temp.delete(recursive: true);
+    }
+  }
+
+  Future<DateTime?> lastSuccessfulBackup() async {
+    final db = await appDatabase.database;
+    final rows = await db.query(
+      'activity_logs',
+      columns: ['created_at'],
+      where: "event_type='BACKUP_CREATED'",
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : DateTime.parse(rows.single['created_at']! as String).toLocal();
+  }
+
+  Future<List<File>> localBackups() async {
+    final directory = await _documents;
+    if (!await directory.exists()) return [];
+    final files = await directory
+        .list()
+        .where(
+          (e) =>
+              e is File &&
+              path.basename(e.path).startsWith('TindahanNiEmbi_') &&
+              e.path.endsWith('.tnebackup.zip'),
+        )
+        .cast<File>()
+        .toList();
+    files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    return files;
+  }
+
+  Future<void> rotateLocalBackups() async {
+    if (keepLocalBackups < 1) return;
+    final files = await localBackups();
+    for (final old in files.skip(keepLocalBackups)) {
+      await old.delete();
+    }
+  }
+
+  Future<BackupHealth> health() async {
+    final files = await localBackups();
+    if (files.isEmpty) return const BackupHealth(status: 'Backup Recommended');
+    final file = files.first;
+    try {
+      final manifest = await validate(file.path);
+      final modified = await file.lastModified();
+      final age = DateTime.now().difference(modified).inDays;
+      return BackupHealth(
+        status: age > 14
+            ? 'Backup Overdue'
+            : age > 7
+            ? 'Backup Recommended'
+            : 'Recent',
+        createdAt: manifest.createdAt.toLocal(),
+        filePath: file.path,
+        fileSizeBytes: await file.length(),
+        imageCount: manifest.imageCount,
+        schemaVersion: manifest.schemaVersion,
+        valid: true,
+      );
+    } catch (_) {
+      return BackupHealth(
+        status: 'Backup Recommended',
+        filePath: file.path,
+        fileSizeBytes: await file.length(),
+        valid: false,
+      );
     }
   }
 
@@ -109,6 +187,7 @@ class BackupService {
     }
     ArchiveFile? manifestFile, dbFile;
     var hasImages = false;
+    var imageFiles = 0;
     for (final f in archive) {
       if (f.name == 'manifest.json') manifestFile = f;
       if (f.name == 'database/tindahan.db') dbFile = f;
@@ -116,6 +195,7 @@ class BackupService {
           f.name == 'images/' ||
           f.name.startsWith('images/')) {
         hasImages = true;
+        if (f.isFile) imageFiles++;
       }
     }
     if (manifestFile == null) {
@@ -131,6 +211,14 @@ class BackupService {
     );
     if (manifest.schemaVersion > AppDatabase.schemaVersion) {
       throw const InvalidBackupException('Incompatible schema');
+    }
+    if (manifest.imageCount != imageFiles) {
+      throw const InvalidBackupException('Backup image manifest mismatch');
+    }
+    final databaseBytes = dbFile.content as List<int>;
+    if (databaseBytes.length < 16 ||
+        utf8.decode(databaseBytes.take(15).toList()) != 'SQLite format 3') {
+      throw const InvalidBackupException('Invalid SQLite snapshot');
     }
     return manifest;
   }
@@ -213,4 +301,22 @@ class BackupService {
       }
     }
   }
+}
+
+class BackupHealth {
+  const BackupHealth({
+    required this.status,
+    this.createdAt,
+    this.filePath,
+    this.fileSizeBytes = 0,
+    this.imageCount = 0,
+    this.schemaVersion,
+    this.valid = false,
+  });
+  final String status;
+  final DateTime? createdAt;
+  final String? filePath;
+  final int fileSizeBytes, imageCount;
+  final int? schemaVersion;
+  final bool valid;
 }

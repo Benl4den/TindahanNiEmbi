@@ -9,6 +9,9 @@ import '../../../models/utang_draft.dart';
 import '../../../repositories/customer_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/payment_repository.dart';
+import '../../../repositories/reversal_repository.dart';
+import '../../../repositories/correction_repository.dart';
+import '../../../services/auth_service.dart';
 import '../../payments/presentation/payment_screen.dart';
 import '../../../repositories/utang_repository.dart';
 import '../../customers/presentation/customer_form_screen.dart';
@@ -22,11 +25,13 @@ class UtangCustomerScreen extends StatefulWidget {
     required this.products,
     required this.utang,
     required this.payments,
+    this.reversals,
   });
   final CustomerRepository customers;
   final ProductRepository products;
   final UtangRepository utang;
   final PaymentRepository payments;
+  final ReversalRepository? reversals;
   @override
   State<UtangCustomerScreen> createState() => _UtangCustomerScreenState();
 }
@@ -87,6 +92,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
           products: widget.products,
           utang: widget.utang,
           payments: widget.payments,
+          reversals: widget.reversals,
         ),
       ),
     );
@@ -396,12 +402,14 @@ class CustomerUtangScreen extends StatefulWidget {
     required this.products,
     required this.utang,
     required this.payments,
+    this.reversals,
   });
   final int customerId;
   final CustomerRepository customers;
   final ProductRepository products;
   final UtangRepository utang;
   final PaymentRepository payments;
+  final ReversalRepository? reversals;
   @override
   State<CustomerUtangScreen> createState() => _CustomerUtangState();
 }
@@ -480,6 +488,10 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                                         .onSurfaceVariant,
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Last UTANG: ${_lastDate(d.ledger, 'UTANG')}\nLast Payment: ${_lastDate(d.ledger, 'PAYMENT')}\nOutstanding UTANG transactions: ${_outstandingCount(d)}',
+                          ),
                         ],
                       ),
                     ),
@@ -493,12 +505,20 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                       onPressed: d.customer.balanceCentavos <= 0
                           ? null
                           : () async {
-                              final ok = await Navigator.push<bool>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PaymentScreen(
-                                    customer: d.customer,
-                                    repository: widget.payments,
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => Dialog(
+                                  insetPadding: const EdgeInsets.all(16),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 620,
+                                      maxHeight: 620,
+                                    ),
+                                    child: PaymentScreen(
+                                      customer: d.customer,
+                                      repository: widget.payments,
+                                    ),
                                   ),
                                 ),
                               );
@@ -536,9 +556,16 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                           : Icons.payments,
                     ),
                   ),
-                  title: Text(e.type.startsWith('UTANG') ? 'UTANG' : 'Payment'),
+                  title: Text(
+                    e.type.startsWith('UTANG')
+                        ? MaterialLocalizations.of(context)
+                              .formatMediumDate(e.occurredAt.toLocal())
+                        : 'Payment',
+                  ),
                   subtitle: Text(
-                    '${_date(e.occurredAt.toLocal())}\n${e.itemCount == null ? '' : '${e.itemCount} products'}',
+                    '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
+                    '${e.description == null ? '' : ' • ${e.description}'}\n'
+                    '${e.itemCount == null ? '' : '${e.itemCount} items'}',
                   ),
                   trailing: e.type == 'UTANG'
                       ? Column(
@@ -574,6 +601,10 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                         ),
                   onTap: e.type == 'UTANG' && e.utangTransactionId != null
                       ? () => _showDetails(d, e)
+                      : e.type == 'PAYMENT' &&
+                            e.paymentId != null &&
+                            widget.reversals != null
+                      ? () => _showPaymentDetails(e, d.customer)
                       : null,
                 ),
               ),
@@ -607,8 +638,275 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
         transactionId: entry.utangTransactionId!,
         previousCentavos: previous,
         resultingCentavos: previous + entry.amountCentavos,
+        reversals: widget.reversals,
       ),
     );
+  }
+
+  Future<void> _reversePayment(CustomerLedgerEntry entry) async {
+    final reason = TextEditingController(), pin = TextEditingController();
+    String? error;
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (x) => StatefulBuilder(
+        builder: (_, set) => AlertDialog(
+          title: const Text('Reverse Only?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: reason,
+                decoration: InputDecoration(
+                  labelText: 'Reason',
+                  border: const OutlineInputBorder(),
+                  errorText: error,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pin,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Owner PIN',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(x, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+              ),
+              onPressed: () async {
+                if (reason.text.trim().isEmpty) {
+                  set(() => error = 'Reason is required.');
+                  return;
+                }
+                try {
+                  final authorized =
+                      await AuthService(widget.reversals!.db)
+                          .verify(pin.text) ==
+                      UserRole.owner;
+                  if (!authorized) {
+                    throw const ReversalException('Incorrect Owner PIN.');
+                  }
+                  await widget.reversals!.reversePayment(
+                    entry.paymentId!,
+                    reason.text,
+                    ownerPinAuthorized: true,
+                  );
+                  if (x.mounted) Navigator.pop(x, true);
+                } catch (e) {
+                  if (x.mounted) {
+                    set(
+                      () => error = e is ReversalException
+                          ? e.message
+                          : 'Could not reverse payment.',
+                    );
+                  }
+                }
+              },
+              child: const Text('Confirm Reversal'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (done == true && mounted) setState(reload);
+  }
+
+  Future<void> _showPaymentDetails(
+    CustomerLedgerEntry entry,
+    Customer customer,
+  ) async {
+    final relation = await CorrectionRepository(widget.reversals!.db)
+        .relationship('PAYMENT', entry.paymentId!);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Payment Details'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                customer.fullName,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              Text(_date(entry.occurredAt.toLocal())),
+              Text(
+                _money(entry.amountCentavos.abs()),
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              if (relation != null)
+                Text(
+                  relation['original_entity_id'] == entry.paymentId
+                      ? 'Status: CORRECTED\nCorrected by PAY-${(relation['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${relation['reason']}'
+                      : 'Status: COMPLETED — correction of PAY-${(relation['original_entity_id']! as int).toString().padLeft(6, '0')}',
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          if (relation == null)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(dialog);
+                await _correctPayment(entry, customer);
+              },
+              child: const Text('Correct Transaction'),
+            ),
+          if (relation == null)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(dialog);
+                await _reversePayment(entry);
+              },
+              child: const Text('Reverse Only'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _correctPayment(
+    CustomerLedgerEntry entry,
+    Customer customer,
+  ) async {
+    final amount = TextEditingController(),
+        reason = TextEditingController(),
+        pin = TextEditingController();
+    String? error;
+    var saving = false;
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, set) {
+          final cents = ((double.tryParse(amount.text) ?? 0) * 100).round();
+          return AlertDialog(
+            title: const Text('Correct Transaction'),
+            content: SizedBox(
+              width: 520,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${customer.fullName}\nOriginal Payment: ${_money(entry.amountCentavos.abs())}',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amount,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (_) => set(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Corrected Payment',
+                      prefixText: '₱ ',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  Text(
+                    'Resulting Current UTANG: ${_money(customer.balanceCentavos + entry.amountCentavos.abs() - cents)}',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reason,
+                    decoration: InputDecoration(
+                      labelText: 'Correction reason',
+                      border: const OutlineInputBorder(),
+                      errorText: error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: pin,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Owner PIN',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialog, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving || cents <= 0
+                    ? null
+                    : () async {
+                        set(() => saving = true);
+                        try {
+                          final authorized =
+                              await AuthService(widget.reversals!.db)
+                                  .verify(pin.text) ==
+                              UserRole.owner;
+                          await CorrectionRepository(widget.reversals!.db)
+                              .correctPayment(
+                                originalId: entry.paymentId!,
+                                correctedAmountCentavos: cents,
+                                reason: reason.text,
+                                ownerPinAuthorized: authorized,
+                              );
+                          if (dialog.mounted) Navigator.pop(dialog, true);
+                        } catch (e) {
+                          if (dialog.mounted) {
+                            set(() {
+                              saving = false;
+                              error = e is CorrectionException
+                                  ? e.message
+                                  : 'Could not correct payment.';
+                            });
+                          }
+                        }
+                      },
+                child: const Text('Confirm Correction'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (done == true && mounted) setState(reload);
+  }
+
+  String _lastDate(List<CustomerLedgerEntry> entries, String type) {
+    final matching = entries.where((e) => e.type == type).toList()
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    return matching.isEmpty
+        ? 'None'
+        : _date(matching.first.occurredAt.toLocal());
+  }
+
+  int _outstandingCount(CustomerDetails details) {
+    var remaining = details.customer.balanceCentavos, count = 0;
+    final debts = details.ledger.where((e) => e.type == 'UTANG').toList()
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    for (final debt in debts) {
+      if (remaining <= 0) break;
+      count++;
+      remaining -= debt.amountCentavos;
+    }
+    return count;
   }
 }
 
@@ -619,10 +917,12 @@ class UtangDetailsDialog extends StatelessWidget {
     required this.transactionId,
     required this.previousCentavos,
     required this.resultingCentavos,
+    this.reversals,
   });
   final CustomerRepository repository;
   final int transactionId;
   final int previousCentavos, resultingCentavos;
+  final ReversalRepository? reversals;
   @override
   Widget build(BuildContext context) => Dialog(
     child: ConstrainedBox(
@@ -730,11 +1030,125 @@ class UtangDetailsDialog extends StatelessWidget {
                 ),
                 _balance('Previous UTANG', money(previousCentavos)),
                 _balance('Current/Resulting UTANG', money(resultingCentavos)),
+                if (d['status'] == 'REVERSED')
+                  const Chip(label: Text('REVERSED')),
+                if (reversals != null)
+                  FutureBuilder<Map<String, Object?>?>(
+                    future: CorrectionRepository(reversals!.db)
+                        .relationship('UTANG', transactionId),
+                    builder: (_, s) {
+                      final r = s.data;
+                      if (r == null) return const SizedBox.shrink();
+                      return Text(
+                        r['original_entity_id'] == transactionId
+                            ? 'CORRECTED by UTG-${(r['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${r['reason']}'
+                            : 'Correction of UTG-${(r['original_entity_id']! as int).toString().padLeft(6, '0')}',
+                      );
+                    },
+                  ),
                 const SizedBox(height: 14),
                 FilledButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Close'),
                 ),
+                if (reversals != null && d['status'] == 'POSTED') ...[
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () => _correct(context, d),
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('Correct Transaction'),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                    onPressed: () async {
+                      final reason = TextEditingController(),
+                          pin = TextEditingController();
+                      String? error;
+                      final done = await showDialog<bool>(
+                        context: context,
+                        builder: (x) => StatefulBuilder(
+                          builder: (_, set) => AlertDialog(
+                            title: const Text('Reverse Only?'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextField(
+                                  controller: reason,
+                                  decoration: InputDecoration(
+                                    labelText: 'Reason',
+                                    border: const OutlineInputBorder(),
+                                    errorText: error,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: pin,
+                                  obscureText: true,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Owner PIN',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(x, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.red.shade700,
+                                ),
+                                onPressed: () async {
+                                  if (reason.text.trim().isEmpty) {
+                                    set(() => error = 'Reason is required.');
+                                    return;
+                                  }
+                                  try {
+                                    final authorized =
+                                        await AuthService(reversals!.db)
+                                            .verify(pin.text) ==
+                                        UserRole.owner;
+                                    if (!authorized) {
+                                      throw const ReversalException(
+                                        'Incorrect Owner PIN.',
+                                      );
+                                    }
+                                    await reversals!.reverseUtang(
+                                      transactionId,
+                                      reason.text,
+                                      ownerPinAuthorized: true,
+                                    );
+                                    if (x.mounted) Navigator.pop(x, true);
+                                  } catch (e) {
+                                    if (x.mounted) {
+                                      set(
+                                        () => error = e is ReversalException
+                                            ? e.message
+                                            : 'Could not reverse UTANG.',
+                                      );
+                                    }
+                                  }
+                                },
+                                child: const Text('Confirm Reversal'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                      if (done == true && context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Reverse Only'),
+                  ),
+                ],
               ],
             ),
           );
@@ -742,6 +1156,211 @@ class UtangDetailsDialog extends StatelessWidget {
       ),
     ),
   );
+
+  Future<void> _correct(
+    BuildContext context,
+    Map<String, Object?> details,
+  ) async {
+    final db = reversals!.db;
+    final products = await db.query(
+      'products',
+      where: 'is_archived=0',
+      orderBy: 'name COLLATE NOCASE',
+    );
+    final customers = await db.query(
+      'customers',
+      where: 'is_archived=0',
+      orderBy: 'full_name COLLATE NOCASE',
+    );
+    if (!context.mounted) return;
+    final originalItems = details['items']! as List<Map<String, Object?>>;
+    final quantities = <int, int>{
+      for (final x in originalItems)
+        x['product_id']! as int: x['quantity']! as int,
+    };
+    final names = <int, String>{
+      for (final x in products) x['id']! as int: x['name']! as String,
+    };
+    for (final x in originalItems) {
+      names[x['product_id']! as int] = x['product_name_snapshot']! as String;
+    }
+    var customerId = details['customer_id']! as int;
+    int? addId = products.isEmpty ? null : products.first['id']! as int;
+    final reason = TextEditingController(), pin = TextEditingController();
+    String? error;
+    var saving = false;
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, set) => AlertDialog(
+          title: const Text('Correct Transaction'),
+          content: SizedBox(
+            width: 680,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ORIGINAL UTANG — ${details['reference']}\n${details['full_name']} • ₱${((details['total_centavos']! as int) / 100).toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Divider(),
+                  DropdownButtonFormField<int>(
+                    initialValue: customerId,
+                    decoration: const InputDecoration(
+                      labelText: 'Correct UTANGAN',
+                    ),
+                    items: customers
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c['id']! as int,
+                            child: Text(c['full_name']! as String),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => customerId = v!,
+                  ),
+                  ...quantities.keys.toList().map(
+                    (id) => Row(
+                      children: [
+                        Expanded(child: Text(names[id] ?? 'Product')),
+                        IconButton(
+                          onPressed: quantities[id]! > 1
+                              ? () => set(
+                                  () => quantities[id] = quantities[id]! - 1,
+                                )
+                              : null,
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Text('${quantities[id]}'),
+                        IconButton(
+                          onPressed: () =>
+                              set(() => quantities[id] = quantities[id]! + 1),
+                          icon: const Icon(Icons.add),
+                        ),
+                        IconButton(
+                          onPressed: () => set(() => quantities.remove(id)),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (products.isNotEmpty)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: addId,
+                            decoration: const InputDecoration(
+                              labelText: 'Add correct product',
+                            ),
+                            items: products
+                                .map(
+                                  (p) => DropdownMenuItem(
+                                    value: p['id']! as int,
+                                    child: Text(p['name']! as String),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => addId = v,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => set(() {
+                            if (addId != null) {
+                              quantities.update(
+                                addId!,
+                                (v) => v + 1,
+                                ifAbsent: () => 1,
+                              );
+                            }
+                          }),
+                          icon: const Icon(Icons.add_circle),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reason,
+                    decoration: InputDecoration(
+                      labelText: 'Correction reason',
+                      border: const OutlineInputBorder(),
+                      errorText: error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: pin,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Owner PIN',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialog, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (quantities.isEmpty || reason.text.trim().isEmpty) {
+                        set(
+                          () => error =
+                              'At least one item and a reason are required.',
+                        );
+                        return;
+                      }
+                      set(() => saving = true);
+                      try {
+                        final authorized =
+                            await AuthService(db).verify(pin.text) ==
+                            UserRole.owner;
+                        await CorrectionRepository(db).correctUtang(
+                          originalId: transactionId,
+                          corrected: UtangDraft(
+                            customerId: customerId,
+                            items: quantities.entries
+                                .map(
+                                  (e) => UtangItemDraft(
+                                    productId: e.key,
+                                    quantity: e.value,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                          reason: reason.text,
+                          ownerPinAuthorized: authorized,
+                        );
+                        if (dialog.mounted) Navigator.pop(dialog, true);
+                      } catch (e) {
+                        if (dialog.mounted) {
+                          set(() {
+                            saving = false;
+                            error = e is CorrectionException
+                                ? e.message
+                                : 'Could not correct UTANG.';
+                          });
+                        }
+                      }
+                    },
+              child: const Text('Confirm Correction'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (done == true && context.mounted) Navigator.pop(context);
+  }
+
   Widget _balance(String label, String value) => Padding(
     padding: const EdgeInsets.only(top: 6),
     child: Row(

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../models/product.dart';
 import '../../../models/utang_draft.dart';
 import '../../../repositories/cash_sale_repository.dart';
+import '../../../repositories/reversal_repository.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'sale_details_screen.dart';
 
@@ -17,6 +18,10 @@ class CashSaleScreen extends StatefulWidget {
     this.loadProducts,
     this.embedded = false,
     this.onUtang,
+    this.categoryNames = const {},
+    this.frequentProductNames = const {},
+    this.selectaProductIds = const {},
+    this.reversals,
   }) : assert(repository != null || saveSale != null);
   final List<Product> products;
   final CashSaleRepository? repository;
@@ -24,6 +29,10 @@ class CashSaleScreen extends StatefulWidget {
   final Future<List<Product>> Function()? loadProducts;
   final bool embedded;
   final Future<bool> Function(List<UtangItemDraft>)? onUtang;
+  final Map<int, String> categoryNames;
+  final Set<String> frequentProductNames;
+  final Set<int> selectaProductIds;
+  final ReversalRepository? reversals;
   @override
   State<CashSaleScreen> createState() => _State();
 }
@@ -32,6 +41,7 @@ class _State extends State<CashSaleScreen> {
   late ProductSelectionController c;
   late List<Product> products;
   String search = '';
+  String filter = 'ALL';
   bool saving = false;
   CashSaleResult? lastSale;
   int todayTotal = 0;
@@ -212,6 +222,14 @@ class _State extends State<CashSaleScreen> {
   Widget _catalog() {
     final shown = products
         .where((p) => p.name.toLowerCase().contains(search.toLowerCase()))
+        .where(
+          (p) => switch (filter) {
+            'FREQUENT' => widget.frequentProductNames.contains(p.name),
+            'SELECTA' => widget.selectaProductIds.contains(p.id),
+            'ALL' => true,
+            _ => p.categoryId.toString() == filter,
+          },
+        )
         .toList();
     return Column(
       children: [
@@ -223,6 +241,32 @@ class _State extends State<CashSaleScreen> {
               prefixIcon: Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => search = v),
+          ),
+        ),
+        SizedBox(
+          height: 48,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final item in <(String, String)>[
+                ('ALL', 'All'),
+                if (widget.frequentProductNames.isNotEmpty)
+                  ('FREQUENT', 'Frequently Sold'),
+                if (widget.selectaProductIds.isNotEmpty) ('SELECTA', 'Selecta'),
+                ...widget.categoryNames.entries.map(
+                  (entry) => (entry.key.toString(), entry.value),
+                ),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(item.$2),
+                    selected: filter == item.$1,
+                    onSelected: (_) => setState(() => filter = item.$1),
+                  ),
+                ),
+            ],
           ),
         ),
         Padding(
@@ -466,6 +510,15 @@ class _State extends State<CashSaleScreen> {
                 ],
                 const SizedBox(height: 16),
                 _lastSaleCard(),
+                if (widget.repository != null) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    key: const Key('sales-transaction-history'),
+                    onPressed: _showHistory,
+                    icon: const Icon(Icons.history),
+                    label: const Text('Cash & UTANG History'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -534,12 +587,21 @@ class _State extends State<CashSaleScreen> {
                 OutlinedButton.icon(
                   onPressed: widget.repository == null
                       ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SaleDetailsScreen(
-                              repository: widget.repository!,
-                              saleId: sale.id,
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => Dialog(
+                            insetPadding: const EdgeInsets.all(16),
+                            clipBehavior: Clip.antiAlias,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: 760,
+                                maxHeight: 820,
+                              ),
+                              child: SaleDetailsScreen(
+                                repository: widget.repository!,
+                                saleId: sale.id,
+                                reversals: widget.reversals,
+                              ),
                             ),
                           ),
                         ),
@@ -560,6 +622,166 @@ class _State extends State<CashSaleScreen> {
     final time = MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(value));
     return '${sameDay ? 'Today' : MaterialLocalizations.of(context).formatShortDate(value)} • $time';
+  }
+
+  Future<void> _showHistory() async {
+    var filter = 'ALL';
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, setModal) => Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 820, maxHeight: 820),
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('Sales Transactions'),
+                  trailing: IconButton(
+                    onPressed: () => Navigator.pop(dialog),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final x in const [
+                      ('ALL', 'All'),
+                      ('CASH', 'Cash'),
+                      ('UTANG', 'UTANG'),
+                    ])
+                      ChoiceChip(
+                        label: Text(x.$2),
+                        selected: filter == x.$1,
+                        onSelected: (_) => setModal(() => filter = x.$1),
+                      ),
+                  ],
+                ),
+                Expanded(
+                  child: FutureBuilder<List<SalesHistoryEntry>>(
+                    future: widget.repository!.history(type: filter),
+                    builder: (_, s) => !s.hasData
+                        ? const Center(child: CircularProgressIndicator())
+                        : s.data!.isEmpty
+                        ? const Center(child: Text('No transactions found.'))
+                        : ListView.builder(
+                            itemCount: s.data!.length,
+                            itemBuilder: (_, i) {
+                              final e = s.data![i],
+                                  local = e.occurredAt.toLocal();
+                              return ListTile(
+                                leading: Icon(
+                                  e.isUtang ? Icons.people_alt : Icons.payments,
+                                ),
+                                title: Text(
+                                  '${e.isUtang ? 'UTANG' : 'Cash Sale'} • ${e.reference}',
+                                ),
+                                subtitle: Text(
+                                  '${e.customerName == null ? '' : '${e.customerName} • '}${MaterialLocalizations.of(context).formatMediumDate(local)} • ${TimeOfDay.fromDateTime(local).format(context)}\n'
+                                  '${e.itemCount} items • ${e.correctedById != null
+                                      ? 'CORRECTED'
+                                      : e.status == 'REVERSED'
+                                      ? 'REVERSED'
+                                      : 'COMPLETED'}'
+                                  '${e.correctionOfId == null ? '' : '\nCorrection of #${e.correctionOfId}'}',
+                                ),
+                                trailing: Text(money(e.totalCentavos)),
+                                onTap: () {
+                                  Navigator.pop(dialog);
+                                  WidgetsBinding.instance.addPostFrameCallback(
+                                    (_) => _showHistoryDetails(e),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showHistoryDetails(SalesHistoryEntry entry) async {
+    if (!entry.isUtang) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760, maxHeight: 820),
+            child: SaleDetailsScreen(
+              repository: widget.repository!,
+              saleId: entry.id,
+              reversals: widget.reversals,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final items = await widget.repository!.utangItems(entry.id);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('UTANG • ${entry.reference}'),
+        content: SizedBox(
+          width: 650,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (entry.customerName != null)
+                  Text('Customer: ${entry.customerName}'),
+                Text(_saleWhen(entry.occurredAt.toLocal())),
+                const SizedBox(height: 8),
+                Text(
+                  'Status: ${entry.correctedById != null
+                      ? 'CORRECTED'
+                      : entry.status == 'REVERSED'
+                      ? 'REVERSED'
+                      : 'COMPLETED'}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (entry.correctedById != null)
+                  Text('Corrected by UTANG #${entry.correctedById}'),
+                if (entry.correctionOfId != null)
+                  Text('Correction of UTANG #${entry.correctionOfId}'),
+                const Divider(),
+                ...items.map(
+                  (x) => ListTile(
+                    title: Text(x['product_name_snapshot']! as String),
+                    subtitle: Text(
+                      '${x['quantity']} × ${money(x['unit_price_centavos']! as int)}',
+                    ),
+                    trailing: Text(money(x['line_total_centavos']! as int)),
+                  ),
+                ),
+                const Divider(),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '${entry.itemCount} items\nTotal: ${money(entry.totalCentavos)}',
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(d),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _summary(String label, String value) => Card(

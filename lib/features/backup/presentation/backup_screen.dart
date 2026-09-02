@@ -20,6 +20,13 @@ class BackupScreen extends StatefulWidget {
 class _State extends State<BackupScreen> {
   bool busy = false;
   String? status;
+  late Future<BackupHealth> backupHealth;
+  @override
+  void initState() {
+    super.initState();
+    backupHealth = widget.service.health();
+  }
+
   Future<void> backup() async {
     setState(() => busy = true);
     try {
@@ -29,13 +36,20 @@ class _State extends State<BackupScreen> {
         fileName: 'TindahanNiEmbi.tnebackup.zip',
         bytes: await File(generated).readAsBytes(),
       );
-      if (save != null) {
-        setState(() => status = 'Nahimo ang backup: $save');
+      if (mounted) {
+        setState(() {
+          status = save == null
+              ? 'Backup created and validated in local app storage.'
+              : 'Backup created and validated: $save';
+          backupHealth = widget.service.health();
+        });
       }
     } catch (e) {
-      setState(() => status = 'Backup could not be created.');
+      if (mounted) {
+        setState(() => status = 'Backup could not be created or validated.');
+      }
     } finally {
-      setState(() => busy = false);
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -88,10 +102,33 @@ class _State extends State<BackupScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              FutureBuilder<BackupHealth>(
+                future: backupHealth,
+                builder: (_, snapshot) {
+                  final value = snapshot.data;
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        value == null
+                            ? 'Checking backup health…'
+                            : 'Backup Health: ${value.status}\n'
+                                  'Last Successful Backup: ${value.createdAt?.toString() ?? 'None'}\n'
+                                  'File Size: ${_size(value.fileSizeBytes)}\n'
+                                  'Database: ${value.valid ? 'Included • Schema V${value.schemaVersion}' : 'Not validated'}\n'
+                                  'Product Images: ${value.valid ? '${value.imageCount} included' : 'Not validated'}\n'
+                                  'Validation: ${value.valid ? 'Valid' : 'Needs Backup'}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 18),
               FilledButton.icon(
                 onPressed: busy ? null : backup,
                 icon: const Icon(Icons.backup),
-                label: const Text('Create Backup'),
+                label: const Text('Backup Now'),
               ),
               const SizedBox(height: 18),
               OutlinedButton.icon(
@@ -110,4 +147,8 @@ class _State extends State<BackupScreen> {
       ),
     ),
   );
+
+  String _size(int bytes) => bytes < 1024 * 1024
+      ? '${(bytes / 1024).toStringAsFixed(1)} KB'
+      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }

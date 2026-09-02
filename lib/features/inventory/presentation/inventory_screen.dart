@@ -242,7 +242,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(AppStrings.inventoryValue),
+                    const Text('Owned Inventory Value'),
                     Text(
                       '₱${((s.data ?? 0) / 100).toStringAsFixed(2)}',
                       style: Theme.of(context).textTheme.titleLarge,

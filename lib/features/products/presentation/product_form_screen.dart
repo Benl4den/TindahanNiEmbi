@@ -15,11 +15,17 @@ class ProductFormScreen extends StatefulWidget {
     required this.photoService,
     required this.categories,
     this.product,
+    this.onSaved,
+    this.allowStartingStock = true,
+    this.onDraft,
   });
   final ProductRepository repository;
   final ProductPhotoService photoService;
   final List<Category> categories;
   final Product? product;
+  final ValueChanged<Product>? onSaved;
+  final bool allowStartingStock;
+  final ValueChanged<ProductDraft>? onDraft;
 
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
@@ -103,19 +109,26 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     try {
       final existing = widget.product;
       if (existing == null) {
-        await widget.repository.create(
-          ProductDraft(
-            categoryId: _categoryId!,
-            name: _name.text,
-            photoPath: _photoPath!,
-            purchasePriceCentavos: _money(_purchase.text)!,
-            sellingPriceCentavos: _money(_selling.text)!,
-            startingQuantity: _whole(_starting.text)!,
-            minimumStockLevel: _whole(_minimum.text)!,
-          ),
+        final draft = ProductDraft(
+          categoryId: _categoryId!,
+          name: _name.text,
+          photoPath: _photoPath!,
+          purchasePriceCentavos: _money(_purchase.text)!,
+          sellingPriceCentavos: _money(_selling.text)!,
+          startingQuantity: widget.allowStartingStock
+              ? _whole(_starting.text)!
+              : 0,
+          minimumStockLevel: _whole(_minimum.text)!,
         );
+        if (widget.onDraft != null) {
+          widget.onDraft!(draft);
+          if (mounted) Navigator.pop(context, true);
+          return;
+        }
+        final saved = await widget.repository.create(draft);
+        widget.onSaved?.call(saved);
       } else {
-        await widget.repository.update(
+        final saved = await widget.repository.update(
           Product(
             id: existing.id,
             categoryId: _categoryId!,
@@ -130,6 +143,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             updatedAt: existing.updatedAt,
           ),
         );
+        widget.onSaved?.call(saved);
       }
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
@@ -250,7 +264,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              if (widget.product == null) ...[
+                              if (widget.product == null &&
+                                  widget.allowStartingStock) ...[
                                 Expanded(
                                   child: _field(
                                     _starting,

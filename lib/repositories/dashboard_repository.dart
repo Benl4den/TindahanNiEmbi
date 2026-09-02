@@ -8,6 +8,8 @@ class DashboardSummary {
     required this.outstandingCentavos,
     required this.stockOutToday,
     required this.inventoryValueCentavos,
+    this.supplierPayableCentavos = 0,
+    this.selectaLowStock = 0,
   });
   final int products,
       lowStock,
@@ -15,6 +17,7 @@ class DashboardSummary {
       outstandingCentavos,
       stockOutToday,
       inventoryValueCentavos;
+  final int supplierPayableCentavos, selectaLowStock;
 }
 
 class DashboardRepository {
@@ -46,6 +49,18 @@ class DashboardRepository {
               [start, end],
             )).single['value']!
             as int;
+    final supplier =
+        (await db.rawQuery(
+              '''SELECT COALESCE((SELECT SUM(amount_change_centavos) FROM consignor_ledger_entries),0)+COALESCE((SELECT SUM(payable_change_centavos) FROM consignment_allocation_reversals),0) value''',
+            )).single['value']!
+            as int;
+    final selectaLow =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            '''SELECT COUNT(*) FROM products p JOIN product_inventory_groups m ON m.product_id=p.id JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE g.code='SELECTA' AND m.archived_at IS NULL AND p.is_archived=0 AND p.current_quantity<=p.minimum_stock_level''',
+          ),
+        ) ??
+        0;
     return DashboardSummary(
       products: p['products']! as int,
       lowStock: (p['low_stock'] as int?) ?? 0,
@@ -53,6 +68,8 @@ class DashboardRepository {
       outstandingCentavos: debt,
       stockOutToday: out,
       inventoryValueCentavos: p['value']! as int,
+      supplierPayableCentavos: supplier,
+      selectaLowStock: selectaLow,
     );
   }
 }

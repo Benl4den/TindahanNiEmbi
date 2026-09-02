@@ -44,7 +44,6 @@ class _State extends State<InactivityLockRegion> {
 
   void _reset() {
     timer?.cancel();
-    subscription?.cancel();
     if (minutes > 0) {
       timer = Timer(Duration(minutes: minutes), widget.onTimeout);
     }
@@ -53,6 +52,7 @@ class _State extends State<InactivityLockRegion> {
   @override
   void dispose() {
     timer?.cancel();
+    subscription?.cancel();
     super.dispose();
   }
 

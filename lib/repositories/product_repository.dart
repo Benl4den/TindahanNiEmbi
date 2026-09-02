@@ -21,16 +21,56 @@ class SqliteProductRepository implements ProductRepository {
 
   @override
   Future<List<Product>> searchActive([String query = '']) async {
+    return searchAll(query: query, archiveFilter: 'ACTIVE');
+  }
+
+  Future<List<Product>> searchAll({
+    String query = '',
+    String archiveFilter = 'ALL',
+    int? categoryId,
+    String? groupCode,
+  }) async {
     final normalized = query.trim();
-    final rows = await _database.query(
-      'products',
-      where: normalized.isEmpty
-          ? 'is_archived = 0'
-          : "is_archived = 0 AND name LIKE ? ESCAPE '\\' COLLATE NOCASE",
-      whereArgs: normalized.isEmpty ? null : ['%${_escapeLike(normalized)}%'],
-      orderBy: 'name COLLATE NOCASE ASC',
+    final clauses = <String>[], args = <Object?>[];
+    if (archiveFilter == 'ACTIVE') clauses.add('p.is_archived=0');
+    if (archiveFilter == 'ARCHIVED') clauses.add('p.is_archived=1');
+    if (normalized.isNotEmpty) {
+      clauses.add("p.name LIKE ? ESCAPE '\\' COLLATE NOCASE");
+      args.add('%${_escapeLike(normalized)}%');
+    }
+    if (categoryId != null) {
+      clauses.add('p.category_id=?');
+      args.add(categoryId);
+    }
+    if (groupCode != null) {
+      clauses.add(
+        'EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code=?)',
+      );
+      args.add(groupCode);
+    }
+    final rows = await _database.rawQuery(
+      'SELECT p.* FROM products p${clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}'} ORDER BY p.name COLLATE NOCASE',
+      args,
     );
     return rows.map(Product.fromMap).toList(growable: false);
+  }
+
+  Future<Map<int, List<String>>> inventoryGroups(
+    Iterable<int> productIds,
+  ) async {
+    final ids = productIds.toList();
+    if (ids.isEmpty) return {};
+    final rows = await _database.rawQuery(
+      '''SELECT m.product_id,g.name FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.archived_at IS NULL AND m.product_id IN(${List.filled(ids.length, '?').join(',')})''',
+      ids,
+    );
+    final result = <int, List<String>>{};
+    for (final row in rows) {
+      result
+          .putIfAbsent(row['product_id']! as int, () => [])
+          .add(row['name']! as String);
+    }
+    return result;
   }
 
   @override

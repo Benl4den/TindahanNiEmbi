@@ -20,6 +20,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final amount = TextEditingController();
   int cents = 0;
   bool saving = false;
+  String? error;
   @override
   void dispose() {
     amount.dispose();
@@ -28,26 +29,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Future<void> save() async {
     if (saving || cents <= 0 || cents > widget.customer.balanceCentavos) return;
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Record this payment?'),
-        content: Text(
-          'Total UTANG: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}\nPayment: ₱${(cents / 100).toStringAsFixed(2)}\nRemaining: ₱${((widget.customer.balanceCentavos - cents) / 100).toStringAsFixed(2)}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text(AppStrings.back),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Save Payment'),
-          ),
-        ],
-      ),
-    );
-    if (yes != true) return;
     setState(() => saving = true);
     try {
       await widget.repository.record(
@@ -55,14 +36,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
         amountCentavos: cents,
       );
       if (mounted) Navigator.pop(context, true);
-    } finally {
-      if (mounted) setState(() => saving = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          saving = false;
+          error = 'Could not record payment. Please try again.';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Payment')),
+    appBar: AppBar(title: const Text('Record Payment')),
     body: Padding(
       padding: const EdgeInsets.all(28),
       child: Column(
@@ -71,6 +57,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           Text(
             'Total UTANG: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          Text(
+            widget.customer.fullName,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 24),
           TextField(
@@ -86,6 +76,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
               () => cents = ((double.tryParse(v) ?? 0) * 100).round(),
             ),
           ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           const SizedBox(height: 20),
           Text(
             'Remaining: ₱${((widget.customer.balanceCentavos - cents).clamp(0, widget.customer.balanceCentavos) / 100).toStringAsFixed(2)}',
@@ -98,6 +96,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ? save
                 : null,
             child: const Text('Record Payment'),
+          ),
+          TextButton(
+            onPressed: saving ? null : () => Navigator.pop(context, false),
+            child: const Text(AppStrings.back),
           ),
         ],
       ),

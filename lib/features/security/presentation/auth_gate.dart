@@ -25,6 +25,9 @@ class _State extends State<AuthGate> {
     configured = widget.auth.hasOwner;
   }
 
+  void retryConfiguration() =>
+      setState(() => configured = widget.auth.hasOwner);
+
   @override
   void dispose() {
     pin.dispose();
@@ -69,6 +72,39 @@ class _State extends State<AuthGate> {
     final login = FutureBuilder<bool>(
       future: configured,
       builder: (_, s) {
+        if (s.hasError) {
+          return Scaffold(
+            body: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_person_outlined,
+                        size: 56,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Could not load the PIN settings.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: retryConfiguration,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try Again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
         if (!s.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
