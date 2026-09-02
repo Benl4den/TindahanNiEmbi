@@ -51,8 +51,8 @@ class AuthService {
     limit: 1,
   )).isNotEmpty;
   Future<void> setPin(UserRole role, String pin) async {
-    if (!RegExp(r'^\d{4,6}$').hasMatch(pin)) {
-      throw ArgumentError('PIN must be 4–6 digits');
+    if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
+      throw ArgumentError('PIN must be exactly 4 digits');
     }
     final random = Random.secure(),
         salt = Uint8List.fromList(

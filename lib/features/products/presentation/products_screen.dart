@@ -8,6 +8,7 @@ import '../../../repositories/product_repository.dart';
 import '../../../services/product_photo_service.dart';
 import 'product_card.dart';
 import 'product_form_screen.dart';
+import '../../../widgets/app_state_view.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({
@@ -201,15 +202,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
               future: _products,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppLoadingView(label: 'Loading products…');
+                }
+                if (snapshot.hasError) {
+                  return AppStateView.error(
+                    title: 'Could not load products',
+                    message: 'Your inventory records were not changed.',
+                    actionLabel: 'Try Again',
+                    onAction: () => setState(_reload),
+                  );
                 }
                 final products = snapshot.data ?? const <Product>[];
                 if (products.isEmpty) {
-                  return Center(
-                    child: Text(
-                      AppStrings.noProducts,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                  return AppStateView.empty(
+                    title: AppStrings.noProducts,
+                    message: 'Try another filter or add your first product.',
+                    actionLabel: AppStrings.addProduct,
+                    onAction: _form,
                   );
                 }
                 final width = MediaQuery.sizeOf(context).width;
@@ -223,7 +232,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         : 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: .68,
+                    mainAxisExtent: 430,
                   ),
                   itemCount: products.length,
                   itemBuilder: (_, index) => ProductCard(

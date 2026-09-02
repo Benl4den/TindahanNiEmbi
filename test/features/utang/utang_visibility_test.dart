@@ -14,7 +14,7 @@ void main() {
     updatedAt: DateTime.utc(2026),
     balanceCentavos: balance,
   );
-  testWidgets('UTANGAN cards expose outstanding and zero balance states', (
+  testWidgets('customer cards expose outstanding and zero balance states', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -40,12 +40,12 @@ void main() {
     );
     expect(find.text('₱300.00'), findsOneWidget);
     expect(find.text('₱0.00'), findsOneWidget);
-    expect(find.bySemanticsLabel('Outstanding UTANG'), findsOneWidget);
-    expect(find.bySemanticsLabel('Zero UTANG'), findsOneWidget);
+    expect(find.bySemanticsLabel('Outstanding Credit'), findsOneWidget);
+    expect(find.bySemanticsLabel('Zero Credit Balance'), findsOneWidget);
   });
 
   testWidgets(
-    'UTANG details modal uses historical snapshots and closes in place',
+    'credit details modal uses historical snapshots and closes in place',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -69,7 +69,7 @@ void main() {
       );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      expect(find.text('UTANG DETAILS'), findsOneWidget);
+      expect(find.text('CREDIT SALE DETAILS'), findsOneWidget);
       expect(find.text('UTG-000009'), findsOneWidget);
       expect(find.text('Historical Coke'), findsOneWidget);
       expect(find.text('2 × ₱150.00'), findsOneWidget);
@@ -78,7 +78,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Close'));
       await tester.pumpAndSettle();
       expect(find.text('Open'), findsOneWidget);
-      expect(find.text('UTANG DETAILS'), findsNothing);
+      expect(find.text('CREDIT SALE DETAILS'), findsNothing);
     },
   );
 }

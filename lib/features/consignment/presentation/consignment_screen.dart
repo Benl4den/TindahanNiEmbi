@@ -658,6 +658,57 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     );
   }
 
+  Future<void> _archiveConsignor(String name) async {
+    final id = selectedConsignorId;
+    if (id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Archive Consignor?'),
+        content: Text(
+          '$name will no longer appear in normal Consignment selections. All receipts, products, remittances, payable entries, and historical records will remain unchanged.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Archive Consignor'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.repository.archiveConsignor(id);
+      if (!mounted) return;
+      setState(() {
+        selectedConsignorId = null;
+        _reload();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Consignor archived. Historical records were preserved.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The consignor could not be archived. Please try again.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _returnStock(Map<String, Object?> product) async {
     final batches = await widget.repository.returnableBatches(
       product['product_id']! as int,
@@ -855,6 +906,15 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   onPressed: _remit,
                   icon: const Icon(Icons.payments),
                   label: const Text('Record Remittance'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                  ),
+                  onPressed: () =>
+                      _archiveConsignor(company['name']! as String),
+                  icon: const Icon(Icons.archive_outlined),
+                  label: const Text('Archive Consignor'),
                 ),
               ],
             ),

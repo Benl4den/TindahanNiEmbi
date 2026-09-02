@@ -6,6 +6,7 @@ import '../../../repositories/customer_repository.dart';
 import '../../../repositories/payment_repository.dart';
 import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
+import '../../../widgets/app_state_view.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({
@@ -107,15 +108,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
           child: FutureBuilder<List<Customer>>(
             future: _items,
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return AppStateView.error(
+                  title: 'Could not load customers',
+                  actionLabel: 'Try Again',
+                  onAction: () => setState(_reload),
+                );
+              }
               if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const AppLoadingView(label: 'Loading customers…');
               }
               if (snapshot.data!.isEmpty) {
-                return Center(
-                  child: Text(
-                    AppStrings.noCustomers,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                return AppStateView.empty(
+                  title: AppStrings.noCustomers,
+                  message: 'Add a customer to begin managing accounts.',
+                  actionLabel: AppStrings.newCustomer,
+                  onAction: _form,
                 );
               }
               return ListView.separated(
@@ -125,45 +133,69 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 itemBuilder: (_, index) {
                   final customer = snapshot.data![index];
                   return Card(
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(18),
-                      leading: const CircleAvatar(
-                        radius: 28,
-                        child: Icon(Icons.person, size: 32),
-                      ),
-                      title: Text(
-                        customer.fullName,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      subtitle: Text(
-                        '${customer.nickname ?? ''}\n${AppStrings.totalUtang}: ₱${(customer.balanceCentavos / 100).toStringAsFixed(2)}',
-                      ),
-                      isThreeLine: true,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CustomerDetailScreen(
-                            repository: widget.repository,
-                            payments: widget.payments,
-                            customerId: customer.id,
+                    child: LayoutBuilder(
+                      builder: (_, box) {
+                        final narrow = box.maxWidth < 650;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.all(18),
+                          leading: const CircleAvatar(
+                            radius: 28,
+                            child: Icon(Icons.person, size: 32),
                           ),
-                        ),
-                      ),
-                      trailing: widget.canManage
-                          ? Wrap(
-                              spacing: 8,
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () => _form(customer),
-                                  child: const Text(AppStrings.edit),
-                                ),
-                                OutlinedButton(
-                                  onPressed: () => _archive(customer),
-                                  child: const Text(AppStrings.archive),
-                                ),
-                              ],
-                            )
-                          : null,
+                          title: Text(
+                            customer.fullName,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          subtitle: Text(
+                            '${customer.nickname ?? ''}\n${AppStrings.totalUtang}: ₱${(customer.balanceCentavos / 100).toStringAsFixed(2)}',
+                          ),
+                          isThreeLine: true,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CustomerDetailScreen(
+                                repository: widget.repository,
+                                payments: widget.payments,
+                                customerId: customer.id,
+                              ),
+                            ),
+                          ),
+                          trailing: widget.canManage
+                              ? narrow
+                                    ? PopupMenuButton<String>(
+                                        tooltip: 'Customer actions',
+                                        onSelected: (value) => value == 'edit'
+                                            ? _form(customer)
+                                            : _archive(customer),
+                                        itemBuilder: (_) => const [
+                                          PopupMenuItem(
+                                            value: 'edit',
+                                            child: Text(AppStrings.edit),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'archive',
+                                            child: Text(AppStrings.archive),
+                                          ),
+                                        ],
+                                      )
+                                    : Wrap(
+                                        spacing: 8,
+                                        children: [
+                                          OutlinedButton(
+                                            onPressed: () => _form(customer),
+                                            child: const Text(AppStrings.edit),
+                                          ),
+                                          OutlinedButton(
+                                            onPressed: () => _archive(customer),
+                                            child: const Text(
+                                              AppStrings.archive,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                              : null,
+                        );
+                      },
                     ),
                   );
                 },

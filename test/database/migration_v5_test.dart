@@ -38,7 +38,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       )).map((x) => x['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9],
     );
     expect((await db.query('app_settings')).single['value'], '0');
     await app.close();

@@ -10,6 +10,9 @@ class Customer {
     required this.createdAt,
     required this.updatedAt,
     this.balanceCentavos = 0,
+    this.lastUtangAt,
+    this.lastPaymentAt,
+    this.transactionCount = 0,
   });
   final int id;
   final String fullName;
@@ -21,6 +24,8 @@ class Customer {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int balanceCentavos;
+  final DateTime? lastUtangAt, lastPaymentAt;
+  final int transactionCount;
 
   factory Customer.fromMap(Map<String, Object?> map) => Customer(
     id: map['id']! as int,
@@ -33,6 +38,13 @@ class Customer {
     createdAt: DateTime.parse(map['created_at']! as String),
     updatedAt: DateTime.parse(map['updated_at']! as String),
     balanceCentavos: (map['balance_centavos'] as int?) ?? 0,
+    lastUtangAt: map['last_utang_at'] == null
+        ? null
+        : DateTime.parse(map['last_utang_at']! as String),
+    lastPaymentAt: map['last_payment_at'] == null
+        ? null
+        : DateTime.parse(map['last_payment_at']! as String),
+    transactionCount: (map['transaction_count'] as int?) ?? 0,
   );
 }
 

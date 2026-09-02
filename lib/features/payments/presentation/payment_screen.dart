@@ -55,7 +55,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Total UTANG: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
+            'Total Credit Balance: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text(

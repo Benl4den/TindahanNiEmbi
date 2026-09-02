@@ -27,7 +27,10 @@ class SqliteCustomerRepository implements CustomerRepository {
         ? <Object?>[]
         : ['%${_escape(q)}%', '%${_escape(q)}%'];
     final rows = await _database.rawQuery('''
-      SELECT c.*, COALESCE(SUM(l.amount_change_centavos), 0) balance_centavos
+      SELECT c.*, COALESCE(SUM(l.amount_change_centavos), 0) balance_centavos,
+        (SELECT MAX(u.occurred_at) FROM utang_transactions u WHERE u.customer_id=c.id) last_utang_at,
+        (SELECT MAX(p.paid_at) FROM utang_payments p WHERE p.customer_id=c.id) last_payment_at,
+        (SELECT COUNT(*) FROM customer_ledger_entries x WHERE x.customer_id=c.id AND x.entry_type IN('UTANG','PAYMENT')) transaction_count
       FROM customers c LEFT JOIN customer_ledger_entries l ON l.customer_id = c.id
       WHERE c.is_archived = 0 ${q.isEmpty ? '' : "AND (c.full_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR c.nickname LIKE ? ESCAPE '\\' COLLATE NOCASE)"}
       GROUP BY c.id ORDER BY CASE WHEN COALESCE(SUM(l.amount_change_centavos),0)>0 THEN 0 ELSE 1 END, c.full_name COLLATE NOCASE

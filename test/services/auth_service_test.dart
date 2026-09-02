@@ -28,6 +28,16 @@ void main() {
     expect(row['pin_hash'], isNot('1234'));
     expect(row['salt'], isNotEmpty);
   });
+  test('PIN setup requires exactly four digits', () async {
+    final auth = AuthService(db);
+    await expectLater(auth.setPin(UserRole.owner, '123'), throwsArgumentError);
+    await expectLater(
+      auth.setPin(UserRole.owner, '12345'),
+      throwsArgumentError,
+    );
+    await auth.setPin(UserRole.owner, '4321');
+    expect(await auth.verify('4321'), UserRole.owner);
+  });
   test('central permissions block staff sensitive actions', () {
     const p = PermissionService();
     expect(p.allows(UserRole.staff, AppPermission.cashSale), isTrue);
@@ -62,7 +72,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       )).map((r) => r['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9],
     );
     expect(
       await upgradedDb.rawQuery(

@@ -59,4 +59,61 @@ class ReportsRepository {
   Future<List<Map<String, Object?>>> customerLedger() => db.rawQuery(
     'SELECT c.full_name,l.entry_type,l.amount_change_centavos,l.occurred_at FROM customer_ledger_entries l JOIN customers c ON c.id=l.customer_id ORDER BY l.occurred_at DESC,l.id DESC',
   );
+
+  Future<Map<String, Object?>> expenseSummary({
+    DateTime? from,
+    DateTime? to,
+    int? categoryId,
+  }) async {
+    final clauses = ["status='POSTED'"], args = <Object?>[];
+    if (from != null) {
+      clauses.add('expense_datetime>=?');
+      args.add(from.toUtc().toIso8601String());
+    }
+    if (to != null) {
+      clauses.add('expense_datetime<?');
+      args.add(to.toUtc().toIso8601String());
+    }
+    if (categoryId != null) {
+      clauses.add('category_id=?');
+      args.add(categoryId);
+    }
+    return (await db.rawQuery('''SELECT COALESCE(SUM(amount_centavos),0) total,
+      COUNT(*) count,COALESCE(MAX(amount_centavos),0) largest
+      FROM expenses WHERE ${clauses.join(' AND ')}''', args)).single;
+  }
+
+  Future<List<Map<String, Object?>>> expensesByCategory({
+    DateTime? from,
+    DateTime? to,
+    int? categoryId,
+  }) {
+    final clauses = ["status='POSTED'"], args = <Object?>[];
+    if (from != null) {
+      clauses.add('expense_datetime>=?');
+      args.add(from.toUtc().toIso8601String());
+    }
+    if (to != null) {
+      clauses.add('expense_datetime<?');
+      args.add(to.toUtc().toIso8601String());
+    }
+    if (categoryId != null) {
+      clauses.add('category_id=?');
+      args.add(categoryId);
+    }
+    return db.rawQuery(
+      '''SELECT category_name_snapshot name,SUM(amount_centavos) total,COUNT(*) count
+      FROM expenses WHERE ${clauses.join(' AND ')} GROUP BY category_name_snapshot ORDER BY total DESC''',
+      args,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> expenseHistory() => db.rawQuery(
+    '''SELECT expense_ref name,category_name_snapshot category,description,
+      amount_centavos,expense_datetime,status FROM expenses ORDER BY expense_datetime DESC''',
+  );
+
+  Future<List<Map<String, Object?>>> expenseCategories() => db.rawQuery(
+    'SELECT id,name,is_archived FROM expense_categories ORDER BY name COLLATE NOCASE',
+  );
 }

@@ -8,6 +8,7 @@ import '../../../repositories/category_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
+import '../../../widgets/app_state_view.dart';
 import '../../products/presentation/product_form_screen.dart';
 
 class SelectaScreen extends StatefulWidget {
@@ -177,9 +178,10 @@ class _SelectaScreenState extends State<SelectaScreen> {
         ),
         Padding(
           padding: const EdgeInsets.all(8),
-          child: OutlinedButton(
+          child: IconButton.filledTonal(
             onPressed: _assign,
-            child: const Text('Assign Existing'),
+            tooltip: 'Assign Existing Product',
+            icon: const Icon(Icons.playlist_add),
           ),
         ),
       ],
@@ -188,33 +190,56 @@ class _SelectaScreenState extends State<SelectaScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(20),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 360,
-                child: TextField(
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search Selecta products',
-                    border: OutlineInputBorder(),
+          child: LayoutBuilder(
+            builder: (_, box) {
+              final search = TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search Selecta products',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => query = v),
+              );
+              final chips =
+                  [
+                        (null, 'All'),
+                        (ProductStockStatus.lowStock, 'Low Stock'),
+                        (ProductStockStatus.outOfStock, 'Out of Stock'),
+                      ]
+                      .map(
+                        (x) => ChoiceChip(
+                          label: Text(x.$2),
+                          selected: status == x.$1,
+                          onSelected: (_) => setState(() => status = x.$1),
+                        ),
+                      )
+                      .toList();
+              if (box.maxWidth < 720) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    search,
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(spacing: 8, children: chips),
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: search),
+                  const SizedBox(width: 16),
+                  ...chips.map(
+                    (chip) => Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: chip,
+                    ),
                   ),
-                  onChanged: (v) => setState(() => query = v),
-                ),
-              ),
-              ...[
-                (null, 'All'),
-                (ProductStockStatus.lowStock, 'Low Stock'),
-                (ProductStockStatus.outOfStock, 'Out of Stock'),
-              ].map(
-                (x) => ChoiceChip(
-                  label: Text(x.$2),
-                  selected: status == x.$1,
-                  onSelected: (_) => setState(() => status = x.$1),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
         Expanded(
@@ -225,22 +250,29 @@ class _SelectaScreenState extends State<SelectaScreen> {
               status: status,
             ),
             builder: (_, s) {
+              if (s.hasError) {
+                return AppStateView.error(
+                  title: 'Could not load Selecta products',
+                  actionLabel: 'Try Again',
+                  onAction: () => setState(() {}),
+                );
+              }
               if (!s.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const AppLoadingView(label: 'Loading Selecta products…');
               }
               if (s.data!.isEmpty) {
-                return const Center(
-                  child: Text(
-                    'No Selecta products found.',
-                    style: TextStyle(fontSize: 20),
-                  ),
+                return AppStateView.empty(
+                  title: 'No Selecta products found',
+                  message: 'Try another filter or add a Selecta product.',
+                  actionLabel: 'Add Selecta Product',
+                  onAction: _create,
                 );
               }
               return GridView.builder(
                 padding: const EdgeInsets.all(20),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 480,
-                  mainAxisExtent: 180,
+                  maxCrossAxisExtent: 440,
+                  mainAxisExtent: 218,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                 ),
@@ -257,8 +289,8 @@ class _SelectaScreenState extends State<SelectaScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: SizedBox(
-                              width: 110,
-                              height: 110,
+                              width: 96,
+                              height: 140,
                               child:
                                   p.photoPath.isNotEmpty &&
                                       File(p.photoPath).existsSync()
@@ -280,6 +312,8 @@ class _SelectaScreenState extends State<SelectaScreen> {
                               children: [
                                 Text(
                                   p.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
                                 Text(
@@ -304,13 +338,15 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                Wrap(
+                                Row(
                                   spacing: 8,
                                   children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () => _stockIn(p),
-                                      icon: const Icon(Icons.add_box),
-                                      label: const Text('Stock In'),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => _stockIn(p),
+                                        icon: const Icon(Icons.add_box),
+                                        label: const Text('Stock In'),
+                                      ),
                                     ),
                                     IconButton(
                                       onPressed: () => _edit(p),

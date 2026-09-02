@@ -16,6 +16,7 @@ class DailyClosingSummary {
     required this.cashSaleCount,
     required this.newUtang,
     required this.payments,
+    required this.operatingExpenses,
     required this.consignmentSales,
     required this.supplierPayable,
     required this.consignmentMargin,
@@ -28,6 +29,7 @@ class DailyClosingSummary {
       cashSaleCount,
       newUtang,
       payments,
+      operatingExpenses,
       consignmentSales,
       supplierPayable,
       consignmentMargin,
@@ -36,12 +38,13 @@ class DailyClosingSummary {
       outOfStock;
   final List<Map<String, Object?>> topProducts;
   int get recordedCashIn => cashSales + payments;
+  int get netRecordedCash => recordedCashIn - operatingExpenses;
 }
 
 class OperationsRepository {
   const OperationsRepository(this.db);
   final Database db;
-  Future<List<RestockItem>> restock({String filter = 'ALL'}) async {
+  Future<List<RestockItem>> restock({String filter = 'NEEDS'}) async {
     final rows = await db.rawQuery(
       '''SELECT p.*,EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT') consigned,EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='SELECTA') selecta FROM products p WHERE p.is_archived=0 ORDER BY p.name COLLATE NOCASE''',
     );
@@ -59,6 +62,10 @@ class OperationsRepository {
               x.product.currentQuantity > 0 &&
                   x.product.currentQuantity <= x.product.minimumStockLevel,
             'OUT' => x.product.currentQuantity == 0,
+            'NEEDS' =>
+              x.product.currentQuantity <= 0 ||
+                  (x.product.currentQuantity > 0 &&
+                      x.product.currentQuantity <= x.product.minimumStockLevel),
             'SELECTA' => x.isSelecta,
             _ => true,
           },
@@ -90,6 +97,9 @@ class OperationsRepository {
     final pay = await one(
       "SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count FROM utang_payments WHERE status='POSTED' AND paid_at>=? AND paid_at<?",
     );
+    final expenses = await one(
+      "SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count FROM expenses WHERE status='POSTED' AND expense_datetime>=? AND expense_datetime<?",
+    );
     final con = await one(
       '''SELECT COALESCE(SUM(a.selling_price_centavos*a.quantity),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(a.margin_centavos),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
     );
@@ -105,13 +115,15 @@ class OperationsRepository {
       cashSaleCount: cash['count']! as int,
       newUtang: utang['total']! as int,
       payments: pay['total']! as int,
+      operatingExpenses: expenses['total']! as int,
       consignmentSales: con['sales']! as int,
       supplierPayable: con['payable']! as int,
       consignmentMargin: con['margin']! as int,
       transactionCount:
           (cash['count']! as int) +
           (utang['count']! as int) +
-          (pay['count']! as int),
+          (pay['count']! as int) +
+          (expenses['count']! as int),
       lowStock: (stock['low'] as int?) ?? 0,
       outOfStock: (stock['out'] as int?) ?? 0,
       topProducts: top,
@@ -123,6 +135,7 @@ class OperationsRepository {
       SELECT occurred_at stamp FROM cash_sales WHERE status='POSTED'
       UNION ALL SELECT occurred_at FROM utang_transactions WHERE status='POSTED'
       UNION ALL SELECT paid_at FROM utang_payments WHERE status='POSTED'
+      UNION ALL SELECT expense_datetime FROM expenses WHERE status='POSTED'
       ORDER BY stamp DESC''');
     final days = <String, DateTime>{};
     for (final row in rows) {

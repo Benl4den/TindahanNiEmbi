@@ -60,7 +60,7 @@ void main() {
   );
 
   testWidgets(
-    'Sales UTANG checkout receives exact cart and only clears on success',
+    'Sales credit checkout receives exact cart and only clears on success',
     (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1;
@@ -96,13 +96,13 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Add'));
       await tester.pump();
-      await tester.tap(find.text('UTANG'));
+      await tester.tap(find.text('Sell on Credit'));
       await tester.pump();
       expect(received!.single.productId, 7);
       expect(received!.single.quantity, 1);
       expect(find.text('1 × ₱10.00'), findsOneWidget);
       succeeds = true;
-      await tester.tap(find.text('UTANG'));
+      await tester.tap(find.text('Sell on Credit'));
       await tester.pump();
       expect(
         find.text('Your cart is empty.\nSelect products to begin a sale.'),

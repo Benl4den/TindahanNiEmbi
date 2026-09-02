@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../repositories/operations_repository.dart';
-import '../../../widgets/summary_card.dart';
 
 class DailyClosingScreen extends StatefulWidget {
   const DailyClosingScreen({super.key, required this.repository});
@@ -70,49 +69,85 @@ class _State extends State<DailyClosingScreen> {
               'Transaction-based summary — not a physical cash-drawer reconciliation.',
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SummaryCard(
-                  label: 'Cash Sales (${x.cashSaleCount})',
-                  value: m(x.cashSales),
-                ),
-                SummaryCard(label: 'New UTANG', value: m(x.newUtang)),
-                SummaryCard(label: 'UTANG Payments', value: m(x.payments)),
-                SummaryCard(
-                  label: 'Recorded Cash In',
-                  value: m(x.recordedCashIn),
-                ),
-                SummaryCard(
-                  label: 'Consignment Sales',
-                  value: m(x.consignmentSales),
-                ),
-                SummaryCard(
-                  label: 'Supplier Payable Generated',
-                  value: m(x.supplierPayable),
-                ),
-                SummaryCard(
-                  label: 'Consignment Margin',
-                  value: m(x.consignmentMargin),
-                ),
-                SummaryCard(
-                  label: 'Transactions',
-                  value: '${x.transactionCount}',
-                ),
-                SummaryCard(label: 'Low Stock', value: '${x.lowStock}'),
-                SummaryCard(label: 'Out of Stock', value: '${x.outOfStock}'),
-              ],
+            _section('CASH FLOW', Icons.payments_outlined, [
+              _metric('Cash Sales (${x.cashSaleCount})', m(x.cashSales)),
+              _metric('Credit Payments', m(x.payments)),
+              _metric('Recorded Cash In', m(x.recordedCashIn), strong: true),
+            ]),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (_, box) {
+                final width = box.maxWidth >= 700
+                    ? (box.maxWidth - 14) / 2
+                    : box.maxWidth;
+                return Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: [
+                    SizedBox(
+                      width: width,
+                      child: _accentCard(
+                        'NEW CREDIT',
+                        m(x.newUtang),
+                        Icons.people_alt_outlined,
+                        Colors.orange.shade800,
+                      ),
+                    ),
+                    SizedBox(
+                      width: width,
+                      child: _accentCard(
+                        'OPERATING EXPENSES',
+                        m(x.operatingExpenses),
+                        Icons.receipt_long_outlined,
+                        Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
+            const SizedBox(height: 14),
+            _hero('NET RECORDED CASH AFTER EXPENSES', m(x.netRecordedCash)),
+            const SizedBox(height: 14),
+            _section('CONSIGNMENT', Icons.handshake_outlined, [
+              _metric('Consignment Sales', m(x.consignmentSales)),
+              _metric('Supplier Payable Generated', m(x.supplierPayable)),
+              _metric(
+                'Consignment Margin',
+                m(x.consignmentMargin),
+                strong: true,
+              ),
+            ]),
+            const SizedBox(height: 14),
+            _section('OPERATIONS', Icons.store_mall_directory_outlined, [
+              _metric('Transactions', '${x.transactionCount}'),
+              _metric(
+                'Low Stock',
+                '${x.lowStock}',
+                color: Colors.orange.shade800,
+              ),
+              _metric(
+                'Out of Stock',
+                '${x.outOfStock}',
+                color: Colors.red.shade700,
+              ),
+            ]),
             const SizedBox(height: 20),
             Text(
               'Top-selling Products',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            ...x.topProducts.map(
-              (p) => ListTile(
-                title: Text(p['name']! as String),
-                trailing: Text('${p['quantity']} sold'),
+            ...x.topProducts.indexed.map(
+              (entry) => Card(
+                margin: const EdgeInsets.only(top: 8),
+                child: ListTile(
+                  leading: CircleAvatar(child: Text('${entry.$1 + 1}')),
+                  title: Text(entry.$2['name']! as String),
+                  trailing: Text(
+                    '${entry.$2['quantity']} sold',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
             ),
             const Divider(height: 40),
@@ -156,6 +191,128 @@ class _State extends State<DailyClosingScreen> {
     ),
   );
 
+  Widget _section(String title, IconData icon, List<Widget> metrics) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Wrap(spacing: 12, runSpacing: 12, children: metrics),
+        ],
+      ),
+    ),
+  );
+
+  Widget _metric(
+    String label,
+    String value, {
+    bool strong = false,
+    Color? color,
+  }) => SizedBox(
+    width: 210,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: strong ? 25 : 21,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _accentCard(String label, String value, IconData icon, Color color) =>
+      Card(
+        color: color.withValues(alpha: .08),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 34),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 27,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _hero(String label, String value) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Card(
+      color: color,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.account_balance_wallet_outlined,
+              color: Colors.white,
+              size: 42,
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showDay(DateTime day) async {
     final summary = await widget.repository.daily(day);
     if (!mounted) return;
@@ -170,9 +327,11 @@ class _State extends State<DailyClosingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Cash Sales: ${m(summary.cashSales)}'),
-                Text('UTANG Created: ${m(summary.newUtang)}'),
-                Text('UTANG Payments: ${m(summary.payments)}'),
+                Text('Credit Created: ${m(summary.newUtang)}'),
+                Text('Credit Payments: ${m(summary.payments)}'),
                 Text('Recorded Cash In: ${m(summary.recordedCashIn)}'),
+                Text('Operating Expenses: ${m(summary.operatingExpenses)}'),
+                Text('Net Recorded Cash: ${m(summary.netRecordedCash)}'),
                 Text('Consignment Sales: ${m(summary.consignmentSales)}'),
                 Text('Supplier Payable: ${m(summary.supplierPayable)}'),
                 Text('Store Margin: ${m(summary.consignmentMargin)}'),

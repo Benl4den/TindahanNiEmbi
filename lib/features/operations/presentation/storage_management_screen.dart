@@ -167,7 +167,7 @@ class _State extends State<StorageManagementScreen> {
               ),
             const SizedBox(height: 20),
             const Text(
-              'Sales, UTANG, payments, inventory movements, and other business history are never removed here.',
+              'Sales, credit accounts, payments, inventory movements, and other business history are never removed here.',
             ),
           ],
         );

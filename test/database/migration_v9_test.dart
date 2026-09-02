@@ -9,41 +9,53 @@ import 'package:tindahan_ni_embi/database/migrations/migration_v3.dart';
 import 'package:tindahan_ni_embi/database/migrations/migration_v4.dart';
 import 'package:tindahan_ni_embi/database/migrations/migration_v5.dart';
 import 'package:tindahan_ni_embi/database/migrations/migration_v6.dart';
+import 'package:tindahan_ni_embi/database/migrations/migration_v7.dart';
+import 'package:tindahan_ni_embi/database/migrations/migration_v8.dart';
 
 void main() {
   sqfliteFfiInit();
-  test('existing V6 upgrades to V7 with reversal history', () async {
-    final dir = await Directory.systemTemp.createTemp('v6_v7'),
-        file = '${dir.path}/db';
+  test('V8 upgrades safely to resumable V9 and preserves data', () async {
+    final dir = await Directory.systemTemp.createTemp('v8_v9_');
+    final file = '${dir.path}/db.sqlite';
     final old = await databaseFactoryFfi.openDatabase(
       file,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 8,
         onCreate: (db, _) async {
-          for (final m in [
+          for (final migration in [
             MigrationV1(),
             MigrationV2(),
             MigrationV3(),
             MigrationV4(),
             MigrationV5(),
             MigrationV6(),
+            MigrationV7(),
+            MigrationV8(),
           ]) {
-            await m.migrate(db);
+            await migration.migrate(db);
           }
         },
       ),
     );
+    final stamp = DateTime.now().toUtc().toIso8601String();
+    await old.insert('categories', {
+      'name': 'Preserved',
+      'created_at': stamp,
+      'updated_at': stamp,
+    });
     await old.close();
-    final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file),
-        db = await app.database;
+    final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
+    final db = await app.database;
+    expect(await db.getVersion(), 9);
     expect(
-      (await db.query(
-        'schema_migrations',
-        orderBy: 'version',
-      )).map((x) => x['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      await db.query('categories', where: "name='Preserved'"),
+      hasLength(1),
     );
-    expect(await db.query('transaction_reversals'), isEmpty);
+    expect(await db.query('expense_categories'), hasLength(12));
+    expect(
+      await db.query('schema_migrations', where: 'version=9'),
+      hasLength(1),
+    );
     expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
     await app.close();
     await dir.delete(recursive: true);

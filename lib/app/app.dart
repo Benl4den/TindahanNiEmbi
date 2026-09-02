@@ -7,6 +7,7 @@ import '../database/app_database.dart';
 import '../features/security/presentation/auth_gate.dart';
 import '../features/shell/presentation/app_shell.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_state_view.dart';
 
 class TindahanNiEmbiApp extends StatefulWidget {
   const TindahanNiEmbiApp({super.key, this.database});
@@ -43,47 +44,16 @@ class _State extends State<TindahanNiEmbiApp> {
       builder: (_, s) {
         if (s.hasError) {
           return Scaffold(
-            body: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Could not start TindahanNiEmbi',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Your store data was not deleted. Please try again. If this continues, contact support and mention “database startup”.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: retryStartup,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Try Again'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            body: AppStateView.error(
+              title: 'Could not start TindahanNiEmbi',
+              message: 'Your store data is safe. Please try again. If this continues, contact support and mention “database startup”.',
+              actionLabel: 'Try Again',
+              onAction: retryStartup,
             ),
           );
         }
         if (!s.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: _StartupView());
         }
         return AuthGate(
           auth: AuthService(s.data!),
@@ -95,6 +65,40 @@ class _State extends State<TindahanNiEmbiApp> {
           ),
         );
       },
+    ),
+  );
+}
+
+class _StartupView extends StatelessWidget {
+  const _StartupView();
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(Icons.storefront, color: Colors.white, size: 40),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          AppStrings.appName,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Preparing your store…',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
+        const SizedBox(width: 160, child: LinearProgressIndicator()),
+      ],
     ),
   );
 }

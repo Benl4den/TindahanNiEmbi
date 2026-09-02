@@ -4,6 +4,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../models/category.dart';
 import '../../../repositories/category_repository.dart';
 import 'category_form_screen.dart';
+import '../../../widgets/app_state_view.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key, required this.repository});
@@ -88,23 +89,23 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           future: _categories,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return const AppLoadingView(label: 'Loading categories…');
             }
             if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  AppStrings.couldNotSave,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+              return AppStateView.error(
+                title: 'Could not load categories',
+                message: 'Your category records were not changed.',
+                actionLabel: 'Try Again',
+                onAction: () => setState(_reload),
               );
             }
             final categories = snapshot.data!;
             if (categories.isEmpty) {
-              return Center(
-                child: Text(
-                  AppStrings.noCategories,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
+              return AppStateView.empty(
+                title: AppStrings.noCategories,
+                message: 'Add a category to organize your products.',
+                actionLabel: AppStrings.addCategory,
+                onAction: _openForm,
               );
             }
             return ListView.separated(
@@ -114,31 +115,55 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               itemBuilder: (context, index) {
                 final category = categories[index];
                 return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.category_outlined, size: 42),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: Text(
-                            category.name,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
+                  child: LayoutBuilder(
+                    builder: (_, box) {
+                      final narrow = box.maxWidth < 560;
+                      return Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.category_outlined, size: 42),
+                            const SizedBox(width: 18),
+                            Expanded(
+                              child: Text(
+                                category.name,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            if (narrow)
+                              PopupMenuButton<String>(
+                                tooltip: 'Category actions',
+                                onSelected: (value) => value == 'edit'
+                                    ? _openForm(category)
+                                    : _confirmArchive(category),
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text(AppStrings.edit),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'archive',
+                                    child: Text(AppStrings.archive),
+                                  ),
+                                ],
+                              )
+                            else ...[
+                              OutlinedButton.icon(
+                                onPressed: () => _openForm(category),
+                                icon: const Icon(Icons.edit_outlined),
+                                label: const Text(AppStrings.edit),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                onPressed: () => _confirmArchive(category),
+                                icon: const Icon(Icons.archive_outlined),
+                                label: const Text(AppStrings.archive),
+                              ),
+                            ],
+                          ],
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () => _openForm(category),
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text(AppStrings.edit),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          onPressed: () => _confirmArchive(category),
-                          icon: const Icon(Icons.archive_outlined),
-                          label: const Text(AppStrings.archive),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 );
               },

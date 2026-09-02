@@ -35,15 +35,21 @@ class _State extends State<UtangCheckoutPicker> {
 
   void reload() => data = widget.customers.searchActive(search.text);
   Future<void> select(Customer customer) async {
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UtangCheckoutReview(
-          customer: customer,
-          customers: widget.customers,
-          utang: widget.utang,
-          products: widget.products,
-          items: widget.items,
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 820),
+          child: UtangCheckoutReview(
+            customer: customer,
+            customers: widget.customers,
+            utang: widget.utang,
+            products: widget.products,
+            items: widget.items,
+          ),
         ),
       ),
     );
@@ -55,10 +61,15 @@ class _State extends State<UtangCheckoutPicker> {
         .map((x) => x.id)
         .toSet();
     if (!mounted) return;
-    final ok = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CustomerFormScreen(repository: widget.customers),
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700, maxHeight: 820),
+          child: CustomerFormScreen(repository: widget.customers),
+        ),
       ),
     );
     if (ok == true) {
@@ -70,7 +81,13 @@ class _State extends State<UtangCheckoutPicker> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('MGA UTANGAN')),
+    appBar: AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        onPressed: () => Navigator.pop(context, false),
+      ),
+      title: const Text('SELECT CUSTOMER'),
+    ),
     body: Column(
       children: [
         Padding(
@@ -81,7 +98,7 @@ class _State extends State<UtangCheckoutPicker> {
                 child: TextField(
                   controller: search,
                   decoration: const InputDecoration(
-                    hintText: 'Search UTANGAN...',
+                    hintText: 'Search customers...',
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (_) => setState(reload),
@@ -91,7 +108,7 @@ class _State extends State<UtangCheckoutPicker> {
               FilledButton.icon(
                 onPressed: create,
                 icon: const Icon(Icons.person_add),
-                label: const Text('Add New UTANGAN'),
+                label: const Text('Add New Customer'),
               ),
             ],
           ),
@@ -106,7 +123,7 @@ class _State extends State<UtangCheckoutPicker> {
               if (s.data!.isEmpty) {
                 return const Center(
                   child: Text(
-                    'No UTANGAN Yet.\nAdd a customer to start tracking UTANG.',
+                    'No customers yet.\nAdd a customer to start tracking credit.',
                     textAlign: TextAlign.center,
                   ),
                 );
@@ -169,7 +186,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'The UTANG could not be completed. Your cart has been kept. Please try again.',
+              'The credit sale could not be completed. Your cart has been kept. Please try again.',
             ),
           ),
         );
@@ -188,7 +205,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
       }
       final previous = s.data!.customer.balanceCentavos;
       return Scaffold(
-        appBar: AppBar(title: const Text('Review UTANG')),
+        appBar: AppBar(title: const Text('Review Credit Sale')),
         body: ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -212,9 +229,9 @@ class _ReviewState extends State<UtangCheckoutReview> {
               );
             }),
             const Divider(),
-            _amount('Previous UTANG', previous),
-            _amount('New UTANG', total),
-            _amount('Total UTANG', previous + total, important: true),
+            _amount('Previous Balance', previous),
+            _amount('New Credit', total),
+            _amount('Total Credit Balance', previous + total, important: true),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -228,7 +245,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
                 Expanded(
                   child: FilledButton(
                     onPressed: saving ? null : confirm,
-                    child: const Text('Confirm UTANG'),
+                    child: const Text('Confirm Credit Sale'),
                   ),
                 ),
               ],

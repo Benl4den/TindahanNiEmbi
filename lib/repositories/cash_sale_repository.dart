@@ -116,6 +116,12 @@ class CashSaleRepository {
     return rows.isEmpty ? null : CashSaleResult.fromMap(rows.single);
   }
 
+  Future<SalesHistoryEntry?> latestTransaction() async {
+    final rows = await history();
+    final posted = rows.where((x) => x.status == 'POSTED');
+    return posted.isEmpty ? null : posted.first;
+  }
+
   Future<int> todayTotal() async {
     final now = DateTime.now(),
         start = DateTime(

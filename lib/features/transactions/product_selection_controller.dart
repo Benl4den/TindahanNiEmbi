@@ -22,6 +22,8 @@ class ProductSelectionController {
     }
   }
 
+  void remove(Product p) => _quantities.remove(p.id);
+
   int get totalCentavos => products.fold(
     0,
     (sum, p) => sum + p.sellingPriceCentavos * quantityFor(p),

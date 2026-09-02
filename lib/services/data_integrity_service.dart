@@ -23,6 +23,7 @@ class DataIntegrityService {
         utangIssues = <String>[],
         consignmentIssues = <String>[],
         transactions = <String>[];
+    final expenseIssues = <String>[];
     const requiredTables = [
       'products',
       'inventory_movements',
@@ -37,6 +38,10 @@ class DataIntegrityService {
       'consignor_ledger_entries',
       'transaction_reversals',
       'transaction_corrections',
+      'expense_categories',
+      'expenses',
+      'expense_reversals',
+      'expense_corrections',
     ];
     final tables = (await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table'",
@@ -107,12 +112,34 @@ class DataIntegrityService {
         '${invalidRemittance.length} invalid supplier payable balance(s).',
       );
     }
+    if (tables.contains('expenses')) {
+      final badExpenses = await db.rawQuery(
+        '''SELECT e.id FROM expenses e
+        LEFT JOIN expense_categories c ON c.id=e.category_id
+        WHERE c.id IS NULL OR e.amount_centavos<=0 OR trim(e.category_name_snapshot)='' ''',
+      );
+      if (badExpenses.isNotEmpty) {
+        expenseIssues.add('${badExpenses.length} invalid expense record(s).');
+      }
+      final badLinks = await db.rawQuery(
+        '''SELECT e.id FROM expenses e WHERE
+        (e.status='CORRECTED' AND NOT EXISTS(SELECT 1 FROM expense_corrections c WHERE c.original_expense_id=e.id)) OR
+        (e.status='REVERSED' AND NOT EXISTS(SELECT 1 FROM expense_reversals r WHERE r.expense_id=e.id)) OR
+        (e.status='POSTED' AND EXISTS(SELECT 1 FROM expense_reversals r WHERE r.expense_id=e.id))''',
+      );
+      if (badLinks.isNotEmpty) {
+        expenseIssues.add(
+          '${badLinks.length} expense status/link inconsistency(s).',
+        );
+      }
+    }
     return IntegrityResult([
       IntegritySection('Database', database),
       IntegritySection('Inventory', inventory),
       IntegritySection('UTANG', utangIssues),
       IntegritySection('Consignment', consignmentIssues),
       IntegritySection('Transactions', transactions),
+      IntegritySection('Expenses', expenseIssues),
     ]);
   }
 }

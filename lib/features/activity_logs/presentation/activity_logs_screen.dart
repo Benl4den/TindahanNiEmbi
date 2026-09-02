@@ -22,7 +22,11 @@ class _State extends State<ActivityLogsScreen> {
 
   void reload() => logs = widget.repository.forDate(
     date,
-    category: category == 'All' ? null : category.toUpperCase(),
+    category: category == 'All'
+        ? null
+        : category == 'Credit'
+        ? 'UTANG'
+        : category.toUpperCase(),
     query: query,
   );
   void select(DateTime value) => setState(() {
@@ -65,7 +69,7 @@ class _State extends State<ActivityLogsScreen> {
                       [
                             'All',
                             'Sales',
-                            'UTANG',
+                            'Credit',
                             'Inventory',
                             'Security',
                             'Backup',

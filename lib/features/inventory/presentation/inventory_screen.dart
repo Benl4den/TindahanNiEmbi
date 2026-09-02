@@ -164,7 +164,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     'STOCK_IN' => 'Stock In',
     'ADJUSTMENT_IN' => 'Adjustment In',
     'ADJUSTMENT_OUT' => 'Adjustment Out',
-    'UTANG' => 'UTANG',
+    'UTANG' => 'Credit Sale',
     _ => type,
   };
 

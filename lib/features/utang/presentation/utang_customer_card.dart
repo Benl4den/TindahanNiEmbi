@@ -23,7 +23,7 @@ class UtangCustomerCard extends StatelessWidget {
         ? Colors.orange.shade800
         : Theme.of(context).colorScheme.onSurfaceVariant;
     return Semantics(
-      label: outstanding ? 'Outstanding UTANG' : 'Zero UTANG',
+      label: outstanding ? 'Outstanding Credit' : 'Zero Credit Balance',
       button: true,
       child: Card(
         child: InkWell(
@@ -45,6 +45,25 @@ class UtangCustomerCard extends StatelessWidget {
                       ),
                       if (customer.nickname?.isNotEmpty == true)
                         Text(customer.nickname!),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 2,
+                        children: [
+                          Text(
+                            'Last Credit Sale: ${_date(context, customer.lastUtangAt)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          Text(
+                            'Last payment: ${_date(context, customer.lastPaymentAt)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          Text(
+                            '${customer.transactionCount} transactions',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -52,7 +71,7 @@ class UtangCustomerCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text(
-                      'Current UTANG',
+                      'Current Balance',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     Text(
@@ -74,4 +93,8 @@ class UtangCustomerCard extends StatelessWidget {
       ),
     );
   }
+
+  String _date(BuildContext context, DateTime? value) => value == null
+      ? '—'
+      : MaterialLocalizations.of(context).formatMediumDate(value.toLocal());
 }

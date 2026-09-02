@@ -91,6 +91,65 @@ void main() {
     },
   );
   test(
+    'restock default and statuses use one authoritative boundary rule',
+    () async {
+      final category = (await SqliteCategoryRepository(db).getActive()).first;
+      final products = SqliteProductRepository(db);
+      final above = await products.create(
+        ProductDraft(
+          categoryId: category.id,
+          name: 'Above',
+          photoPath: '/above',
+          purchasePriceCentavos: 1,
+          sellingPriceCentavos: 1,
+          startingQuantity: 6,
+          minimumStockLevel: 5,
+        ),
+      );
+      final zeroMinimum = await products.create(
+        ProductDraft(
+          categoryId: category.id,
+          name: 'Zero minimum',
+          photoPath: '/zero-min',
+          purchasePriceCentavos: 1,
+          sellingPriceCentavos: 1,
+          startingQuantity: 2,
+          minimumStockLevel: 0,
+        ),
+      );
+      final out = await products.create(
+        ProductDraft(
+          categoryId: category.id,
+          name: 'Out',
+          photoPath: '/out',
+          purchasePriceCentavos: 1,
+          sellingPriceCentavos: 1,
+          startingQuantity: 0,
+          minimumStockLevel: 5,
+        ),
+      );
+      final repository = OperationsRepository(db);
+      final needs = await repository.restock();
+      expect(needs.map((x) => x.product.id), containsAll([p.id, out.id]));
+      expect(needs.map((x) => x.product.id), isNot(contains(above.id)));
+      expect(needs.map((x) => x.product.id), isNot(contains(zeroMinimum.id)));
+      expect(
+        (await repository.restock(filter: 'LOW')).map((x) => x.product.id),
+        contains(p.id),
+      );
+      expect(
+        (await repository.restock(filter: 'OUT')).map((x) => x.product.id),
+        contains(out.id),
+      );
+      expect(
+        (await repository.restock(filter: 'ALL'))
+            .firstWhere((x) => x.product.id == above.id)
+            .suggested,
+        0,
+      );
+    },
+  );
+  test(
     'integrity check passes healthy DB and detects deliberate mismatch',
     () async {
       expect((await DataIntegrityService(db).check()).healthy, isTrue);
