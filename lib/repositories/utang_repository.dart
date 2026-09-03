@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/utang_draft.dart';
 import 'consignment_allocation.dart';
+import '../services/app_refresh_controller.dart';
 
 class UtangRepository {
   const UtangRepository(this._database, {this.actorRole});
@@ -10,7 +11,9 @@ class UtangRepository {
   final String? actorRole;
 
   Future<int> save(UtangDraft draft) async {
-    return _database.transaction((txn) => saveWithExecutor(txn, draft));
+    return AppRefreshController.instance.after(
+      _database.transaction((txn) => saveWithExecutor(txn, draft)),
+    );
   }
 
   Future<int> saveWithExecutor(DatabaseExecutor txn, UtangDraft draft) async {

@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/inventory_movement.dart';
 import '../models/product.dart';
+import '../services/app_refresh_controller.dart';
 
 class InvalidInventoryOperation implements Exception {
   const InvalidInventoryOperation(this.message);
@@ -11,6 +12,7 @@ class InvalidInventoryOperation implements Exception {
 class InventoryRepository {
   const InventoryRepository(this._database, {this.actorRole});
   final Database _database;
+  Database get db => _database;
   final String? actorRole;
 
   Future<List<Product>> current({ProductStockStatus? status}) async {
@@ -29,7 +31,13 @@ class InventoryRepository {
 
   Future<int> inventoryValueCentavos() async {
     final rows = await _database.rawQuery(
-      '''SELECT COALESCE(SUM(p.current_quantity * p.purchase_price_centavos), 0) value
+      '''SELECT COALESCE(SUM(
+           (p.current_quantity * p.purchase_price_centavos +
+             COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
+               WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)/2) /
+           COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
+             WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)
+         ), 0) value
          FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
            SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
            WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
@@ -135,6 +143,7 @@ class InventoryRepository {
         'created_at': now,
       });
     });
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<List<InventoryMovement>> history() async {

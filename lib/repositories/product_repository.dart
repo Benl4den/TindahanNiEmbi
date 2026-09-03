@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
 import '../models/product_unit.dart';
+import '../services/app_refresh_controller.dart';
 
 class InvalidProductException implements Exception {
   const InvalidProductException(this.message);
@@ -77,73 +78,80 @@ class SqliteProductRepository implements ProductRepository {
   @override
   Future<Product> create(ProductDraft draft) async {
     final name = _validate(draft);
-    return _database.transaction((txn) async {
-      await _requireActiveCategory(txn, draft.categoryId);
-      final now = DateTime.now().toUtc().toIso8601String();
-      final units =
-          draft.unitConfiguration ??
-          ProductUnitPreset.forCategory('', draft.sellingPriceCentavos);
-      _validateUnits(units);
-      final productId = await txn.insert('products', {
-        'category_id': draft.categoryId,
-        'name': name,
-        'photo_path': draft.photoPath.trim(),
-        'purchase_price_centavos': draft.purchasePriceCentavos,
-        'selling_price_centavos': draft.sellingPriceCentavos,
-        'current_quantity': 0,
-        'minimum_stock_level': draft.minimumStockLevel,
-        'is_archived': 0,
-        'created_at': now,
-        'updated_at': now,
-        'base_unit_code': units.baseUnit.code,
-        'base_unit_label': units.baseUnit.label,
-      });
-      await _replaceUnits(txn, productId, units, now);
-      if (draft.startingQuantity > 0) {
-        final startingBaseQuantity =
-            draft.startingQuantity *
-            units.purchasePackages.singleWhere((x) => x.isDefault).baseQuantity;
-        final transactionId = await txn.insert('inventory_transactions', {
-          'type': 'INITIAL_STOCK',
-          'reference_number': 'PRODUCT-$productId',
-          'notes': 'Starting stock',
-          'occurred_at': now,
+    return AppRefreshController.instance.after(
+      _database.transaction((txn) async {
+        await _requireActiveCategory(txn, draft.categoryId);
+        final now = DateTime.now().toUtc().toIso8601String();
+        final units =
+            draft.unitConfiguration ??
+            ProductUnitPreset.forCategory('', draft.sellingPriceCentavos);
+        _validateUnits(units);
+        final authoritativePrice = units.sellingOptions
+            .singleWhere((x) => x.isDefault)
+            .priceCentavos;
+        final productId = await txn.insert('products', {
+          'category_id': draft.categoryId,
+          'name': name,
+          'photo_path': draft.photoPath.trim(),
+          'purchase_price_centavos': draft.purchasePriceCentavos,
+          'selling_price_centavos': authoritativePrice,
+          'current_quantity': 0,
+          'minimum_stock_level': draft.minimumStockLevel,
+          'is_archived': 0,
+          'created_at': now,
+          'updated_at': now,
+          'base_unit_code': units.baseUnit.code,
+          'base_unit_label': units.baseUnit.label,
+        });
+        await _replaceUnits(txn, productId, units, now);
+        if (draft.startingQuantity > 0) {
+          final startingBaseQuantity =
+              draft.startingQuantity *
+              units.purchasePackages
+                  .singleWhere((x) => x.isDefault)
+                  .baseQuantity;
+          final transactionId = await txn.insert('inventory_transactions', {
+            'type': 'INITIAL_STOCK',
+            'reference_number': 'PRODUCT-$productId',
+            'notes': 'Starting stock',
+            'occurred_at': now,
+            'created_at': now,
+          });
+          await txn.insert('inventory_movements', {
+            'inventory_transaction_id': transactionId,
+            'product_id': productId,
+            'quantity_change': startingBaseQuantity,
+            'quantity_before': 0,
+            'quantity_after': startingBaseQuantity,
+            'unit_cost_centavos': draft.purchasePriceCentavos,
+            'entered_quantity': draft.startingQuantity,
+            'entered_unit_snapshot': units.purchasePackages
+                .singleWhere((x) => x.isDefault)
+                .name,
+            'base_quantity_per_entered_unit': units.purchasePackages
+                .singleWhere((x) => x.isDefault)
+                .baseQuantity,
+            'created_at': now,
+          });
+        }
+        await txn.insert('activity_logs', {
+          'event_type': 'PRODUCT_CREATED',
+          'description': 'Product created — $name',
+          'actor_role': actorRole,
+          'related_entity_type': 'PRODUCT',
+          'related_entity_id': productId,
           'created_at': now,
         });
-        await txn.insert('inventory_movements', {
-          'inventory_transaction_id': transactionId,
-          'product_id': productId,
-          'quantity_change': startingBaseQuantity,
-          'quantity_before': 0,
-          'quantity_after': startingBaseQuantity,
-          'unit_cost_centavos': draft.purchasePriceCentavos,
-          'entered_quantity': draft.startingQuantity,
-          'entered_unit_snapshot': units.purchasePackages
-              .singleWhere((x) => x.isDefault)
-              .name,
-          'base_quantity_per_entered_unit': units.purchasePackages
-              .singleWhere((x) => x.isDefault)
-              .baseQuantity,
-          'created_at': now,
-        });
-      }
-      await txn.insert('activity_logs', {
-        'event_type': 'PRODUCT_CREATED',
-        'description': 'Product created — $name',
-        'actor_role': actorRole,
-        'related_entity_type': 'PRODUCT',
-        'related_entity_id': productId,
-        'created_at': now,
-      });
-      return Product.fromMap(
-        (await txn.query(
-          'products',
-          where: 'id = ?',
-          whereArgs: [productId],
-          limit: 1,
-        )).single,
-      );
-    });
+        return Product.fromMap(
+          (await txn.query(
+            'products',
+            where: 'id = ?',
+            whereArgs: [productId],
+            limit: 1,
+          )).single,
+        );
+      }),
+    );
   }
 
   @override
@@ -157,73 +165,94 @@ class SqliteProductRepository implements ProductRepository {
     if (product.photoPath.trim().isEmpty) {
       throw const InvalidProductException('Product photo is required.');
     }
-    return _database.transaction((txn) async {
-      await _requireActiveCategory(txn, product.categoryId);
-      final now = DateTime.now().toUtc().toIso8601String();
-      final units = product.unitConfiguration;
-      if (units != null) {
-        _validateUnits(units);
-        final existing = (await txn.query(
-          'products',
-          columns: ['base_unit_code', 'current_quantity'],
-          where: 'id=?',
-          whereArgs: [product.id],
-          limit: 1,
-        )).single;
-        if (existing['base_unit_code'] != units.baseUnit.code &&
-            (existing['current_quantity']! as int) > 0) {
-          final oldConversions = await txn.rawQuery(
-            '''SELECT base_quantity FROM product_purchase_packages WHERE product_id=? AND is_archived=0
+    if (product.sellingPriceCentavos <= 0 &&
+        product.unitConfiguration == null) {
+      throw const InvalidProductException(
+        'Selling price must be greater than zero.',
+      );
+    }
+    return AppRefreshController.instance.after(
+      _database.transaction((txn) async {
+        await _requireActiveCategory(txn, product.categoryId);
+        final now = DateTime.now().toUtc().toIso8601String();
+        final units = product.unitConfiguration;
+        if (units != null) {
+          _validateUnits(units);
+          final existing = (await txn.query(
+            'products',
+            columns: ['base_unit_code', 'current_quantity'],
+            where: 'id=?',
+            whereArgs: [product.id],
+            limit: 1,
+          )).single;
+          if (existing['base_unit_code'] != units.baseUnit.code &&
+              (existing['current_quantity']! as int) > 0) {
+            final oldConversions = await txn.rawQuery(
+              '''SELECT base_quantity FROM product_purchase_packages WHERE product_id=? AND is_archived=0
                UNION ALL SELECT base_quantity FROM product_selling_options WHERE product_id=? AND is_archived=0''',
-            [product.id, product.id],
-          );
-          final remainsOneToOne =
-              oldConversions.every((x) => x['base_quantity'] == 1) &&
-              units.purchasePackages.every((x) => x.baseQuantity == 1) &&
-              units.sellingOptions.every((x) => x.baseQuantity == 1);
-          if (!remainsOneToOne) {
-            throw const InvalidProductException(
-              'Base unit cannot be changed while stock remains. Adjust stock to zero first.',
+              [product.id, product.id],
             );
+            final remainsOneToOne =
+                oldConversions.every((x) => x['base_quantity'] == 1) &&
+                units.purchasePackages.every((x) => x.baseQuantity == 1) &&
+                units.sellingOptions.every((x) => x.baseQuantity == 1);
+            if (!remainsOneToOne) {
+              throw const InvalidProductException(
+                'Base unit cannot be changed while stock remains. Adjust stock to zero first.',
+              );
+            }
           }
         }
-      }
-      final changed = await txn.update(
-        'products',
-        {
-          'category_id': product.categoryId,
-          'name': name,
-          'photo_path': product.photoPath,
-          'purchase_price_centavos': product.purchasePriceCentavos,
-          'selling_price_centavos': product.sellingPriceCentavos,
-          'minimum_stock_level': product.minimumStockLevel,
-          'updated_at': now,
-          if (units != null) 'base_unit_code': units.baseUnit.code,
-          if (units != null) 'base_unit_label': units.baseUnit.label,
-        },
-        where: 'id = ? AND is_archived = 0',
-        whereArgs: [product.id],
-      );
-      if (changed == 0) {
-        throw const InvalidProductException('Product not found.');
-      }
-      if (units != null) await _replaceUnits(txn, product.id, units, now);
-      await txn.insert('activity_logs', {
-        'event_type': 'PRODUCT_EDITED',
-        'description': 'Product edited — $name',
-        'actor_role': actorRole,
-        'related_entity_type': 'PRODUCT',
-        'related_entity_id': product.id,
-        'created_at': now,
-      });
-      return Product.fromMap(
-        (await txn.query(
+        final authoritativePrice =
+            units?.sellingOptions
+                .singleWhere((x) => x.isDefault)
+                .priceCentavos ??
+            product.sellingPriceCentavos;
+        final changed = await txn.update(
           'products',
-          where: 'id = ?',
+          {
+            'category_id': product.categoryId,
+            'name': name,
+            'photo_path': product.photoPath,
+            'purchase_price_centavos': product.purchasePriceCentavos,
+            'selling_price_centavos': authoritativePrice,
+            'minimum_stock_level': product.minimumStockLevel,
+            'updated_at': now,
+            if (units != null) 'base_unit_code': units.baseUnit.code,
+            if (units != null) 'base_unit_label': units.baseUnit.label,
+          },
+          where: 'id = ? AND is_archived = 0',
           whereArgs: [product.id],
-        )).single,
-      );
-    });
+        );
+        if (changed == 0) {
+          throw const InvalidProductException('Product not found.');
+        }
+        if (units != null) await _replaceUnits(txn, product.id, units, now);
+        if (units == null) {
+          await txn.update(
+            'product_selling_options',
+            {'price_centavos': authoritativePrice, 'updated_at': now},
+            where: 'product_id=? AND is_default=1 AND is_archived=0',
+            whereArgs: [product.id],
+          );
+        }
+        await txn.insert('activity_logs', {
+          'event_type': 'PRODUCT_EDITED',
+          'description': 'Product edited — $name',
+          'actor_role': actorRole,
+          'related_entity_type': 'PRODUCT',
+          'related_entity_id': product.id,
+          'created_at': now,
+        });
+        return Product.fromMap(
+          (await txn.query(
+            'products',
+            where: 'id = ?',
+            whereArgs: [product.id],
+          )).single,
+        );
+      }),
+    );
   }
 
   @override
@@ -254,6 +283,7 @@ class SqliteProductRepository implements ProductRepository {
         'created_at': now,
       });
     });
+    AppRefreshController.instance.dataChanged();
   }
 
   String _validate(ProductDraft draft) {
@@ -361,7 +391,7 @@ class SqliteProductRepository implements ProductRepository {
           (x) =>
               x.name.trim().isEmpty ||
               x.baseQuantity <= 0 ||
-              x.priceCentavos < 0,
+              x.priceCentavos <= 0,
         )) {
       throw const InvalidProductException(
         'Enter valid units and select one default package and selling option.',

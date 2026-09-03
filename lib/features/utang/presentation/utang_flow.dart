@@ -134,7 +134,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
               child: Row(
                 children: [
                   _utangMetric(
-                    'Total Outstanding Credit',
+                    'Total Outstanding UTANG',
                     '₱${(total / 100).toStringAsFixed(2)}',
                     Colors.orange.shade800,
                   ),
@@ -168,7 +168,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                 ? s.data!.isEmpty
                       ? const Center(
                           child: Text(
-                            'No customers yet.\nAdd a customer to start tracking credit.',
+                            'No UTANGAN yet.\nAdd an UTANGAN to start tracking UTANG.',
                             textAlign: TextAlign.center,
                           ),
                         )
@@ -389,7 +389,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
         .toList();
     return Scaffold(
       appBar: AppBar(
-        title: Text('New Credit Sale — ${widget.customer.fullName}'),
+        title: Text('New UTANG Sale — ${widget.customer.fullName}'),
       ),
       body: Column(
         children: [
@@ -493,7 +493,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                               Navigator.pop(context, true);
                             }
                           },
-                    child: const Text('Review Credit Sale'),
+                    child: const Text('Review UTANG Sale'),
                   ),
                 ],
               ),
@@ -536,7 +536,7 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
       widget.selection.clear();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Credit sale saved.')));
+            .showSnackBar(const SnackBar(content: Text('UTANG sale saved.')));
         Navigator.pop(context, true);
       }
     } finally {
@@ -554,7 +554,7 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
       final old = s.data!.customer.balanceCentavos,
           newDebt = widget.selection.totalCentavos;
       return Scaffold(
-        appBar: AppBar(title: const Text('Review Credit Sale')),
+        appBar: AppBar(title: const Text('Review UTANG Sale')),
         body: ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -573,16 +573,16 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
                 ),
               ),
             ),
-            Text('New Credit: ₱${(newDebt / 100).toStringAsFixed(2)}'),
+            Text('New UTANG: ₱${(newDebt / 100).toStringAsFixed(2)}'),
             Text('Previous Balance: ₱${(old / 100).toStringAsFixed(2)}'),
             Text(
-              'Total Credit Balance: ₱${((old + newDebt) / 100).toStringAsFixed(2)}',
+              'Total UTANG Balance: ₱${((old + newDebt) / 100).toStringAsFixed(2)}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: saving ? null : save,
-              child: const Text('Save Credit Sale'),
+              child: const Text('Save UTANG Sale'),
             ),
             OutlinedButton(
               onPressed: () => Navigator.pop(context),
@@ -654,7 +654,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 .where(
                   (e) =>
                       filter == 'All' ||
-                      (filter == 'Credit'
+                      (filter == 'UTANG'
                           ? e.type.startsWith('UTANG')
                           : e.type.startsWith('PAYMENT')),
                 )
@@ -691,7 +691,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Last Credit Sale: ${_lastDate(d.ledger, 'UTANG')}\nLast Payment: ${_lastDate(d.ledger, 'PAYMENT')}\nOutstanding credit transactions: ${_outstandingCount(d)}',
+                            'Last UTANG Sale: ${_lastDate(d.ledger, 'UTANG')}\nLast Payment: ${_lastDate(d.ledger, 'PAYMENT')}\nOutstanding UTANG transactions: ${_outstandingCount(d)}',
                           ),
                         ],
                       ),
@@ -699,7 +699,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     FilledButton.icon(
                       onPressed: () => newUtang(d.customer),
                       icon: const Icon(Icons.add),
-                      label: const Text('New Credit Sale'),
+                      label: const Text('New UTANG Sale'),
                     ),
                     const SizedBox(width: 12),
                     OutlinedButton.icon(
@@ -735,7 +735,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
-              children: ['All', 'Credit', 'Payments']
+              children: ['All', 'UTANG', 'Payments']
                   .map(
                     (x) => ChoiceChip(
                       label: Text(x),
@@ -1022,7 +1022,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     ),
                   ),
                   Text(
-                    'Resulting Credit Balance: ${_money(customer.balanceCentavos + entry.amountCentavos.abs() - cents)}',
+                    'Resulting UTANG Balance: ${_money(customer.balanceCentavos + entry.amountCentavos.abs() - cents)}',
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -1329,7 +1329,7 @@ class UtangDetailsDialog extends StatelessWidget {
                                       set(
                                         () => error = e is ReversalException
                                             ? e.message
-                                            : 'Could not reverse credit sale.',
+                                            : 'Could not reverse UTANG sale.',
                                       );
                                     }
                                   }
@@ -1546,7 +1546,7 @@ class UtangDetailsDialog extends StatelessWidget {
                             saving = false;
                             error = e is CorrectionException
                                 ? e.message
-                                : 'Could not correct credit sale.';
+                                : 'Could not correct UTANG sale.';
                           });
                         }
                       }

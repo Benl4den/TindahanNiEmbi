@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/consignment.dart';
 import '../models/product.dart';
+import '../models/product_unit.dart';
 
 class InvalidConsignmentOperation implements Exception {
   const InvalidConsignmentOperation(this.message);
@@ -69,7 +70,7 @@ class ConsignmentRepository {
     if (draft.boxes <= 0 ||
         draft.unitsPerBox <= 0 ||
         draft.unitCostCentavos < 0 ||
-        draft.sellingPriceCentavos < 0) {
+        draft.sellingPriceCentavos <= 0) {
       throw const InvalidConsignmentOperation('Invalid receipt values.');
     }
     return db.transaction((tx) => _receiveWith(tx, draft));
@@ -103,6 +104,19 @@ class ConsignmentRepository {
       throw const InvalidConsignmentOperation('Active category is required.');
     }
     final now = DateTime.now().toUtc().toIso8601String();
+    final units =
+        product.unitConfiguration ??
+        ProductUnitPreset.forCategory('', sellingPriceCentavos);
+    final synchronizedSales = units.sellingOptions
+        .map(
+          (x) => SellingOptionDraft(
+            name: x.name,
+            baseQuantity: x.baseQuantity,
+            priceCentavos: x.isDefault ? sellingPriceCentavos : x.priceCentavos,
+            isDefault: x.isDefault,
+          ),
+        )
+        .toList();
     final productId = await tx.insert('products', {
       'category_id': product.categoryId,
       'name': name,
@@ -114,7 +128,32 @@ class ConsignmentRepository {
       'is_archived': 0,
       'created_at': now,
       'updated_at': now,
+      'base_unit_code': units.baseUnit.code,
+      'base_unit_label': units.baseUnit.label,
     });
+    for (final package in units.purchasePackages) {
+      await tx.insert('product_purchase_packages', {
+        'product_id': productId,
+        'name': package.name.trim(),
+        'base_quantity': package.baseQuantity,
+        'is_default': package.isDefault ? 1 : 0,
+        'is_archived': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+    for (final option in synchronizedSales) {
+      await tx.insert('product_selling_options', {
+        'product_id': productId,
+        'name': option.name.trim(),
+        'base_quantity': option.baseQuantity,
+        'price_centavos': option.priceCentavos,
+        'is_default': option.isDefault ? 1 : 0,
+        'is_archived': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
     await tx.insert('activity_logs', {
       'event_type': 'PRODUCT_CREATED',
       'description': 'Product created — $name',
@@ -144,7 +183,7 @@ class ConsignmentRepository {
     if (draft.boxes <= 0 ||
         draft.unitsPerBox <= 0 ||
         draft.unitCostCentavos < 0 ||
-        draft.sellingPriceCentavos < 0) {
+        draft.sellingPriceCentavos <= 0) {
       throw const InvalidConsignmentOperation('Invalid receipt values.');
     }
     final consignor = await tx.query(
@@ -211,6 +250,12 @@ class ConsignmentRepository {
       'products',
       {'selling_price_centavos': draft.sellingPriceCentavos},
       where: 'id=?',
+      whereArgs: [draft.productId],
+    );
+    await tx.update(
+      'product_selling_options',
+      {'price_centavos': draft.sellingPriceCentavos, 'updated_at': now},
+      where: 'product_id=? AND is_default=1 AND is_archived=0',
       whereArgs: [draft.productId],
     );
     await tx.insert('activity_logs', {

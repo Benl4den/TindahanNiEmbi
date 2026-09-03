@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/utang_draft.dart';
 import 'consignment_allocation.dart';
+import '../services/app_refresh_controller.dart';
 
 class CashSaleRepository {
   const CashSaleRepository(this.db, {this.actorRole});
@@ -11,7 +12,9 @@ class CashSaleRepository {
       (await saveWithResult(items)).id;
 
   Future<CashSaleResult> saveWithResult(List<UtangItemDraft> items) async {
-    return db.transaction((tx) => saveWithExecutor(tx, items));
+    return AppRefreshController.instance.after(
+      db.transaction((tx) => saveWithExecutor(tx, items)),
+    );
   }
 
   Future<CashSaleResult> saveWithExecutor(

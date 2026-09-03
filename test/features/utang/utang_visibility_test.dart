@@ -40,8 +40,8 @@ void main() {
     );
     expect(find.text('₱300.00'), findsOneWidget);
     expect(find.text('₱0.00'), findsOneWidget);
-    expect(find.bySemanticsLabel('Outstanding Credit'), findsOneWidget);
-    expect(find.bySemanticsLabel('Zero Credit Balance'), findsOneWidget);
+    expect(find.bySemanticsLabel('Outstanding UTANG'), findsOneWidget);
+    expect(find.bySemanticsLabel('Zero UTANG Balance'), findsOneWidget);
   });
 
   testWidgets(

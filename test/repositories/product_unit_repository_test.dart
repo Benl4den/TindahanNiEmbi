@@ -86,6 +86,7 @@ void main() {
         productId: productId,
         packageId: package.id,
         packageCount: 2,
+        packageCostCentavos: 50000,
       );
       expect(
         (await db.query(
@@ -98,6 +99,7 @@ void main() {
       final movement = (await db.query('inventory_movements')).single;
       expect(movement, containsPair('entered_quantity', 2));
       expect(movement, containsPair('base_quantity_per_entered_unit', 3785));
+      expect(movement, containsPair('unit_cost_centavos', 50000));
     },
   );
 
@@ -139,7 +141,8 @@ void main() {
     expect(bigDrink.purchasePackages.single.baseQuantity, 12);
     final oil = ProductUnitPreset.forCategory('Cooking Oil', 2000);
     expect(oil.purchasePackages.single.baseQuantity, 3785);
-    expect(oil.sellingOptions.map((x) => x.baseQuantity), [125, 250]);
+    expect(oil.sellingOptions.map((x) => x.baseQuantity), [250, 125]);
+    expect(oil.sellingOptions.first.isDefault, isTrue);
     final cigarettes = ProductUnitPreset.forCategory('Cigarettes', 800);
     expect(cigarettes.baseUnit, BaseUnit.stick);
     expect(cigarettes.sellingOptions.map((x) => x.priceCentavos), [800, 800]);

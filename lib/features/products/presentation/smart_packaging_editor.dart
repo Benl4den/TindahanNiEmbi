@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/product_unit.dart';
+import '../../../core/formatters/number_format.dart';
 import 'units_packaging_editor.dart';
 
 class SmartPackagingEditor extends StatefulWidget {
@@ -216,14 +217,22 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
       suffixText: suffix,
       border: const OutlineInputBorder(),
     ),
+    onTap: () {
+      if (controller.text == '0' || controller.text == '0.00') {
+        controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: controller.text.length,
+        );
+      }
+    },
     validator: (text) {
       if (controller == widget.startingPackageCount) {
-        final count = int.tryParse(text?.trim() ?? '');
+        final count = int.tryParse(numericInput(text ?? ''));
         return count == null || count < 0
             ? 'Enter a valid whole number.'
             : null;
       }
-      final n = double.tryParse(text?.trim() ?? '');
+      final n = double.tryParse(numericInput(text ?? ''));
       return n == null || !n.isFinite || (money ? n < 0 : n <= 0)
           ? money
                 ? 'Enter a valid non-negative price.'
@@ -364,7 +373,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
   }
 
   int _baseQuantity() {
-    final n = double.tryParse(size.text.trim()) ?? 0;
+    final n = double.tryParse(numericInput(size.text)) ?? 0;
     return kind == 'rice' || kind == 'oil' ? (n * 1000).round() : n.round();
   }
 
@@ -373,7 +382,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
   int _suggestLarge(int small, int base) =>
       kind == 'rice' ? (small * base / 1000).round() : small * base;
   int? _cents(String text) {
-    final n = double.tryParse(text.trim());
+    final n = double.tryParse(numericInput(text));
     return n == null || !n.isFinite || n < 0 ? null : (n * 100).round();
   }
 

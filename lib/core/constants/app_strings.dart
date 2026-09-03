@@ -5,9 +5,9 @@ abstract final class AppStrings {
   static const products = 'Products';
   static const lowStock = 'Low Stock';
   static const outOfStock = 'Out of Stock';
-  static const totalUtang = 'Total Credit Balance';
+  static const totalUtang = 'Total UTANG Balance';
   static const inventory = 'Inventory';
-  static const utang = 'Credit';
+  static const utang = 'UTANG';
   static const addStock = 'Stock In';
   static const reports = 'Reports';
   static const categories = 'Categories';
@@ -73,7 +73,7 @@ abstract final class AppStrings {
   static const customerSaved = 'Customer saved.';
   static const customerArchived = 'Customer archived.';
   static const archiveCustomer = 'Archive this customer?';
-  static const utangHistory = 'Credit History';
+  static const utangHistory = 'UTANG History';
   static const paymentHistory = 'Payment History';
   static const comingSoon = 'Coming soon.';
   static const close = 'Close';

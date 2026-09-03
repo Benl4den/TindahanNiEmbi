@@ -132,14 +132,14 @@ class ProductUnitPreset {
         ],
         sellingOptions: [
           SellingOptionDraft(
-            name: 'Half Lapad',
-            baseQuantity: 125,
+            name: 'Lapad',
+            baseQuantity: 250,
             priceCentavos: defaultSellingPriceCentavos,
             isDefault: true,
           ),
           SellingOptionDraft(
-            name: 'Lapad',
-            baseQuantity: 250,
+            name: 'Half Lapad',
+            baseQuantity: 125,
             priceCentavos: defaultSellingPriceCentavos,
           ),
         ],

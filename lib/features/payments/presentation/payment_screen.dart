@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_strings.dart';
 import '../../../models/customer.dart';
 import '../../../repositories/payment_repository.dart';
 
@@ -55,7 +54,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Total Credit Balance: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
+            'Total UTANG Balance: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text(
@@ -99,7 +98,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           TextButton(
             onPressed: saving ? null : () => Navigator.pop(context, false),
-            child: const Text(AppStrings.back),
+            child: const Text('Cancel'),
           ),
         ],
       ),

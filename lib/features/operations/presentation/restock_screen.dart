@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../repositories/inventory_repository.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../repositories/operations_repository.dart';
+import '../../../repositories/product_unit_repository.dart';
+import '../../inventory/presentation/package_stock_in_dialog.dart';
 import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_search_field.dart';
 import '../../../widgets/product_image.dart';
@@ -41,55 +44,13 @@ class _State extends State<RestockScreen> {
       widget.openConsignment();
       return;
     }
-    final c = TextEditingController(text: '${item.suggested}');
-    final ok = await showDialog<bool>(
+    final saved = await showPackageStockInDialog(
       context: context,
-      builder: (x) => AlertDialog(
-        title: Text('Stock In — ${item.product.name}'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: c,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Quantity',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(x, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(x, true),
-            child: const Text('Stock In'),
-          ),
-        ],
-      ),
+      product: item.product,
+      repository: ProductUnitRepository(widget.inventory.db),
+      suggestedBaseQuantity: item.suggested,
     );
-    if (ok == true) {
-      try {
-        await widget.inventory.stockIn(
-          productId: item.product.id,
-          quantity: int.tryParse(c.text) ?? 0,
-        );
-        if (mounted) setState(reload);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e is InvalidInventoryOperation
-                    ? e.message
-                    : 'Could not stock in.',
-              ),
-            ),
-          );
-        }
-      }
-    }
+    if (saved && mounted) setState(reload);
   }
 
   @override
@@ -257,7 +218,7 @@ class _State extends State<RestockScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         subtitle: Text(
-                          'Current: ${x.product.currentQuantity}   Minimum: ${x.product.minimumStockLevel}\nSuggested Restock: +${x.suggested}${x.isConsignment ? ' • Consignment' : ''}\n${out
+                          'Current: ${standardNumber(x.product.currentQuantity)}   Minimum: ${standardNumber(x.product.minimumStockLevel)}\nSuggested Restock: +${standardNumber(x.suggested)}${x.isConsignment ? ' • Consignment' : ''}\n${out
                               ? 'OUT OF STOCK'
                               : low
                               ? 'LOW STOCK'

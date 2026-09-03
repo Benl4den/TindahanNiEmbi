@@ -4,6 +4,8 @@ import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/product_repository.dart';
+import '../../../repositories/product_unit_repository.dart';
+import '../../inventory/presentation/package_stock_in_dialog.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../widgets/app_state_view.dart';
@@ -80,6 +82,22 @@ class _SelectaScreenState extends State<SelectaScreen> {
   Future<void> _create() async {
     final categories = await widget.categories.getActive();
     if (!mounted) return;
+    final frozen = categories.where((x) {
+      final name = x.name.trim().toLowerCase().replaceAll(
+        RegExp(r'[- ]+'),
+        ' ',
+      );
+      return name == 'ice & frozen treats' ||
+          name == 'ice cream & frozen treats';
+    }).firstOrNull;
+    if (frozen == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Active category “Ice & Frozen Treats” is required.'),
+        ),
+      );
+      return;
+    }
     Product? created;
     final saved = await showDialog<bool>(
       context: context,
@@ -92,6 +110,8 @@ class _SelectaScreenState extends State<SelectaScreen> {
             repository: widget.products,
             photoService: widget.photoService,
             categories: categories,
+            initialCategoryId: frozen.id,
+            categoryInitiallyLocked: true,
             onSaved: (value) => created = value,
           ),
         ),
@@ -126,42 +146,12 @@ class _SelectaScreenState extends State<SelectaScreen> {
   }
 
   Future<void> _stockIn(Product p) async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
+    final saved = await showPackageStockInDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text('Stock In — ${p.name}'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Quantity',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Stock In'),
-          ),
-        ],
-      ),
+      product: p,
+      repository: ProductUnitRepository(widget.inventory.db),
     );
-    if (ok == true) {
-      await widget.inventory.stockIn(
-        productId: p.id,
-        quantity: int.tryParse(controller.text) ?? 0,
-      );
-      if (mounted) setState(() {});
-    }
+    if (saved && mounted) setState(() {});
   }
 
   @override
@@ -269,7 +259,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                 padding: const EdgeInsets.all(20),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 440,
-                  mainAxisExtent: 218,
+                  mainAxisExtent: 248,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                 ),
@@ -325,20 +315,25 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                       : AppStatus.normal,
                                 ),
                                 const SizedBox(height: 6),
-                                Row(
-                                  spacing: 8,
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
+                                    SizedBox(
+                                      height: 48,
+                                      child: FilledButton.tonalIcon(
                                         onPressed: () => _stockIn(p),
                                         icon: const Icon(Icons.add_box),
                                         label: const Text('Stock In'),
                                       ),
                                     ),
-                                    IconButton(
-                                      onPressed: () => _edit(p),
-                                      icon: const Icon(Icons.edit),
-                                      tooltip: 'Edit Product',
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed: () => _edit(p),
+                                        icon: const Icon(Icons.edit, size: 18),
+                                        label: const Text('Edit'),
+                                      ),
                                     ),
                                   ],
                                 ),

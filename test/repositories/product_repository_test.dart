@@ -48,6 +48,15 @@ void main() {
     () async {
       final zero = await products.create(draft());
       expect(zero.currentQuantity, 0);
+      expect(zero.sellingPriceCentavos, 900);
+      expect(
+        (await database.query(
+          'product_selling_options',
+          where: 'product_id=? AND is_default=1 AND is_archived=0',
+          whereArgs: [zero.id],
+        )).single['price_centavos'],
+        900,
+      );
       expect(
         await database.query(
           'inventory_movements',

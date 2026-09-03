@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../services/app_refresh_controller.dart';
+
 class PaymentRepository {
   const PaymentRepository(this._database, {this.actorRole});
   final Database _database;
@@ -11,13 +13,15 @@ class PaymentRepository {
     String? notes,
     DateTime? paidAt,
   }) async {
-    return _database.transaction(
-      (txn) => recordWithExecutor(
-        txn,
-        customerId: customerId,
-        amountCentavos: amountCentavos,
-        notes: notes,
-        paidAt: paidAt,
+    return AppRefreshController.instance.after(
+      _database.transaction(
+        (txn) => recordWithExecutor(
+          txn,
+          customerId: customerId,
+          amountCentavos: amountCentavos,
+          notes: notes,
+          paidAt: paidAt,
+        ),
       ),
     );
   }

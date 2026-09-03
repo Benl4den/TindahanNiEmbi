@@ -23,7 +23,7 @@ class UtangCustomerCard extends StatelessWidget {
         ? Colors.orange.shade800
         : Theme.of(context).colorScheme.onSurfaceVariant;
     return Semantics(
-      label: outstanding ? 'Outstanding Credit' : 'Zero Credit Balance',
+      label: outstanding ? 'Outstanding UTANG' : 'Zero UTANG Balance',
       button: true,
       child: Card(
         child: InkWell(
@@ -51,7 +51,7 @@ class UtangCustomerCard extends StatelessWidget {
                         runSpacing: 2,
                         children: [
                           Text(
-                            'Last Credit Sale: ${_date(context, customer.lastUtangAt)}',
+                            'Last UTANG Sale: ${_date(context, customer.lastUtangAt)}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           Text(

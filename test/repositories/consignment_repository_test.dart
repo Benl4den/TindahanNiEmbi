@@ -196,6 +196,15 @@ void main() {
       whereArgs: ['New Juice'],
     )).single;
     expect(created['current_quantity'], 24);
+    expect(created['selling_price_centavos'], 450);
+    expect(
+      (await db.query(
+        'product_selling_options',
+        where: 'product_id=? AND is_default=1 AND is_archived=0',
+        whereArgs: [created['id']],
+      )).single['price_centavos'],
+      450,
+    );
     expect(
       (await db.query(
         'inventory_movements',

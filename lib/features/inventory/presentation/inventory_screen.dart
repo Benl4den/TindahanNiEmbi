@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/inventory_movement.dart';
 import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
@@ -112,7 +113,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text(AppStrings.back),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
@@ -164,7 +165,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     'STOCK_IN' => 'Stock In',
     'ADJUSTMENT_IN' => 'Adjustment In',
     'ADJUSTMENT_OUT' => 'Adjustment Out',
-    'UTANG' => 'Credit Sale',
+    'UTANG' => 'UTANG Sale',
     _ => type,
   };
 
@@ -220,64 +221,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(
-            builder: (_, box) {
-              final narrow = box.maxWidth < 650;
-              final actions = [
-                FilledButton.icon(
-                  onPressed: () => _chooseAndPost(false),
-                  icon: const Icon(Icons.add_box),
-                  label: const Text(AppStrings.stockIn),
+          child: FutureBuilder<int>(
+            future: _value,
+            builder: (_, s) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Owned Inventory Value'),
+                Text(
+                  standardMoney(s.data ?? 0),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (widget.allowAdjustment)
-                  OutlinedButton.icon(
-                    onPressed: () => _chooseAndPost(true),
-                    icon: const Icon(Icons.tune),
-                    label: const Text(AppStrings.adjustment),
-                  ),
-              ];
-              final value = FutureBuilder<int>(
-                future: _value,
-                builder: (_, s) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Owned Inventory Value'),
-                    Text(
-                      '₱${((s.data ?? 0) / 100).toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ],
-                ),
-              );
-              if (narrow) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    value,
-                    const SizedBox(height: 10),
-                    ...actions.map(
-                      (x) => Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: SizedBox(height: 52, child: x),
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: value),
-                  ...actions.expand(
-                    (x) => [
-                      const SizedBox(width: 12),
-                      SizedBox(height: 52, child: x),
-                    ],
-                  ),
-                ],
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),

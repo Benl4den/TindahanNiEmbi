@@ -58,7 +58,7 @@ void main() {
 
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 11);
+    expect(await db.getVersion(), 13);
     final row = (await db.query(
       'products',
       where: 'id=?',

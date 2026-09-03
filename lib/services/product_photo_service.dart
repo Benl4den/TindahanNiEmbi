@@ -17,19 +17,31 @@ abstract interface class ProductPhotoService {
   Future<void> delete(String photoPath);
 }
 
-class LocalProductPhotoService implements ProductPhotoService {
+abstract interface class ProductGalleryPhotoService {
+  Future<String?> chooseFromGallery();
+}
+
+class LocalProductPhotoService
+    implements ProductPhotoService, ProductGalleryPhotoService {
   LocalProductPhotoService({ImagePicker? picker})
     : _picker = picker ?? ImagePicker();
   final ImagePicker _picker;
 
   @override
   Future<String?> capture() async {
+    return _pick(ImageSource.camera);
+  }
+
+  @override
+  Future<String?> chooseFromGallery() => _pick(ImageSource.gallery);
+
+  Future<String?> _pick(ImageSource source) async {
     try {
       final photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1600,
-        maxHeight: 1600,
-        imageQuality: 78,
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 75,
         requestFullMetadata: false,
       );
       if (photo == null) return null;

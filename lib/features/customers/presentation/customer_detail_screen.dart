@@ -30,9 +30,9 @@ class _State extends State<CustomerDetailScreen> {
 
   void reload() => data = widget.repository.details(widget.customerId);
   String type(String x) => switch (x) {
-    'UTANG' => 'Credit Sale',
+    'UTANG' => 'UTANG Sale',
     'PAYMENT' => 'Payment',
-    'UTANG_REVERSAL' => 'Credit Reversal',
+    'UTANG_REVERSAL' => 'UTANG Reversal',
     'PAYMENT_REVERSAL' => 'Payment Reversal',
     _ => x,
   };

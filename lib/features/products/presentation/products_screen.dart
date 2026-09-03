@@ -9,7 +9,6 @@ import '../../../services/product_photo_service.dart';
 import 'product_card.dart';
 import 'product_form_screen.dart';
 import '../../../widgets/app_state_view.dart';
-import '../../../widgets/app_search_field.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({
@@ -49,15 +48,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   void _reload() => _products = _loadProducts();
+
+  void _searchNow(String query) {
+    setState(() {});
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    _searchNow('');
+  }
+
   Future<List<Product>> _loadProducts() async {
     final products = widget.repository is SqliteProductRepository
         ? await (widget.repository as SqliteProductRepository).searchAll(
-            query: _search.text,
+            query: '',
             archiveFilter: archiveFilter,
             categoryId: categoryId,
             groupCode: groupCode,
           )
-        : await widget.repository.searchActive(_search.text);
+        : await widget.repository.searchActive();
     if (widget.repository is SqliteProductRepository) {
       groups = await (widget.repository as SqliteProductRepository)
           .inventoryGroups(products.map((x) => x.id));
@@ -105,7 +114,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(AppStrings.back),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -133,10 +142,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: AppSearchField(
+            child: TextField(
               controller: _search,
-              hintText: AppStrings.searchProducts,
-              onChanged: (_) => setState(_reload),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: AppStrings.searchProducts,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: _clearSearch,
+                        icon: const Icon(Icons.close),
+                      ),
+              ),
+              onChanged: _searchNow,
             ),
           ),
           SizedBox(
@@ -194,6 +214,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           const SizedBox(height: 10),
           Expanded(
             child: FutureBuilder<List<Product>>(
+              key: ValueKey('$archiveFilter|$categoryId|$groupCode'),
               future: _products,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
@@ -207,13 +228,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     onAction: () => setState(_reload),
                   );
                 }
-                final products = snapshot.data ?? const <Product>[];
+                final query = _search.text.trim().toLowerCase();
+                final products = (snapshot.data ?? const <Product>[])
+                    .where(
+                      (product) =>
+                          query.isEmpty ||
+                          product.name.toLowerCase().contains(query),
+                    )
+                    .toList(growable: false);
                 if (products.isEmpty) {
                   return AppStateView.empty(
-                    title: AppStrings.noProducts,
-                    message: 'Try another filter or add your first product.',
-                    actionLabel: AppStrings.addProduct,
-                    onAction: _form,
+                    title: query.isEmpty
+                        ? AppStrings.noProducts
+                        : 'No matching products',
+                    message: query.isEmpty
+                        ? 'Try another filter or add your first product.'
+                        : 'No product name contains “${_search.text.trim()}”.',
+                    actionLabel: query.isEmpty
+                        ? AppStrings.addProduct
+                        : 'Clear Search',
+                    onAction: query.isEmpty ? _form : _clearSearch,
                   );
                 }
                 final width = MediaQuery.sizeOf(context).width;

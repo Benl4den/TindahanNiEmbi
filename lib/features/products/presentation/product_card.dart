@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/product.dart';
 import '../../../widgets/status_badge.dart';
 import '../../../widgets/product_image.dart';
@@ -52,11 +53,11 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}  •  Stock: ${product.currentQuantity}',
+                    '₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}  •  Stock: ${standardNumber(product.currentQuantity)}',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   Text(
-                    'Minimum: ${product.minimumStockLevel}${categoryName == null ? '' : ' • $categoryName'}${inventoryGroups.isEmpty ? '' : ' • ${inventoryGroups.join(', ')}'}',
+                    'Minimum: ${standardNumber(product.minimumStockLevel)}${categoryName == null ? '' : ' • $categoryName'}${inventoryGroups.isEmpty ? '' : ' • ${inventoryGroups.join(', ')}'}',
                   ),
                   const SizedBox(height: 6),
                   Align(

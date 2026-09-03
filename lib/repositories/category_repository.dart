@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/category.dart';
+import '../services/app_refresh_controller.dart';
 
 class DuplicateCategoryNameException implements Exception {
   const DuplicateCategoryNameException();
@@ -100,7 +101,9 @@ class SqliteCategoryRepository implements CategoryRepository {
         'created_at': now,
         'updated_at': now,
       });
-      return (await _findById(id))!;
+      final category = (await _findById(id))!;
+      AppRefreshController.instance.dataChanged();
+      return category;
     } on DatabaseException catch (error) {
       if (error.isUniqueConstraintError()) {
         throw const DuplicateCategoryNameException();
@@ -123,7 +126,9 @@ class SqliteCategoryRepository implements CategoryRepository {
         whereArgs: [id],
       );
       if (changed == 0) throw const CategoryNotFoundException();
-      return (await _findById(id))!;
+      final category = (await _findById(id))!;
+      AppRefreshController.instance.dataChanged();
+      return category;
     } on DatabaseException catch (error) {
       if (error.isUniqueConstraintError()) {
         throw const DuplicateCategoryNameException();
@@ -144,6 +149,7 @@ class SqliteCategoryRepository implements CategoryRepository {
       whereArgs: [id],
     );
     if (changed == 0) throw const CategoryNotFoundException();
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<Category?> _findById(int id) async {

@@ -38,6 +38,18 @@ void main() {
     await auth.setPin(UserRole.owner, '4321');
     expect(await auth.verify('4321'), UserRole.owner);
   });
+
+  test('named staff PIN is hashed, selectable, and can be disabled', () async {
+    final auth = AuthService(db);
+    final id = await auth.addStaff('Maria', '2468');
+    final accounts = await auth.staffAccounts(activeOnly: true);
+    expect(accounts.single.name, 'Maria');
+    expect(await auth.verify('2468', staffId: id), UserRole.staff);
+    final stored = (await db.query('staff_accounts')).single;
+    expect(stored['pin_hash'], isNot('2468'));
+    await auth.setStaffActive(id, false);
+    expect(await auth.verify('2468', staffId: id), isNull);
+  });
   test('central permissions block staff sensitive actions', () {
     const p = PermissionService();
     expect(p.allows(UserRole.staff, AppPermission.cashSale), isTrue);
@@ -72,7 +84,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       )).map((r) => r['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     expect(
       await upgradedDb.rawQuery(

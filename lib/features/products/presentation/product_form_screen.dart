@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/category.dart';
 import '../../../models/product.dart';
 import '../../../models/product_unit.dart';
@@ -20,6 +21,8 @@ class ProductFormScreen extends StatefulWidget {
     this.onSaved,
     this.allowStartingStock = true,
     this.onDraft,
+    this.initialCategoryId,
+    this.categoryInitiallyLocked = false,
   });
   final ProductRepository repository;
   final ProductPhotoService photoService;
@@ -28,6 +31,8 @@ class ProductFormScreen extends StatefulWidget {
   final ValueChanged<Product>? onSaved;
   final bool allowStartingStock;
   final ValueChanged<ProductDraft>? onDraft;
+  final int? initialCategoryId;
+  final bool categoryInitiallyLocked;
 
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
@@ -45,6 +50,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   bool _saving = false;
   ProductUnitConfiguration? _units;
   late bool _unitsLoading;
+  late bool _categoryLocked;
+  bool _processingPhoto = false;
 
   @override
   void initState() {
@@ -65,7 +72,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _minimum = TextEditingController(
       text: product?.minimumStockLevel.toString() ?? '0',
     );
-    _categoryId = product?.categoryId;
+    _categoryId = product?.categoryId ?? widget.initialCategoryId;
+    _categoryLocked =
+        product == null &&
+        widget.categoryInitiallyLocked &&
+        _categoryId != null;
     _photoPath = product?.photoPath;
     _unitsLoading =
         product != null && widget.repository is SqliteProductRepository;
@@ -101,8 +112,23 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   Future<void> _capture() async {
+    await _selectPhoto(widget.photoService.capture);
+  }
+
+  Future<void> _gallery() async {
+    final service = widget.photoService;
+    if (service is ProductGalleryPhotoService) {
+      await _selectPhoto(
+        (service as ProductGalleryPhotoService).chooseFromGallery,
+      );
+    }
+  }
+
+  Future<void> _selectPhoto(Future<String?> Function() picker) async {
+    if (_processingPhoto) return;
+    setState(() => _processingPhoto = true);
     try {
-      final result = await widget.photoService.capture();
+      final result = await picker();
       if (result != null && mounted) setState(() => _photoPath = result);
     } on PhotoCaptureException catch (error) {
       if (!mounted) return;
@@ -111,15 +137,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             ? AppStrings.cameraDenied
             : AppStrings.cameraUnavailable,
       );
+    } finally {
+      if (mounted) setState(() => _processingPhoto = false);
     }
   }
 
   int? _money(String value) {
-    final parsed = double.tryParse(value.trim());
+    final parsed = double.tryParse(numericInput(value));
     return parsed == null ? null : (parsed * 100).round();
   }
 
-  int? _whole(String value) => int.tryParse(value.trim());
+  int? _whole(String value) => int.tryParse(numericInput(value));
 
   Future<void> _save() async {
     if (_photoPath == null) return _message(AppStrings.photoRequired);
@@ -225,10 +253,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   const SizedBox(height: 18),
                   FilledButton.icon(
-                    onPressed: _capture,
+                    onPressed: _processingPhoto ? null : _capture,
                     icon: const Icon(Icons.camera_alt_outlined, size: 30),
                     label: Text(
-                      _photoPath == null
+                      _processingPhoto
+                          ? 'Processing photo…'
+                          : _photoPath == null
                           ? AppStrings.takePhoto
                           : AppStrings.retakePhoto,
                     ),
@@ -236,6 +266,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       minimumSize: const Size.fromHeight(68),
                     ),
                   ),
+                  if (widget.photoService is ProductGalleryPhotoService) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _processingPhoto ? null : _gallery,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Choose from Gallery'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(60),
+                      ),
+                    ),
+                  ],
                   if (!creatingWithoutPhoto) ...[
                     const SizedBox(height: 24),
                     Form(
@@ -248,33 +289,57 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             validator: _required,
                           ),
                           const SizedBox(height: 16),
-                          DropdownButtonFormField<int>(
-                            initialValue: _categoryId,
-                            decoration: const InputDecoration(
-                              labelText: AppStrings.category,
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.all(20),
+                          if (_categoryLocked)
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                side: const BorderSide(color: Colors.black26),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              title: const Text('Category'),
+                              subtitle: Text(
+                                widget.categories
+                                        .where((x) => x.id == _categoryId)
+                                        .map((x) => x.name)
+                                        .firstOrNull ??
+                                    '',
+                              ),
+                              trailing: TextButton(
+                                onPressed: () =>
+                                    setState(() => _categoryLocked = false),
+                                child: const Text('Change Category'),
+                              ),
+                            )
+                          else
+                            DropdownButtonFormField<int>(
+                              initialValue: _categoryId,
+                              decoration: const InputDecoration(
+                                labelText: AppStrings.category,
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.all(20),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                color: Colors.black,
+                              ),
+                              items: widget.categories
+                                  .map(
+                                    (c) => DropdownMenuItem(
+                                      value: c.id,
+                                      child: Text(c.name),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) => setState(() {
+                                _categoryId = value;
+                                _units = null;
+                              }),
+                              validator: (value) => value == null
+                                  ? AppStrings.chooseCategory
+                                  : null,
                             ),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              color: Colors.black,
-                            ),
-                            items: widget.categories
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                    value: c.id,
-                                    child: Text(c.name),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) => setState(() {
-                              _categoryId = value;
-                              _units = null;
-                            }),
-                            validator: (value) => value == null
-                                ? AppStrings.chooseCategory
-                                : null,
-                          ),
                           const SizedBox(height: 16),
                           if (!_usesSmartPackaging)
                             Row(
@@ -406,6 +471,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       contentPadding: const EdgeInsets.all(20),
       prefixText: money ? '₱ ' : null,
     ),
+    onTap: controller == _name
+        ? null
+        : () {
+            if (controller.text == '0' || controller.text == '0.00') {
+              controller.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: controller.text.length,
+              );
+            }
+          },
     validator: validator ?? (value) => _number(value, money: money),
   );
 

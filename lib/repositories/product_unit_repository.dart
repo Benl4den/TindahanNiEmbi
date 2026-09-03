@@ -49,7 +49,7 @@ class ProductUnitRepository {
           (x) =>
               x.name.trim().isEmpty ||
               x.baseQuantity <= 0 ||
-              x.priceCentavos < 0,
+              x.priceCentavos <= 0,
         )) {
       throw const InvalidProductUnit(
         'Enter valid packages and select one default.',
@@ -82,6 +82,9 @@ class ProductUnitRepository {
         {
           'base_unit_code': baseUnit.code,
           'base_unit_label': baseUnit.label,
+          'selling_price_centavos': sellingOptions
+              .singleWhere((x) => x.isDefault)
+              .priceCentavos,
           'updated_at': now,
         },
         where: 'id=?',

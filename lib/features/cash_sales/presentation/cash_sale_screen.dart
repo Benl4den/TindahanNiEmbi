@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/product.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/utang_draft.dart';
 import '../../../models/product_unit.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/product_unit_repository.dart';
 import '../../../widgets/app_search_field.dart';
+import '../../../widgets/app_alerts.dart';
 import '../../../widgets/product_image.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'sale_details_screen.dart';
@@ -103,6 +105,10 @@ class _State extends State<CashSaleScreen> {
   }
 
   Future<void> _addProduct(Product product) async {
+    if (product.currentQuantity <= 0) {
+      await showStockAlert(context, product.name, product.currentQuantity);
+      return;
+    }
     final choices = options[product.id] ?? const <SellingOption>[];
     final usable = choices.isEmpty
         ? [
@@ -394,12 +400,10 @@ class _State extends State<CashSaleScreen> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'The sale could not be completed. Your cart has been kept. Please try again.',
-            ),
-          ),
+        await showFriendlyError(
+          context,
+          title: 'Could Not Complete Sale',
+          message: 'Your cart has been kept. Check the available stock and try again.',
         );
       }
     } finally {
@@ -420,6 +424,7 @@ class _State extends State<CashSaleScreen> {
           c = ProductSelectionController(fresh);
         });
       }
+      await _loadSummary();
     }
   }
 
@@ -563,7 +568,7 @@ class _State extends State<CashSaleScreen> {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: out ? null : () => _addProduct(p),
+        onTap: () => _addProduct(p),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -578,14 +583,14 @@ class _State extends State<CashSaleScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
                     '${money(displayPrice)}${priceUnit == null ? '' : ' / $priceUnit'}',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 17,
                       fontWeight: FontWeight.w800,
                       color: Theme.of(context).colorScheme.primary,
                     ),
@@ -630,7 +635,7 @@ class _State extends State<CashSaleScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.tonal(
-                        onPressed: out ? null : () => _addProduct(p),
+                        onPressed: () => _addProduct(p),
                         child: const Text('Add'),
                       ),
                     ),
@@ -651,13 +656,11 @@ class _State extends State<CashSaleScreen> {
         product.currentQuantity >= 1000) {
       return '${_friendlyDecimal(product.currentQuantity, 1000)} L';
     }
-    return '${product.currentQuantity} ${product.baseUnitLabel}${product.currentQuantity == 1 ? '' : 's'}';
+    return '${standardNumber(product.currentQuantity)} ${product.baseUnitLabel}${product.currentQuantity == 1 ? '' : 's'}';
   }
 
-  String _friendlyDecimal(int value, int scale) => (value / scale)
-      .toStringAsFixed(3)
-      .replaceFirst(RegExp(r'0+$'), '')
-      .replaceFirst(RegExp(r'\.$'), '');
+  String _friendlyDecimal(int value, int scale) =>
+      standardNumber(value / scale);
 
   Widget _cart() => Material(
     color: Colors.white,
@@ -856,7 +859,7 @@ class _State extends State<CashSaleScreen> {
                         ? null
                         : checkoutUtang,
                     icon: const Icon(Icons.people_alt),
-                    label: const Text('Sell on Credit'),
+                    label: const Text('UTANG'),
                   ),
                 ],
                 const SizedBox(height: 8),
@@ -911,7 +914,7 @@ class _State extends State<CashSaleScreen> {
                     child: TextButton.icon(
                       onPressed: _showHistory,
                       icon: const Icon(Icons.history, size: 19),
-                      label: const Text('Cash & Credit History'),
+                      label: const Text('Cash & UTANG History'),
                     ),
                   ),
                 ],
@@ -928,72 +931,78 @@ class _State extends State<CashSaleScreen> {
     final accent = utang
         ? Colors.orange.shade800
         : Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: .08),
-        border: Border.all(color: accent.withValues(alpha: .35)),
+    return Card(
+      margin: EdgeInsets.zero,
+      color: accent.withValues(alpha: .08),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: accent.withValues(alpha: .35)),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: sale == null
-          ? const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'LAST TRANSACTION',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                SizedBox(height: 10),
-                Text('No sales recorded yet.'),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: sale == null ? null : () => _showHistoryDetails(sale),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: sale == null
+              ? const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'LAST TRANSACTION',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
+                    Text(
+                      'LAST TRANSACTION',
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    Flexible(
-                      child: Text(
-                        sale.reference,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
+                    SizedBox(height: 10),
+                    Text('No sales recorded yet.'),
                   ],
-                ),
-                Row(
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Text(
-                        money(sale.totalCentavos),
-                        style: TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                          color: accent,
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'LAST TRANSACTION',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
                         ),
-                      ),
+                        Flexible(
+                          child: Text(
+                            sale.reference,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
                     ),
-                    TextButton.icon(
-                      onPressed: () => _showHistoryDetails(sale),
-                      icon: const Icon(Icons.receipt_long, size: 18),
-                      label: const Text('View Details'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            money(sale.totalCentavos),
+                            style: TextStyle(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w900,
+                              color: accent,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          'Click to view details ›',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${utang ? 'UTANG • ${sale.customerName}' : 'Cash'} • ${_saleWhen(sale.occurredAt.toLocal())}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-                Text(
-                  '${utang ? 'Credit • ${sale.customerName}' : 'Cash'} • ${_saleWhen(sale.occurredAt.toLocal())}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+        ),
+      ),
     );
   }
 
@@ -1047,7 +1056,7 @@ class _State extends State<CashSaleScreen> {
                         for (final x in const [
                           ('ALL', 'All'),
                           ('CASH', 'Cash'),
-                          ('UTANG', 'Credit'),
+                          ('UTANG', 'UTANG'),
                         ])
                           ChoiceChip(
                             label: Text(x.$2),
@@ -1095,7 +1104,7 @@ class _State extends State<CashSaleScreen> {
                                         : Icons.payments,
                                   ),
                                   title: Text(
-                                    '${e.isUtang ? 'Credit Sale' : 'Cash Sale'} • ${e.reference}',
+                                    '${e.isUtang ? 'UTANG Sale' : 'Cash Sale'} • ${e.reference}',
                                   ),
                                   subtitle: Text(
                                     '${e.customerName == null ? '' : '${e.customerName} • '}${MaterialLocalizations.of(context).formatMediumDate(local)} • ${TimeOfDay.fromDateTime(local).format(context)}\n'
@@ -1163,7 +1172,7 @@ class _State extends State<CashSaleScreen> {
     await showDialog<void>(
       context: context,
       builder: (d) => AlertDialog(
-        title: Text('Credit Sale • ${entry.reference}'),
+        title: Text('UTANG Sale • ${entry.reference}'),
         content: SizedBox(
           width: 650,
           child: SingleChildScrollView(
@@ -1183,9 +1192,9 @@ class _State extends State<CashSaleScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 if (entry.correctedById != null)
-                  Text('Corrected by Credit Sale #${entry.correctedById}'),
+                  Text('Corrected by UTANG Sale #${entry.correctedById}'),
                 if (entry.correctionOfId != null)
-                  Text('Correction of Credit Sale #${entry.correctionOfId}'),
+                  Text('Correction of UTANG Sale #${entry.correctionOfId}'),
                 const Divider(),
                 ...items.map(
                   (x) => ListTile(

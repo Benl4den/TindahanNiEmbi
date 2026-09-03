@@ -25,7 +25,7 @@ class _State extends State<ActivityLogsScreen> {
     date,
     category: category == 'All'
         ? null
-        : category == 'Credit'
+        : category == 'UTANG'
         ? 'UTANG'
         : category.toUpperCase(),
     query: query,
@@ -67,7 +67,7 @@ class _State extends State<ActivityLogsScreen> {
                       [
                             'All',
                             'Sales',
-                            'Credit',
+                            'UTANG',
                             'Inventory',
                             'Security',
                             'Backup',

@@ -71,7 +71,7 @@ class _State extends State<DailyClosingScreen> {
             const SizedBox(height: 16),
             _section('CASH FLOW', Icons.payments_outlined, [
               _metric('Cash Sales (${x.cashSaleCount})', m(x.cashSales)),
-              _metric('Credit Payments', m(x.payments)),
+              _metric('UTANG Payments', m(x.payments)),
               _metric('Recorded Cash In', m(x.recordedCashIn), strong: true),
             ]),
             const SizedBox(height: 14),
@@ -327,8 +327,8 @@ class _State extends State<DailyClosingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Cash Sales: ${m(summary.cashSales)}'),
-                Text('Credit Created: ${m(summary.newUtang)}'),
-                Text('Credit Payments: ${m(summary.payments)}'),
+                Text('UTANG Created: ${m(summary.newUtang)}'),
+                Text('UTANG Payments: ${m(summary.payments)}'),
                 Text('Recorded Cash In: ${m(summary.recordedCashIn)}'),
                 Text('Operating Expenses: ${m(summary.operatingExpenses)}'),
                 Text('Net Recorded Cash: ${m(summary.netRecordedCash)}'),

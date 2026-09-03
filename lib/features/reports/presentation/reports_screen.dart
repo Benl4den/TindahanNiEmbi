@@ -15,7 +15,7 @@ class ReportsScreen extends StatelessWidget {
         bottom: const TabBar(
           tabs: [
             Tab(text: 'Inventory'),
-            Tab(text: 'Credit'),
+            Tab(text: 'UTANG'),
             Tab(text: 'Sales'),
             Tab(text: 'Expenses'),
           ],
@@ -75,15 +75,15 @@ class ReportsScreen extends StatelessWidget {
         ? ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              _open(c, 'Customer Credit Ledger', repository.customerLedger()),
-              _open(c, 'Credit History', repository.utangHistory()),
+              _open(c, 'UTANGAN Ledger', repository.customerLedger()),
+              _open(c, 'UTANG History', repository.utangHistory()),
               _open(c, 'Payment History', repository.paymentHistory()),
               ...s.data!.map(
                 (r) => Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     title: Text(r['full_name']! as String),
-                    subtitle: const Text('Outstanding Credit'),
+                    subtitle: const Text('Outstanding UTANG'),
                     trailing: Text(
                       '₱${((r['balance']! as int) / 100).toStringAsFixed(2)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),

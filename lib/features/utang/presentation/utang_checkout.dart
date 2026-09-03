@@ -121,7 +121,7 @@ class _State extends State<UtangCheckoutPicker> {
               if (s.data!.isEmpty) {
                 return const Center(
                   child: Text(
-                    'No customers yet.\nAdd a customer to start tracking credit.',
+                    'No UTANGAN yet.\nAdd an UTANGAN to start tracking UTANG.',
                     textAlign: TextAlign.center,
                   ),
                 );
@@ -185,7 +185,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'The credit sale could not be completed. Your cart has been kept. Please try again.',
+              'The UTANG sale could not be completed. Your cart has been kept. Please try again.',
             ),
           ),
         );
@@ -204,7 +204,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
       }
       final previous = s.data!.customer.balanceCentavos;
       return Scaffold(
-        appBar: AppBar(title: const Text('Review Credit Sale')),
+        appBar: AppBar(title: const Text('Review UTANG Sale')),
         body: ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -229,8 +229,8 @@ class _ReviewState extends State<UtangCheckoutReview> {
             }),
             const Divider(),
             _amount('Previous Balance', previous),
-            _amount('New Credit', total),
-            _amount('Total Credit Balance', previous + total, important: true),
+            _amount('New UTANG', total),
+            _amount('Total UTANG Balance', previous + total, important: true),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -244,7 +244,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
                 Expanded(
                   child: FilledButton(
                     onPressed: saving ? null : confirm,
-                    child: const Text('Confirm Credit Sale'),
+                    child: const Text('Confirm UTANG Sale'),
                   ),
                 ),
               ],

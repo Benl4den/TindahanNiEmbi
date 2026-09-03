@@ -39,13 +39,13 @@ void main() {
   });
   tearDown(() => app.close());
   test('V2 installed and cash sale atomically snapshots and deducts', () async {
-    expect(AppDatabase.schemaVersion, 11);
+    expect(AppDatabase.schemaVersion, 13);
     expect(
       (await db.query(
         'schema_migrations',
         orderBy: 'version',
       )).map((x) => x['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     final id = await CashSaleRepository(db)
         .save([UtangItemDraft(productId: p.id, quantity: 2)]);
@@ -171,7 +171,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       )).map((row) => row['version']),
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     expect(
       await upgradedDb.rawQuery(

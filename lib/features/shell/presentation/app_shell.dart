@@ -21,6 +21,7 @@ import '../../../services/backup_service.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../services/data_integrity_service.dart';
 import '../../../services/storage_management_service.dart';
+import '../../../services/app_refresh_controller.dart';
 import '../../activity_logs/presentation/activity_logs_screen.dart';
 import '../../backup/presentation/backup_screen.dart';
 import '../../cash_sales/presentation/cash_sale_screen.dart';
@@ -65,6 +66,24 @@ class _State extends State<AppShell> {
   bool railExpanded = true;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
 
+  @override
+  void initState() {
+    super.initState();
+    AppRefreshController.instance.addListener(_dataChanged);
+  }
+
+  void _dataChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    AppRefreshController.instance.removeListener(_dataChanged);
+    super.dispose();
+  }
+
   void _select(int destination) {
     setState(() {
       selected = destination;
@@ -75,7 +94,7 @@ class _State extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final destinations = const [
+    final bodyDestinations = const [
       NavigationDestination(icon: Icon(Icons.point_of_sale), label: 'Sales'),
       NavigationDestination(
         icon: Icon(Icons.icecream_outlined),
@@ -96,7 +115,7 @@ class _State extends State<AppShell> {
       NavigationDestination(icon: Icon(Icons.inventory), label: 'Products'),
       NavigationDestination(
         icon: Icon(Icons.people_alt_outlined),
-        label: 'Credit',
+        label: 'UTANG',
       ),
       NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Expenses'),
       NavigationDestination(icon: Icon(Icons.today), label: 'Daily Closing'),
@@ -106,11 +125,15 @@ class _State extends State<AppShell> {
       ),
       NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
     ];
+    const navTargets = [0, 6, 1, 2, 3, 4, 5, 7, 8, 9, 10];
+    final destinations = [
+      for (final target in navTargets) bodyDestinations[target],
+    ];
     final body = _body();
     return Scaffold(
       body: Row(
         children: [
-          if (wide) _sidebar(destinations),
+          if (wide) _sidebar(destinations, navTargets),
           if (wide) const VerticalDivider(width: 1),
           Expanded(child: body),
         ],
@@ -124,8 +147,8 @@ class _State extends State<AppShell> {
               onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 3, 6][i]),
               destinations: [
                 destinations[0],
-                destinations[3],
-                destinations[6],
+                destinations[4],
+                destinations[1],
                 destinations[10],
               ],
             ),
@@ -260,7 +283,10 @@ class _State extends State<AppShell> {
     _ => _more(),
   };
 
-  Widget _sidebar(List<NavigationDestination> destinations) {
+  Widget _sidebar(
+    List<NavigationDestination> destinations,
+    List<int> navTargets,
+  ) {
     final colors = Theme.of(context).colorScheme;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -346,10 +372,11 @@ class _State extends State<AppShell> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 itemCount: destinations.length,
                 itemBuilder: (_, i) {
-                  final destination = destinations[i], active = selected == i;
+                  final destination = destinations[i];
+                  final target = navTargets[i], active = selected == target;
                   final tile = InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () => _select(i),
+                    onTap: () => _select(target),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 140),
                       height: 52,
@@ -760,7 +787,7 @@ class _State extends State<AppShell> {
             const SizedBox(width: 8),
             ActionChip(
               label: Text(
-                'Outstanding Credit ₱${(s.outstandingCentavos / 100).toStringAsFixed(2)}',
+                'Outstanding UTANG ₱${(s.outstandingCentavos / 100).toStringAsFixed(2)}',
               ),
               onPressed: () => setState(() => selected = 6),
             ),
