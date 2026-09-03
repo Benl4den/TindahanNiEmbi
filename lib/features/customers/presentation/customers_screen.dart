@@ -7,6 +7,7 @@ import '../../../repositories/payment_repository.dart';
 import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../../widgets/app_search_field.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({
@@ -92,15 +93,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(20),
-          child: TextField(
+          child: AppSearchField(
             controller: _search,
-            style: const TextStyle(fontSize: 20),
-            decoration: const InputDecoration(
-              labelText: AppStrings.searchCustomers,
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.all(20),
-            ),
+            hintText: AppStrings.searchCustomers,
             onChanged: (_) => setState(_reload),
           ),
         ),

@@ -43,7 +43,7 @@ class ReportsRepository {
   }
 
   Future<List<Map<String, Object?>>> frequentProducts() => db.rawQuery(
-    "SELECT product_name_snapshot name,SUM(quantity) quantity FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id WHERE s.status='POSTED' GROUP BY product_name_snapshot ORDER BY quantity DESC",
+    "SELECT product_name_snapshot name,SUM(COALESCE(total_base_quantity,quantity)) quantity FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id WHERE s.status='POSTED' GROUP BY product_name_snapshot ORDER BY quantity DESC",
   );
   Future<int> outstandingTotal() async =>
       (await db.rawQuery(

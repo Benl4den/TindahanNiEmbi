@@ -9,6 +9,7 @@ import '../../../services/product_photo_service.dart';
 import 'product_card.dart';
 import 'product_form_screen.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../../widgets/app_search_field.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({
@@ -132,15 +133,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: TextField(
+            child: AppSearchField(
               controller: _search,
-              style: const TextStyle(fontSize: 20),
-              decoration: const InputDecoration(
-                labelText: AppStrings.searchProducts,
-                prefixIcon: Icon(Icons.search, size: 30),
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.all(20),
-              ),
+              hintText: AppStrings.searchProducts,
               onChanged: (_) => setState(_reload),
             ),
           ),

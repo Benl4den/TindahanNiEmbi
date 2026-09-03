@@ -7,6 +7,7 @@ import '../../../repositories/customer_repository.dart';
 import '../../../repositories/utang_repository.dart';
 import '../../customers/presentation/customer_form_screen.dart';
 import 'utang_customer_card.dart';
+import '../../../widgets/app_search_field.dart';
 
 class UtangCheckoutPicker extends StatefulWidget {
   const UtangCheckoutPicker({
@@ -95,12 +96,9 @@ class _State extends State<UtangCheckoutPicker> {
           child: Row(
             children: [
               Expanded(
-                child: TextField(
+                child: AppSearchField(
                   controller: search,
-                  decoration: const InputDecoration(
-                    hintText: 'Search customers...',
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                  hintText: 'Search customers...',
                   onChanged: (_) => setState(reload),
                 ),
               ),
@@ -169,10 +167,11 @@ class _ReviewState extends State<UtangCheckoutReview> {
     0,
     (n, x) =>
         n +
-        widget.products
-                .firstWhere((p) => p.id == x.productId)
-                .sellingPriceCentavos *
-            x.quantity,
+        x.lineTotalCentavos(
+          widget.products
+              .firstWhere((p) => p.id == x.productId)
+              .sellingPriceCentavos,
+        ),
   );
   Future<void> confirm() async {
     setState(() => saving = true);
@@ -221,10 +220,10 @@ class _ReviewState extends State<UtangCheckoutReview> {
               return ListTile(
                 title: Text(p.name),
                 subtitle: Text(
-                  '${x.quantity} × ₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)}',
+                  '${_quantity(x)} ${x.sellingOptionName ?? 'Piece'} × ₱${((x.unitPriceCentavos ?? p.sellingPriceCentavos) / 100).toStringAsFixed(2)}',
                 ),
                 trailing: Text(
-                  '₱${(p.sellingPriceCentavos * x.quantity / 100).toStringAsFixed(2)}',
+                  '₱${(x.lineTotalCentavos(p.sellingPriceCentavos) / 100).toStringAsFixed(2)}',
                 ),
               );
             }),
@@ -271,4 +270,10 @@ class _ReviewState extends State<UtangCheckoutReview> {
       ],
     ),
   );
+  String _quantity(UtangItemDraft x) => x.quantityScale == 1
+      ? '${x.effectiveQuantityValue}'
+      : (x.effectiveQuantityValue / x.quantityScale)
+            .toStringAsFixed(3)
+            .replaceFirst(RegExp(r'0+$'), '')
+            .replaceFirst(RegExp(r'\.$'), '');
 }

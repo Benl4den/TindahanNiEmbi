@@ -1,10 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/operations_repository.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../../widgets/app_search_field.dart';
+import '../../../widgets/product_image.dart';
 
 class RestockScreen extends StatefulWidget {
   const RestockScreen({
@@ -173,12 +173,8 @@ class _State extends State<RestockScreen> {
                     },
                   ),
               ];
-              final searchField = TextField(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search products',
-                  border: OutlineInputBorder(),
-                ),
+              final searchField = AppSearchField(
+                hintText: 'Search products',
                 onChanged: (v) =>
                     setState(() => search = v.trim().toLowerCase()),
               );
@@ -253,15 +249,7 @@ class _State extends State<RestockScreen> {
                           height: 64,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: File(x.product.photoPath).existsSync()
-                                ? Image.file(
-                                    File(x.product.photoPath),
-                                    fit: BoxFit.cover,
-                                  )
-                                : const ColoredBox(
-                                    color: Color(0xffeeeeee),
-                                    child: Icon(Icons.inventory_2),
-                                  ),
+                            child: ProductImage(path: x.product.photoPath),
                           ),
                         ),
                         title: Text(

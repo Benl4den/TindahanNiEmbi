@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../models/product.dart';
@@ -9,6 +7,9 @@ import '../../../repositories/product_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../../widgets/app_search_field.dart';
+import '../../../widgets/status_badge.dart';
+import '../../../widgets/product_image.dart';
 import '../../products/presentation/product_form_screen.dart';
 
 class SelectaScreen extends StatefulWidget {
@@ -192,12 +193,8 @@ class _SelectaScreenState extends State<SelectaScreen> {
           padding: const EdgeInsets.all(20),
           child: LayoutBuilder(
             builder: (_, box) {
-              final search = TextField(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search Selecta products',
-                  border: OutlineInputBorder(),
-                ),
+              final search = AppSearchField(
+                hintText: 'Search Selecta products',
                 onChanged: (v) => setState(() => query = v),
               );
               final chips =
@@ -291,17 +288,10 @@ class _SelectaScreenState extends State<SelectaScreen> {
                             child: SizedBox(
                               width: 96,
                               height: 140,
-                              child:
-                                  p.photoPath.isNotEmpty &&
-                                      File(p.photoPath).existsSync()
-                                  ? Image.file(
-                                      File(p.photoPath),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : const ColoredBox(
-                                      color: Color(0xffeeeeee),
-                                      child: Icon(Icons.icecream, size: 48),
-                                    ),
+                              child: ProductImage(
+                                path: p.photoPath,
+                                placeholderIcon: Icons.icecream_outlined,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -322,20 +312,17 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                 Text(
                                   'Stock ${p.currentQuantity}  •  Minimum ${p.minimumStockLevel}',
                                 ),
-                                Text(
-                                  out
+                                StatusBadge(
+                                  label: out
                                       ? 'Out of Stock'
                                       : low
                                       ? 'Low Stock'
                                       : 'In Stock',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: out
-                                        ? Colors.red
-                                        : low
-                                        ? Colors.orange
-                                        : Colors.green,
-                                  ),
+                                  status: out
+                                      ? AppStatus.critical
+                                      : low
+                                      ? AppStatus.attention
+                                      : AppStatus.normal,
                                 ),
                                 const SizedBox(height: 6),
                                 Row(

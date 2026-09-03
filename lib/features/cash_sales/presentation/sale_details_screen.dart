@@ -39,7 +39,7 @@ class SaleDetailsScreen extends StatelessWidget {
               (x) => ListTile(
                 title: Text(x['product_name_snapshot']! as String),
                 subtitle: Text(
-                  '${x['quantity']} × ₱${((x['unit_price_centavos']! as int) / 100).toStringAsFixed(2)}',
+                  '${_quantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ₱${(((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int) / 100).toStringAsFixed(2)}\n${x['total_base_quantity'] ?? x['quantity']} ${x['base_unit_snapshot'] ?? 'piece'} deducted',
                 ),
                 trailing: Text(
                   '₱${((x['line_total_centavos']! as int) / 100).toStringAsFixed(2)}',
@@ -97,6 +97,17 @@ class SaleDetailsScreen extends StatelessWidget {
       },
     ),
   );
+
+  String _quantity(Map<String, Object?> x) {
+    final value =
+        (x['selling_quantity_value'] as int?) ?? x['quantity']! as int;
+    final scale = (x['selling_quantity_scale'] as int?) ?? 1;
+    if (scale == 1) return '$value';
+    return (value / scale)
+        .toStringAsFixed(3)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
 
   Future<void> _correct(BuildContext context, CashSaleDetails details) async {
     final products = await repository.db.query(

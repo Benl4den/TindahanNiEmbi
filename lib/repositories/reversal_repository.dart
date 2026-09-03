@@ -168,7 +168,8 @@ class ReversalRepository {
             limit: 1,
           )).single,
           before = product['current_quantity']! as int,
-          quantity = item['quantity']! as int;
+          quantity =
+              (item['total_base_quantity'] as int?) ?? item['quantity']! as int;
       await tx.insert('inventory_movements', {
         'inventory_transaction_id': inv,
         'product_id': item['product_id'],
@@ -247,7 +248,9 @@ class ReversalRepository {
         'consignor_id': a['consignor_id'],
         'quantity': a['quantity'],
         'payable_change_centavos': -payable,
-        'margin_change_centavos': -(a['margin_centavos']! as int),
+        'margin_change_centavos':
+            -((a['actual_margin_centavos'] as int?) ??
+                a['margin_centavos']! as int),
         'occurred_at': now,
         'created_at': now,
       });

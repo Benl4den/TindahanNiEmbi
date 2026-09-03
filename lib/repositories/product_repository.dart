@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
+import '../models/product_unit.dart';
 
 class InvalidProductException implements Exception {
   const InvalidProductException(this.message);
@@ -79,6 +80,10 @@ class SqliteProductRepository implements ProductRepository {
     return _database.transaction((txn) async {
       await _requireActiveCategory(txn, draft.categoryId);
       final now = DateTime.now().toUtc().toIso8601String();
+      final units =
+          draft.unitConfiguration ??
+          ProductUnitPreset.forCategory('', draft.sellingPriceCentavos);
+      _validateUnits(units);
       final productId = await txn.insert('products', {
         'category_id': draft.categoryId,
         'name': name,
@@ -90,8 +95,14 @@ class SqliteProductRepository implements ProductRepository {
         'is_archived': 0,
         'created_at': now,
         'updated_at': now,
+        'base_unit_code': units.baseUnit.code,
+        'base_unit_label': units.baseUnit.label,
       });
+      await _replaceUnits(txn, productId, units, now);
       if (draft.startingQuantity > 0) {
+        final startingBaseQuantity =
+            draft.startingQuantity *
+            units.purchasePackages.singleWhere((x) => x.isDefault).baseQuantity;
         final transactionId = await txn.insert('inventory_transactions', {
           'type': 'INITIAL_STOCK',
           'reference_number': 'PRODUCT-$productId',
@@ -102,10 +113,17 @@ class SqliteProductRepository implements ProductRepository {
         await txn.insert('inventory_movements', {
           'inventory_transaction_id': transactionId,
           'product_id': productId,
-          'quantity_change': draft.startingQuantity,
+          'quantity_change': startingBaseQuantity,
           'quantity_before': 0,
-          'quantity_after': draft.startingQuantity,
+          'quantity_after': startingBaseQuantity,
           'unit_cost_centavos': draft.purchasePriceCentavos,
+          'entered_quantity': draft.startingQuantity,
+          'entered_unit_snapshot': units.purchasePackages
+              .singleWhere((x) => x.isDefault)
+              .name,
+          'base_quantity_per_entered_unit': units.purchasePackages
+              .singleWhere((x) => x.isDefault)
+              .baseQuantity,
           'created_at': now,
         });
       }
@@ -142,6 +160,34 @@ class SqliteProductRepository implements ProductRepository {
     return _database.transaction((txn) async {
       await _requireActiveCategory(txn, product.categoryId);
       final now = DateTime.now().toUtc().toIso8601String();
+      final units = product.unitConfiguration;
+      if (units != null) {
+        _validateUnits(units);
+        final existing = (await txn.query(
+          'products',
+          columns: ['base_unit_code', 'current_quantity'],
+          where: 'id=?',
+          whereArgs: [product.id],
+          limit: 1,
+        )).single;
+        if (existing['base_unit_code'] != units.baseUnit.code &&
+            (existing['current_quantity']! as int) > 0) {
+          final oldConversions = await txn.rawQuery(
+            '''SELECT base_quantity FROM product_purchase_packages WHERE product_id=? AND is_archived=0
+               UNION ALL SELECT base_quantity FROM product_selling_options WHERE product_id=? AND is_archived=0''',
+            [product.id, product.id],
+          );
+          final remainsOneToOne =
+              oldConversions.every((x) => x['base_quantity'] == 1) &&
+              units.purchasePackages.every((x) => x.baseQuantity == 1) &&
+              units.sellingOptions.every((x) => x.baseQuantity == 1);
+          if (!remainsOneToOne) {
+            throw const InvalidProductException(
+              'Base unit cannot be changed while stock remains. Adjust stock to zero first.',
+            );
+          }
+        }
+      }
       final changed = await txn.update(
         'products',
         {
@@ -152,6 +198,8 @@ class SqliteProductRepository implements ProductRepository {
           'selling_price_centavos': product.sellingPriceCentavos,
           'minimum_stock_level': product.minimumStockLevel,
           'updated_at': now,
+          if (units != null) 'base_unit_code': units.baseUnit.code,
+          if (units != null) 'base_unit_label': units.baseUnit.label,
         },
         where: 'id = ? AND is_archived = 0',
         whereArgs: [product.id],
@@ -159,6 +207,7 @@ class SqliteProductRepository implements ProductRepository {
       if (changed == 0) {
         throw const InvalidProductException('Product not found.');
       }
+      if (units != null) await _replaceUnits(txn, product.id, units, now);
       await txn.insert('activity_logs', {
         'event_type': 'PRODUCT_EDITED',
         'description': 'Product edited — $name',
@@ -252,4 +301,126 @@ class SqliteProductRepository implements ProductRepository {
       .replaceAll(r'\', r'\\')
       .replaceAll('%', r'\%')
       .replaceAll('_', r'\_');
+
+  Future<ProductUnitConfiguration> unitConfiguration(int productId) async {
+    final product = (await _database.query(
+      'products',
+      where: 'id=?',
+      whereArgs: [productId],
+      limit: 1,
+    )).single;
+    final purchases = await _database.query(
+      'product_purchase_packages',
+      where: 'product_id=? AND is_archived=0',
+      whereArgs: [productId],
+      orderBy: 'is_default DESC,id',
+    );
+    final sales = await _database.query(
+      'product_selling_options',
+      where: 'product_id=? AND is_archived=0',
+      whereArgs: [productId],
+      orderBy: 'is_default DESC,id',
+    );
+    final base = BaseUnit.values.firstWhere(
+      (x) => x.code == product['base_unit_code'],
+      orElse: () => BaseUnit.piece,
+    );
+    return ProductUnitConfiguration(
+      baseUnit: base,
+      purchasePackages: purchases
+          .map(
+            (x) => PurchasePackageDraft(
+              name: x['name']! as String,
+              baseQuantity: x['base_quantity']! as int,
+              isDefault: x['is_default'] == 1,
+            ),
+          )
+          .toList(),
+      sellingOptions: sales
+          .map(
+            (x) => SellingOptionDraft(
+              name: x['name']! as String,
+              baseQuantity: x['base_quantity']! as int,
+              priceCentavos: x['price_centavos']! as int,
+              isDefault: x['is_default'] == 1,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  void _validateUnits(ProductUnitConfiguration units) {
+    if (units.purchasePackages.isEmpty ||
+        units.sellingOptions.isEmpty ||
+        units.purchasePackages.where((x) => x.isDefault).length != 1 ||
+        units.sellingOptions.where((x) => x.isDefault).length != 1 ||
+        units.purchasePackages.any(
+          (x) => x.name.trim().isEmpty || x.baseQuantity <= 0,
+        ) ||
+        units.sellingOptions.any(
+          (x) =>
+              x.name.trim().isEmpty ||
+              x.baseQuantity <= 0 ||
+              x.priceCentavos < 0,
+        )) {
+      throw const InvalidProductException(
+        'Enter valid units and select one default package and selling option.',
+      );
+    }
+    final purchaseNames = units.purchasePackages
+        .map((x) => x.name.trim().toLowerCase())
+        .toSet();
+    final sellingNames = units.sellingOptions
+        .map((x) => x.name.trim().toLowerCase())
+        .toSet();
+    if (purchaseNames.length != units.purchasePackages.length ||
+        sellingNames.length != units.sellingOptions.length) {
+      throw const InvalidProductException(
+        'Package and option names must be unique.',
+      );
+    }
+  }
+
+  Future<void> _replaceUnits(
+    DatabaseExecutor tx,
+    int productId,
+    ProductUnitConfiguration units,
+    String now,
+  ) async {
+    await tx.update(
+      'product_purchase_packages',
+      {'is_archived': 1, 'is_default': 0, 'updated_at': now},
+      where: 'product_id=? AND is_archived=0',
+      whereArgs: [productId],
+    );
+    await tx.update(
+      'product_selling_options',
+      {'is_archived': 1, 'is_default': 0, 'updated_at': now},
+      where: 'product_id=? AND is_archived=0',
+      whereArgs: [productId],
+    );
+    for (final p in units.purchasePackages) {
+      await tx.insert('product_purchase_packages', {
+        'product_id': productId,
+        'name': p.name.trim(),
+        'base_quantity': p.baseQuantity,
+        'is_default': p.isDefault ? 1 : 0,
+        'is_archived': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+    for (final s in units.sellingOptions) {
+      await tx.insert('product_selling_options', {
+        'product_id': productId,
+        'name': s.name.trim(),
+        'base_quantity': s.baseQuantity,
+        'price_centavos': s.priceCentavos,
+        'is_default': s.isDefault ? 1 : 0,
+        'is_archived': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
 }

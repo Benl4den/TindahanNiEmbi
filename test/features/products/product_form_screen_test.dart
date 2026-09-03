@@ -32,6 +32,9 @@ void main() {
     await tester.tap(find.text('Take Photo'));
     await tester.pumpAndSettle();
     expect(find.text('Product Name'), findsOneWidget);
+    expect(find.text('Units & Packaging'), findsOneWidget);
+    expect(find.text('How do you buy this product?'), findsOneWidget);
+    expect(find.text('How do you sell this product?'), findsOneWidget);
     expect(find.text('Save'), findsOneWidget);
   });
 }

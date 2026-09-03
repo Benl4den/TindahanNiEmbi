@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/activity_log.dart';
 import '../../../repositories/activity_log_repository.dart';
+import '../../../widgets/app_search_field.dart';
 
 class ActivityLogsScreen extends StatefulWidget {
   const ActivityLogsScreen({super.key, required this.repository});
@@ -50,11 +51,8 @@ class _State extends State<ActivityLogsScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Search activity...',
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                child: AppSearchField(
+                  hintText: 'Search activity...',
                   onChanged: (v) => setState(() {
                     query = v;
                     reload();

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tindahan_ni_embi/features/transactions/product_selection_controller.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
+import 'package:tindahan_ni_embi/models/product_unit.dart';
 
 void main() {
   Product p(int id, int stock, int price) => Product(
@@ -32,6 +33,38 @@ void main() {
     c.decrease(a);
     c.decrease(a);
     expect(c.totalCentavos, 0);
+  });
+  test('same option merges and different options remain separate', () {
+    final product = p(1, 100, 1500);
+    final bottle = SellingOption(
+      id: 1,
+      productId: 1,
+      name: 'Bottle',
+      baseQuantity: 1,
+      priceCentavos: 1500,
+      isDefault: true,
+    );
+    final caseOption = SellingOption(
+      id: 2,
+      productId: 1,
+      name: 'Case',
+      baseQuantity: 24,
+      priceCentavos: 34000,
+      isDefault: false,
+    );
+    final cart = ProductSelectionController([product]);
+    cart.add(product, bottle);
+    cart.add(product, bottle, quantityValue: 2);
+    cart.add(product, caseOption);
+    expect(cart.lines, hasLength(2));
+    expect(cart.lines.first.quantityValue, 3);
+    expect(cart.lines.last.baseQuantity, 24);
+  });
+
+  test('decimal parser converts kg without floating point', () {
+    final parsed = parseSaleQuantity('1.5', measured: true);
+    expect(parsed.value, 15);
+    expect(parsed.scale, 10);
   });
   test('multiple products are retained and clear resets the cart', () {
     final a = p(1, 3, 1000), b = p(2, 4, 500);

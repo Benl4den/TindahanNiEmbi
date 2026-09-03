@@ -18,11 +18,21 @@ class CashSaleRepository {
     DatabaseExecutor tx,
     List<UtangItemDraft> items,
   ) async {
-    if (items.isEmpty || items.any((i) => i.quantity <= 0)) {
+    if (items.isEmpty || items.any((i) => i.effectiveQuantityValue <= 0)) {
       throw ArgumentError('Items required');
     }
     final now = DateTime.now().toUtc().toIso8601String();
-    final loaded = <({UtangItemDraft item, Map<String, Object?> row})>[];
+    final loaded =
+        <
+          ({
+            UtangItemDraft item,
+            Map<String, Object?> row,
+            int price,
+            int baseQuantity,
+            int line,
+          })
+        >[];
+    final requiredByProduct = <int, int>{};
     var total = 0;
     for (final i in items) {
       final rows = await tx.query(
@@ -33,9 +43,41 @@ class CashSaleRepository {
       );
       if (rows.isEmpty) throw StateError('Product unavailable');
       final row = rows.single, stock = row['current_quantity']! as int;
-      if (stock < i.quantity) throw StateError('Insufficient stock');
-      total += (row['selling_price_centavos']! as int) * i.quantity;
-      loaded.add((item: i, row: row));
+      if (i.quantityScale <= 0 || i.baseQuantityPerUnit <= 0) {
+        throw ArgumentError('Invalid selling quantity.');
+      }
+      if (i.sellingOptionId != null) {
+        final option = await tx.query(
+          'product_selling_options',
+          where: 'id=? AND product_id=? AND is_archived=0',
+          whereArgs: [i.sellingOptionId, i.productId],
+          limit: 1,
+        );
+        if (option.isEmpty) {
+          throw StateError(
+            'The selected selling option is no longer available.',
+          );
+        }
+      }
+      final base = i.totalBaseQuantity;
+      final needed = (requiredByProduct[i.productId] ?? 0) + base;
+      requiredByProduct[i.productId] = needed;
+      if (stock < needed) {
+        throw StateError(
+          'Not enough ${i.baseUnitLabel}. Required: $needed; available: $stock.',
+        );
+      }
+      final price =
+          i.unitPriceCentavos ?? row['selling_price_centavos']! as int;
+      final line = i.lineTotalCentavos(price);
+      total += line;
+      loaded.add((
+        item: i,
+        row: row,
+        price: price,
+        baseQuantity: base,
+        line: line,
+      ));
     }
     final sale = await tx.insert('cash_sales', {
       'total_centavos': total,
@@ -57,37 +99,54 @@ class CashSaleRepository {
       'created_at': now,
     });
     var verified = 0, count = 0;
+    final runningStock = <int, int>{};
     for (final x in loaded) {
-      final price = x.row['selling_price_centavos']! as int,
-          before = x.row['current_quantity']! as int,
-          line = price * x.item.quantity;
+      final price = x.price,
+          before =
+              runningStock[x.item.productId] ??
+              x.row['current_quantity']! as int,
+          line = x.line;
       verified += line;
-      count += x.item.quantity;
+      count += x.item.quantityScale == 1 ? x.item.effectiveQuantityValue : 1;
       final saleItemId = await tx.insert('cash_sale_items', {
         'cash_sale_id': sale,
         'product_id': x.item.productId,
         'product_name_snapshot': x.row['name'],
-        'unit_price_centavos': price,
-        'quantity': x.item.quantity,
+        'unit_price_centavos': x.item.quantityScale == 1 ? price : line,
+        'quantity': x.item.quantityScale == 1
+            ? x.item.effectiveQuantityValue
+            : 1,
         'line_total_centavos': line,
+        'selling_option_id': x.item.sellingOptionId,
+        'selling_option_name_snapshot': x.item.sellingOptionName ?? 'Piece',
+        'base_quantity_per_unit': x.item.baseQuantityPerUnit,
+        'selling_quantity_value': x.item.effectiveQuantityValue,
+        'selling_quantity_scale': x.item.quantityScale,
+        'base_unit_snapshot': x.item.baseUnitLabel,
+        'total_base_quantity': x.baseQuantity,
+        'selling_unit_price_centavos': price,
         'created_at': now,
       });
       await ConsignmentAllocation.postSale(
         tx,
         productId: x.item.productId,
-        quantity: x.item.quantity,
-        sellingPriceCentavos: price,
+        quantity: x.baseQuantity,
+        sellingPriceCentavos: x.baseQuantity == 0
+            ? 0
+            : (line + x.baseQuantity ~/ 2) ~/ x.baseQuantity,
+        totalSaleCentavos: line,
         cashSaleItemId: saleItemId,
         occurredAt: now,
       );
       await tx.insert('inventory_movements', {
         'inventory_transaction_id': inv,
         'product_id': x.item.productId,
-        'quantity_change': -x.item.quantity,
+        'quantity_change': -x.baseQuantity,
         'quantity_before': before,
-        'quantity_after': before - x.item.quantity,
+        'quantity_after': before - x.baseQuantity,
         'created_at': now,
       });
+      runningStock[x.item.productId] = before - x.baseQuantity;
     }
     if (verified != total) throw StateError('Total mismatch');
     await tx.insert('activity_logs', {

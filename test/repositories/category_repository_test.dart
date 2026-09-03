@@ -100,4 +100,38 @@ void main() {
       expect(product['category_id'], category.id);
     },
   );
+
+  test('default category population is complete and idempotent', () async {
+    await repository.ensureDefaultCategories();
+    await repository.ensureDefaultCategories();
+    final active = await repository.getActive();
+    expect(
+      active,
+      hasLength(SqliteCategoryRepository.defaultPhilippineCategories.length),
+    );
+    expect(
+      active.map((x) => x.name),
+      containsAll([
+        'Rice',
+        'Cooking Oil',
+        'Soft Drinks',
+        'Cigarettes & Tobacco',
+      ]),
+    );
+  });
+
+  test(
+    'defaults preserve existing normalized names and custom categories',
+    () async {
+      await repository.create('  Rice  ');
+      await repository.create('Frozen Meat');
+      await repository.ensureDefaultCategories();
+      final rows = await database.query('categories');
+      expect(
+        rows.where((x) => (x['name']! as String).toLowerCase() == 'rice'),
+        hasLength(1),
+      );
+      expect(rows.where((x) => x['name'] == 'Frozen Meat'), hasLength(1));
+    },
+  );
 }

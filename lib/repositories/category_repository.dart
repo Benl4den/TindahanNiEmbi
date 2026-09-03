@@ -26,6 +26,59 @@ class SqliteCategoryRepository implements CategoryRepository {
 
   final Database _database;
 
+  static const defaultPhilippineCategories = <String>[
+    'Soft Drinks',
+    'Water & Beverages',
+    'Coffee & Powdered Drinks',
+    'Rice',
+    'Cooking Oil',
+    'Canned Goods',
+    'Instant Noodles',
+    'Snacks & Chips',
+    'Biscuits & Crackers',
+    'Candy & Chocolates',
+    'Bread & Bakery',
+    'Eggs',
+    'Condiments & Seasonings',
+    'Sugar & Cooking Ingredients',
+    'Milk & Creamer',
+    'Cigarettes & Tobacco',
+    'Beer & Alcoholic Drinks',
+    'Frozen Foods',
+    'Ice & Frozen Treats',
+    'Shampoo & Hair Care',
+    'Soap & Body Care',
+    'Laundry Products',
+    'Dishwashing & Cleaning',
+    'Dental Care',
+    'Personal Care',
+    'Baby Products',
+    'Household Supplies',
+    'School & Office Supplies',
+    'Medicine / OTC',
+    'Mobile Load & Services',
+    'Other',
+  ];
+
+  Future<void> ensureDefaultCategories() async {
+    await _database.transaction((tx) async {
+      final existing = await tx.query('categories', columns: ['name']);
+      final names = existing
+          .map((x) => _comparisonKey(x['name']! as String))
+          .toSet();
+      final now = DateTime.now().toUtc().toIso8601String();
+      for (final name in defaultPhilippineCategories) {
+        if (!names.add(_comparisonKey(name))) continue;
+        await tx.insert('categories', {
+          'name': name,
+          'is_archived': 0,
+          'created_at': now,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+    });
+  }
+
   @override
   Future<List<Category>> getActive() async {
     final rows = await _database.query(
@@ -108,4 +161,7 @@ class SqliteCategoryRepository implements CategoryRepository {
     if (normalized.isEmpty) throw const InvalidCategoryNameException();
     return normalized;
   }
+
+  String _comparisonKey(String name) =>
+      name.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 }

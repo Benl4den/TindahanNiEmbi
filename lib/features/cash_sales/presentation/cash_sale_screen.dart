@@ -1,11 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../models/product.dart';
 import '../../../models/utang_draft.dart';
+import '../../../models/product_unit.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/reversal_repository.dart';
+import '../../../repositories/product_unit_repository.dart';
+import '../../../widgets/app_search_field.dart';
+import '../../../widgets/product_image.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'sale_details_screen.dart';
 
@@ -46,12 +48,189 @@ class _State extends State<CashSaleScreen> {
   SalesHistoryEntry? lastTransaction;
   int todaySalesTotal = 0;
   int todayTransactionCount = 0;
+  Map<int, List<SellingOption>> options = const {};
   @override
   void initState() {
     super.initState();
-    products = widget.products;
+    products = widget.products.where((x) => !x.isArchived).toList();
     c = ProductSelectionController(products);
     _loadSummary();
+    _loadOptions();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _refreshCatalog();
+  }
+
+  Future<void> _refreshCatalog() async {
+    final loader = widget.loadProducts;
+    if (loader == null) return;
+    final active = (await loader()).where((x) => !x.isArchived).toList();
+    if (!mounted) return;
+    setState(() {
+      products = active;
+      c = ProductSelectionController(products);
+      options = const {};
+    });
+    await _loadOptions();
+  }
+
+  @override
+  void didUpdateWidget(covariant CashSaleScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final active = widget.products.where((x) => !x.isArchived).toList();
+    final oldIds = products.map((x) => x.id).toSet();
+    final newIds = active.map((x) => x.id).toSet();
+    if (oldIds.length != newIds.length || !oldIds.containsAll(newIds)) {
+      products = active;
+      c = ProductSelectionController(products);
+      options = const {};
+      _loadOptions();
+    }
+  }
+
+  Future<void> _loadOptions() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final units = ProductUnitRepository(repository.db);
+    final loaded = <int, List<SellingOption>>{};
+    for (final product in products) {
+      loaded[product.id] = await units.sellingOptions(product.id);
+    }
+    if (mounted) setState(() => options = loaded);
+  }
+
+  Future<void> _addProduct(Product product) async {
+    final choices = options[product.id] ?? const <SellingOption>[];
+    final usable = choices.isEmpty
+        ? [
+            SellingOption(
+              id: -product.id,
+              productId: product.id,
+              name: 'Piece',
+              baseQuantity: 1,
+              priceCentavos: product.sellingPriceCentavos,
+              isDefault: true,
+            ),
+          ]
+        : choices;
+    final measured =
+        product.baseUnitCode == 'GRAM' &&
+        usable.any((x) => x.baseQuantity >= 1000);
+    if (usable.length == 1 && !measured) {
+      setState(() => c.add(product, usable.single));
+      return;
+    }
+    var selected = usable.first;
+    final quantity = TextEditingController(text: '1');
+    String? error;
+    final result = await showDialog<({SellingOption option, int value, int scale})>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          title: Text(product.name),
+          content: SizedBox(
+            width: 430,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<SellingOption>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(
+                    labelText: 'How do you sell this product?',
+                  ),
+                  items: usable
+                      .map(
+                        (x) => DropdownMenuItem(
+                          value: x,
+                          child: Text('${x.name} — ${money(x.priceCentavos)}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (x) {
+                    if (x != null) {
+                      setDialogState(() {
+                        selected = x;
+                        error = null;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: quantity,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText:
+                        product.baseUnitCode == 'GRAM' &&
+                            selected.baseQuantity >= 1000
+                        ? 'Quantity in kg'
+                        : 'Quantity',
+                    errorText: error,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '1 ${selected.name} uses ${selected.baseQuantity} ${product.baseUnitLabel}',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  final parsed = parseSaleQuantity(
+                    quantity.text,
+                    measured:
+                        product.baseUnitCode == 'GRAM' &&
+                        selected.baseQuantity >= 1000,
+                  );
+                  if (parsed.value * selected.baseQuantity % parsed.scale !=
+                      0) {
+                    throw const FormatException(
+                      'Quantity cannot be converted exactly.',
+                    );
+                  }
+                  Navigator.pop(dialogContext, (
+                    option: selected,
+                    value: parsed.value,
+                    scale: parsed.scale,
+                  ));
+                } on FormatException catch (e) {
+                  setDialogState(() => error = e.message);
+                }
+              },
+              child: const Text('Add to Sale'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      try {
+        setState(
+          () => c.add(
+            product,
+            result.option,
+            quantityValue: result.value,
+            quantityScale: result.scale,
+          ),
+        );
+      } catch (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not enough stock for that quantity.')),
+        );
+      }
+    }
   }
 
   Future<void> _loadSummary() async {
@@ -113,10 +292,10 @@ class _State extends State<CashSaleScreen> {
                   constraints: const BoxConstraints(maxHeight: 380),
                   child: ListView.separated(
                     shrinkWrap: true,
-                    itemCount: c.selectedProducts.length,
+                    itemCount: c.lines.length,
                     separatorBuilder: (_, _) => const Divider(height: 12),
                     itemBuilder: (_, i) {
-                      final p = c.selectedProducts[i], q = c.quantityFor(p);
+                      final line = c.lines[i], p = line.product;
                       return Row(
                         children: [
                           Expanded(
@@ -129,12 +308,14 @@ class _State extends State<CashSaleScreen> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                Text('$q × ${money(p.sellingPriceCentavos)}'),
+                                Text(
+                                  '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
+                                ),
                               ],
                             ),
                           ),
                           Text(
-                            money(q * p.sellingPriceCentavos),
+                            money(line.lineTotalCentavos),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ],
@@ -179,11 +360,7 @@ class _State extends State<CashSaleScreen> {
     if (yes != true) return;
     setState(() => saving = true);
     try {
-      final items = c.selectedProducts
-          .map(
-            (p) => UtangItemDraft(productId: p.id, quantity: c.quantityFor(p)),
-          )
-          .toList();
+      final items = c.drafts;
       CashSaleResult? result;
       if (widget.saveSale != null) {
         await widget.saveSale!(items);
@@ -230,9 +407,7 @@ class _State extends State<CashSaleScreen> {
     }
   }
 
-  List<UtangItemDraft> get _items => c.selectedProducts
-      .map((p) => UtangItemDraft(productId: p.id, quantity: c.quantityFor(p)))
-      .toList();
+  List<UtangItemDraft> get _items => c.drafts;
   Future<void> checkoutUtang() async {
     if (widget.onUtang == null || c.totalCentavos == 0) return;
     final ok = await widget.onUtang!(_items);
@@ -320,11 +495,8 @@ class _State extends State<CashSaleScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Search products...',
-              prefixIcon: Icon(Icons.search),
-            ),
+          child: AppSearchField(
+            hintText: 'Search products...',
             onChanged: (v) => setState(() => search = v),
           ),
         ),
@@ -384,23 +556,18 @@ class _State extends State<CashSaleScreen> {
     final q = c.quantityFor(p),
         out = p.currentQuantity == 0,
         low = !out && p.currentQuantity <= p.minimumStockLevel;
+    final productOptions = options[p.id] ?? const <SellingOption>[];
+    final defaultOption = productOptions.where((x) => x.isDefault).firstOrNull;
+    final displayPrice = defaultOption?.priceCentavos ?? p.sellingPriceCentavos;
+    final priceUnit = defaultOption?.name;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: out ? null : () => setState(() => c.increase(p)),
+        onTap: out ? null : () => _addProduct(p),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Image.file(
-                File(p.photoPath),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
-                  color: Color(0xFFE9EEE9),
-                  child: Icon(Icons.inventory_2_outlined, size: 54),
-                ),
-              ),
-            ),
+            Expanded(child: ProductImage(path: p.photoPath)),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -416,7 +583,7 @@ class _State extends State<CashSaleScreen> {
                     ),
                   ),
                   Text(
-                    money(p.sellingPriceCentavos),
+                    '${money(displayPrice)}${priceUnit == null ? '' : ' / $priceUnit'}',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -427,8 +594,8 @@ class _State extends State<CashSaleScreen> {
                     out
                         ? 'Out of Stock'
                         : low
-                        ? '${p.currentQuantity} left • Low Stock'
-                        : '${p.currentQuantity} in stock',
+                        ? '${_stockText(p)} left • Low Stock'
+                        : '${_stockText(p)} available',
                     style: TextStyle(
                       color: out
                           ? Colors.red.shade700
@@ -454,9 +621,7 @@ class _State extends State<CashSaleScreen> {
                           ),
                         ),
                         IconButton.filled(
-                          onPressed: q >= p.currentQuantity
-                              ? null
-                              : () => setState(() => c.increase(p)),
+                          onPressed: () => _addProduct(p),
                           icon: const Icon(Icons.add),
                         ),
                       ],
@@ -465,9 +630,7 @@ class _State extends State<CashSaleScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.tonal(
-                        onPressed: out
-                            ? null
-                            : () => setState(() => c.increase(p)),
+                        onPressed: out ? null : () => _addProduct(p),
                         child: const Text('Add'),
                       ),
                     ),
@@ -479,6 +642,22 @@ class _State extends State<CashSaleScreen> {
       ),
     );
   }
+
+  String _stockText(Product product) {
+    if (product.baseUnitCode == 'GRAM') {
+      return '${_friendlyDecimal(product.currentQuantity, 1000)} kg';
+    }
+    if (product.baseUnitCode == 'MILLILITER' &&
+        product.currentQuantity >= 1000) {
+      return '${_friendlyDecimal(product.currentQuantity, 1000)} L';
+    }
+    return '${product.currentQuantity} ${product.baseUnitLabel}${product.currentQuantity == 1 ? '' : 's'}';
+  }
+
+  String _friendlyDecimal(int value, int scale) => (value / scale)
+      .toStringAsFixed(3)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
 
   Widget _cart() => Material(
     color: Colors.white,
@@ -519,8 +698,8 @@ class _State extends State<CashSaleScreen> {
                     ),
                   )
                 : ListView(
-                    children: c.selectedProducts.map((p) {
-                      final q = c.quantityFor(p);
+                    children: c.lines.map((line) {
+                      final p = line.product;
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
                         margin: const EdgeInsets.symmetric(
@@ -544,14 +723,7 @@ class _State extends State<CashSaleScreen> {
                               child: SizedBox(
                                 width: 48,
                                 height: 48,
-                                child: Image.file(
-                                  File(p.photoPath),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => const ColoredBox(
-                                    color: Color(0xffeeeeee),
-                                    child: Icon(Icons.inventory_2),
-                                  ),
-                                ),
+                                child: ProductImage(path: p.photoPath),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -575,24 +747,28 @@ class _State extends State<CashSaleScreen> {
                                         tooltip: 'Remove item',
                                         visualDensity: VisualDensity.compact,
                                         onPressed: () =>
-                                            setState(() => c.remove(p)),
+                                            setState(() => c.removeLine(line)),
                                         icon: const Icon(Icons.close, size: 19),
                                       ),
                                     ],
                                   ),
                                   Row(
                                     children: [
-                                      Text(
-                                        '$q × ${money(p.sellingPriceCentavos)}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
+                                      Expanded(
+                                        child: Text(
+                                          '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
                                       ),
-                                      const Spacer(),
                                       IconButton.filledTonal(
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: () =>
-                                            setState(() => c.decrease(p)),
+                                        onPressed: () => setState(
+                                          () => c.decreaseLine(line),
+                                        ),
                                         icon: const Icon(
                                           Icons.remove,
                                           size: 18,
@@ -603,7 +779,7 @@ class _State extends State<CashSaleScreen> {
                                           horizontal: 8,
                                         ),
                                         child: Text(
-                                          '$q',
+                                          line.quantityText,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                           ),
@@ -611,10 +787,15 @@ class _State extends State<CashSaleScreen> {
                                       ),
                                       IconButton.filled(
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: q >= p.currentQuantity
+                                        onPressed: line.quantityScale != 1
                                             ? null
-                                            : () =>
-                                                  setState(() => c.increase(p)),
+                                            : () {
+                                                try {
+                                                  setState(
+                                                    () => c.increaseLine(line),
+                                                  );
+                                                } catch (_) {}
+                                              },
                                         icon: const Icon(Icons.add, size: 18),
                                       ),
                                     ],
@@ -622,7 +803,7 @@ class _State extends State<CashSaleScreen> {
                                   Align(
                                     alignment: Alignment.centerRight,
                                     child: Text(
-                                      money(q * p.sellingPriceCentavos),
+                                      money(line.lineTotalCentavos),
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w900,
                                       ),

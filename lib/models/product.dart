@@ -1,3 +1,5 @@
+import 'product_unit.dart';
+
 enum ProductStockStatus { inStock, lowStock, outOfStock }
 
 class Product {
@@ -13,6 +15,9 @@ class Product {
     required this.isArchived,
     required this.createdAt,
     required this.updatedAt,
+    this.baseUnitCode = 'PIECE',
+    this.baseUnitLabel = 'piece',
+    this.unitConfiguration,
   });
 
   final int id;
@@ -26,6 +31,9 @@ class Product {
   final bool isArchived;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String baseUnitCode;
+  final String baseUnitLabel;
+  final ProductUnitConfiguration? unitConfiguration;
 
   ProductStockStatus get stockStatus {
     if (currentQuantity == 0) {
@@ -49,6 +57,8 @@ class Product {
     isArchived: map['is_archived'] == 1,
     createdAt: DateTime.parse(map['created_at']! as String),
     updatedAt: DateTime.parse(map['updated_at']! as String),
+    baseUnitCode: (map['base_unit_code'] as String?) ?? 'PIECE',
+    baseUnitLabel: (map['base_unit_label'] as String?) ?? 'piece',
   );
 }
 
@@ -61,6 +71,7 @@ class ProductDraft {
     required this.sellingPriceCentavos,
     required this.startingQuantity,
     required this.minimumStockLevel,
+    this.unitConfiguration,
   });
   final int categoryId;
   final String name;
@@ -69,4 +80,5 @@ class ProductDraft {
   final int sellingPriceCentavos;
   final int startingQuantity;
   final int minimumStockLevel;
+  final ProductUnitConfiguration? unitConfiguration;
 }

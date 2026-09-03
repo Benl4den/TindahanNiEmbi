@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../models/customer.dart';
 import '../../../models/product.dart';
+import '../../../models/product_unit.dart';
 import '../../../models/utang_draft.dart';
 import '../../../repositories/customer_repository.dart';
 import '../../../repositories/product_repository.dart';
+import '../../../repositories/product_unit_repository.dart';
 import '../../../repositories/payment_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/correction_repository.dart';
@@ -17,6 +19,7 @@ import '../../../repositories/utang_repository.dart';
 import '../../customers/presentation/customer_form_screen.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'utang_customer_card.dart';
+import '../../../widgets/app_search_field.dart';
 
 class UtangCustomerScreen extends StatefulWidget {
   const UtangCustomerScreen({
@@ -152,13 +155,9 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
         ),
         Padding(
           padding: const EdgeInsets.all(20),
-          child: TextField(
+          child: AppSearchField(
             controller: q,
-            decoration: const InputDecoration(
-              labelText: 'Search customers...',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.search),
-            ),
+            hintText: 'Search customers...',
             onChanged: (_) => setState(reload),
           ),
         ),
@@ -241,11 +240,146 @@ class UtangProductsScreen extends StatefulWidget {
 
 class _UtangProductsScreenState extends State<UtangProductsScreen> {
   late final ProductSelectionController c;
+  Map<int, List<SellingOption>> options = const {};
   String q = '';
   @override
   void initState() {
     super.initState();
     c = ProductSelectionController(widget.products);
+    _loadOptions();
+  }
+
+  Future<void> _loadOptions() async {
+    final units = ProductUnitRepository(widget.utang.db),
+        loaded = <int, List<SellingOption>>{};
+    for (final product in widget.products) {
+      loaded[product.id] = await units.sellingOptions(product.id);
+    }
+    if (mounted) setState(() => options = loaded);
+  }
+
+  Future<void> _addProduct(Product product) async {
+    final choices = options[product.id] ?? const <SellingOption>[];
+    final usable = choices.isEmpty
+        ? [
+            SellingOption(
+              id: -product.id,
+              productId: product.id,
+              name: 'Piece',
+              baseQuantity: 1,
+              priceCentavos: product.sellingPriceCentavos,
+              isDefault: true,
+            ),
+          ]
+        : choices;
+    final measured =
+        product.baseUnitCode == 'GRAM' &&
+        usable.any((x) => x.baseQuantity >= 1000);
+    if (usable.length == 1 && !measured) {
+      setState(() => c.add(product, usable.single));
+      return;
+    }
+    var selected = usable.first;
+    String? error;
+    final quantity = TextEditingController(text: '1');
+    final result = await showDialog<({SellingOption option, int value, int scale})>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, setLocal) => AlertDialog(
+          title: Text(product.name),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<SellingOption>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(
+                    labelText: 'Selling option',
+                  ),
+                  items: usable
+                      .map(
+                        (x) => DropdownMenuItem(
+                          value: x,
+                          child: Text(
+                            '${x.name} — ₱${(x.priceCentavos / 100).toStringAsFixed(2)}',
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (x) {
+                    if (x != null) setLocal(() => selected = x);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantity,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText:
+                        product.baseUnitCode == 'GRAM' &&
+                            selected.baseQuantity >= 1000
+                        ? 'Quantity in kg'
+                        : 'Quantity',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  final parsed = parseSaleQuantity(
+                    quantity.text,
+                    measured:
+                        product.baseUnitCode == 'GRAM' &&
+                        selected.baseQuantity >= 1000,
+                  );
+                  if (parsed.value * selected.baseQuantity % parsed.scale !=
+                      0) {
+                    throw const FormatException(
+                      'Quantity cannot be converted exactly.',
+                    );
+                  }
+                  Navigator.pop(dialog, (
+                    option: selected,
+                    value: parsed.value,
+                    scale: parsed.scale,
+                  ));
+                } on FormatException catch (e) {
+                  setLocal(() => error = e.message);
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      try {
+        setState(
+          () => c.add(
+            product,
+            result.option,
+            quantityValue: result.value,
+            quantityScale: result.scale,
+          ),
+        );
+      } catch (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not enough stock for that quantity.')),
+        );
+      }
+    }
   }
 
   @override
@@ -316,7 +450,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             IconButton.filled(
-                              onPressed: () => setState(() => c.increase(p)),
+                              onPressed: () => _addProduct(p),
                               icon: const Icon(Icons.add),
                               iconSize: 30,
                             ),
@@ -396,14 +530,7 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
       await widget.utang.save(
         UtangDraft(
           customerId: widget.customer.id,
-          items: widget.selection.selectedProducts
-              .map(
-                (p) => UtangItemDraft(
-                  productId: p.id,
-                  quantity: widget.selection.quantityFor(p),
-                ),
-              )
-              .toList(),
+          items: widget.selection.drafts,
         ),
       );
       widget.selection.clear();
@@ -435,14 +562,14 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
               widget.customer.fullName,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            ...widget.selection.selectedProducts.map(
-              (p) => ListTile(
-                title: Text(p.name),
+            ...widget.selection.lines.map(
+              (line) => ListTile(
+                title: Text(line.product.name),
                 subtitle: Text(
-                  '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)} × ${widget.selection.quantityFor(p)}',
+                  '${line.quantityText} ${line.option.name} × ₱${(line.option.priceCentavos / 100).toStringAsFixed(2)}',
                 ),
                 trailing: Text(
-                  '₱${(p.sellingPriceCentavos * widget.selection.quantityFor(p) / 100).toStringAsFixed(2)}',
+                  '₱${(line.lineTotalCentavos / 100).toStringAsFixed(2)}',
                 ),
               ),
             ),
@@ -1068,9 +1195,7 @@ class UtangDetailsDialog extends StatelessWidget {
                           (x) => ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(x['product_name_snapshot']! as String),
-                            subtitle: Text(
-                              '${x['quantity']} × ${money(x['unit_price_centavos']! as int)}',
-                            ),
+                            subtitle: Text(_snapshotSubtitle(x)),
                             trailing: Text(
                               money(x['line_total_centavos']! as int),
                               style: const TextStyle(
@@ -1434,6 +1559,27 @@ class UtangDetailsDialog extends StatelessWidget {
     );
     if (done == true && context.mounted) Navigator.pop(context);
   }
+
+  String _snapshotQuantity(Map<String, Object?> x) {
+    final value =
+        (x['selling_quantity_value'] as int?) ?? x['quantity']! as int;
+    final scale = (x['selling_quantity_scale'] as int?) ?? 1;
+    return scale == 1
+        ? '$value'
+        : (value / scale)
+              .toStringAsFixed(3)
+              .replaceFirst(RegExp(r'0+$'), '')
+              .replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String _snapshotSubtitle(Map<String, Object?> x) {
+    if (x['selling_quantity_value'] == null) {
+      return '${x['quantity']} × ${_money(x['unit_price_centavos']! as int)}';
+    }
+    return '${_snapshotQuantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ${_money((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int)}\n${x['total_base_quantity'] ?? x['quantity']} ${x['base_unit_snapshot'] ?? 'piece'} deducted';
+  }
+
+  String _money(int centavos) => '₱${(centavos / 100).toStringAsFixed(2)}';
 
   Widget _balance(String label, String value) => Padding(
     padding: const EdgeInsets.only(top: 6),

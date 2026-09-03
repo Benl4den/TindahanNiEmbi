@@ -1,9 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../models/product.dart';
+import '../../../widgets/status_badge.dart';
+import '../../../widgets/product_image.dart';
 
 class ProductCard extends StatelessWidget {
   const ProductCard({
@@ -38,16 +38,7 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Image.file(
-                File(product.photoPath),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
-                  color: Color(0xFFE3E5DF),
-                  child: Icon(Icons.image_not_supported_outlined, size: 54),
-                ),
-              ),
-            ),
+            Expanded(child: ProductImage(path: product.photoPath)),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
@@ -68,14 +59,19 @@ class ProductCard extends StatelessWidget {
                     'Minimum: ${product.minimumStockLevel}${categoryName == null ? '' : ' • $categoryName'}${inventoryGroups.isEmpty ? '' : ' • ${inventoryGroups.join(', ')}'}',
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    _status,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: warning
-                          ? Colors.red.shade800
-                          : Colors.green.shade800,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: StatusBadge(
+                      label: _status,
+                      status:
+                          product.stockStatus == ProductStockStatus.outOfStock
+                          ? AppStatus.critical
+                          : product.stockStatus == ProductStockStatus.lowStock
+                          ? AppStatus.attention
+                          : AppStatus.normal,
+                      icon: warning
+                          ? Icons.warning_amber
+                          : Icons.check_circle_outline,
                     ),
                   ),
                   const SizedBox(height: 10),

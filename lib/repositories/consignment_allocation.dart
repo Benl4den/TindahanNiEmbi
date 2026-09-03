@@ -8,11 +8,13 @@ class ConsignmentAllocation {
     required int productId,
     required int quantity,
     required int sellingPriceCentavos,
+    int? totalSaleCentavos,
     int? cashSaleItemId,
     int? utangItemId,
     required String occurredAt,
   }) async {
     var remaining = quantity;
+    var remainingRevenue = totalSaleCentavos ?? sellingPriceCentavos * quantity;
     final batches = await tx.rawQuery(
       '''SELECT b.*, c.name consignor_name FROM consignment_batches b
       JOIN consignors c ON c.id=b.consignor_id
@@ -28,6 +30,10 @@ class ConsignmentAllocation {
           (batch['units_returned']! as int);
       final take = remaining < available ? remaining : available;
       final cost = batch['unit_cost_centavos']! as int;
+      final revenue = take == remaining
+          ? remainingRevenue
+          : (remainingRevenue * take) ~/ remaining;
+      final actualMargin = revenue - take * cost;
       final allocationId = await tx.insert('consignment_allocations', {
         'batch_id': batch['id'],
         'cash_sale_item_id': cashSaleItemId,
@@ -37,6 +43,8 @@ class ConsignmentAllocation {
         'selling_price_centavos': sellingPriceCentavos,
         'payable_centavos': take * cost,
         'margin_centavos': take * (sellingPriceCentavos - cost),
+        'sale_revenue_centavos': revenue,
+        'actual_margin_centavos': actualMargin,
         'occurred_at': occurredAt,
       });
       await tx.update(
@@ -55,6 +63,7 @@ class ConsignmentAllocation {
         'created_at': occurredAt,
       });
       remaining -= take;
+      remainingRevenue -= revenue;
     }
   }
 }

@@ -7,6 +7,7 @@ import '../database/app_database.dart';
 import '../features/security/presentation/auth_gate.dart';
 import '../features/shell/presentation/app_shell.dart';
 import '../services/auth_service.dart';
+import '../repositories/category_repository.dart';
 import '../widgets/app_state_view.dart';
 
 class TindahanNiEmbiApp extends StatefulWidget {
@@ -24,10 +25,16 @@ class _State extends State<TindahanNiEmbiApp> {
   void initState() {
     super.initState();
     db = widget.database ?? AppDatabase();
-    startup = db.database;
+    startup = _bootstrap();
   }
 
-  void retryStartup() => setState(() => startup = db.database);
+  Future<Database> _bootstrap() async {
+    final database = await db.database;
+    await SqliteCategoryRepository(database).ensureDefaultCategories();
+    return database;
+  }
+
+  void retryStartup() => setState(() => startup = _bootstrap());
   @override
   void dispose() {
     db.close();

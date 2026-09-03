@@ -158,7 +158,7 @@ void main() {
           items: [UtangItemDraft(productId: productId, quantity: 3)],
         ),
       ),
-      throwsA(isA<DatabaseException>()),
+      throwsA(isA<StateError>()),
     );
 
     expect(await _quantity(db, productId), 2);

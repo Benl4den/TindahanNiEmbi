@@ -61,8 +61,17 @@ class AppShell extends StatefulWidget {
 
 class _State extends State<AppShell> {
   int selected = 0;
+  int salesRevision = 0;
   bool railExpanded = true;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
+
+  void _select(int destination) {
+    setState(() {
+      selected = destination;
+      if (destination == 0) salesRevision++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -112,8 +121,7 @@ class _State extends State<AppShell> {
               selectedIndex: const [0, 3, 6].contains(selected)
                   ? const [0, 3, 6].indexOf(selected)
                   : 3,
-              onDestinationSelected: (i) =>
-                  setState(() => selected = i == 3 ? 10 : [0, 3, 6][i]),
+              onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 3, 6][i]),
               destinations: [
                 destinations[0],
                 destinations[3],
@@ -143,6 +151,7 @@ class _State extends State<AppShell> {
         }
         if (!s.hasData) return const AppLoadingView(label: 'Loading Sales…');
         return CashSaleScreen(
+          key: ValueKey('sales-$salesRevision'),
           embedded: true,
           products: s.data![0] as List<Product>,
           categoryNames: {
@@ -340,7 +349,7 @@ class _State extends State<AppShell> {
                   final destination = destinations[i], active = selected == i;
                   final tile = InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () => setState(() => selected = i),
+                    onTap: () => _select(i),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 140),
                       height: 52,
