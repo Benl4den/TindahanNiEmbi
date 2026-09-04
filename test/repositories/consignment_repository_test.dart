@@ -88,6 +88,23 @@ void main() {
   );
 
   test(
+    'managed brands reuse products and removal only changes membership',
+    () async {
+      final special = SpecialInventoryRepository(db);
+      final brand = await special.createBrand('San Miguel');
+      await special.assign(product.id, brand.code);
+      expect((await special.products(brand.code)).single.id, product.id);
+      expect((await db.query('products')), hasLength(1));
+
+      await special.remove(product.id, brand.code);
+
+      expect(await special.products(brand.code), isEmpty);
+      expect((await db.query('products')).single['is_archived'], 0);
+      expect((await db.query('products')).single['current_quantity'], 0);
+    },
+  );
+
+  test(
     'receipt math, FIFO historical costs, payable and margin are preserved',
     () async {
       await receive(units: 5, cost: 100, sell: 300);

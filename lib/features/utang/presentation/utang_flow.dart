@@ -735,7 +735,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
-              children: ['All', 'UTANG', 'Payments']
+              children: ['All', 'UTANG', 'Payments', 'UTANG Products']
                   .map(
                     (x) => ChoiceChip(
                       label: Text(x),
@@ -746,70 +746,94 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                   .toList(),
             ),
             const SizedBox(height: 12),
-            ...entries.map(
-              (e) => Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: CircleAvatar(
-                    child: Icon(
-                      e.type.startsWith('UTANG')
-                          ? Icons.receipt_long
-                          : Icons.payments,
+            if (filter == 'UTANG Products')
+              ...d.products.map(
+                (item) => Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.shopping_bag_outlined),
+                    ),
+                    title: Text(
+                      item.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      '${item.quantity} ${item.option} • ${_date(item.occurredAt.toLocal())}',
+                    ),
+                    trailing: Text(
+                      _money(item.lineTotalCentavos),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
-                  title: Text(
-                    e.type.startsWith('UTANG')
-                        ? MaterialLocalizations.of(context)
-                              .formatMediumDate(e.occurredAt.toLocal())
-                        : 'Payment',
-                  ),
-                  subtitle: Text(
-                    '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
-                    '${e.description == null ? '' : ' • ${e.description}'}\n'
-                    '${e.itemCount == null ? '' : '${e.itemCount} items'}',
-                  ),
-                  trailing: e.type == 'UTANG'
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '+${_money(e.amountCentavos.abs())}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.orange.shade800,
-                              ),
-                            ),
-                            const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'View Details',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              )
+            else
+              ...entries.map(
+                (e) => Card(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: CircleAvatar(
+                      child: Icon(
+                        e.type.startsWith('UTANG')
+                            ? Icons.receipt_long
+                            : Icons.payments,
+                      ),
+                    ),
+                    title: Text(
+                      e.type.startsWith('UTANG')
+                          ? MaterialLocalizations.of(context)
+                                .formatMediumDate(e.occurredAt.toLocal())
+                          : 'Payment',
+                    ),
+                    subtitle: Text(
+                      '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
+                      '${e.description == null ? '' : ' • ${e.description}'}\n'
+                      '${e.itemCount == null ? '' : '${e.itemCount} items'}',
+                    ),
+                    trailing: e.type == 'UTANG'
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '+${_money(e.amountCentavos.abs())}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade800,
                                 ),
-                                Icon(Icons.chevron_right),
-                              ],
+                              ),
+                              const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'View Details',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right),
+                                ],
+                              ),
+                            ],
+                          )
+                        : Text(
+                            '-${_money(e.amountCentavos.abs())}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
-                        )
-                      : Text(
-                          '-${_money(e.amountCentavos.abs())}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
                           ),
-                        ),
-                  onTap: e.type == 'UTANG' && e.utangTransactionId != null
-                      ? () => _showDetails(d, e)
-                      : e.type == 'PAYMENT' &&
-                            e.paymentId != null &&
-                            widget.reversals != null
-                      ? () => _showPaymentDetails(e, d.customer)
-                      : null,
+                    onTap: e.type == 'UTANG' && e.utangTransactionId != null
+                        ? () => _showDetails(d, e)
+                        : e.type == 'PAYMENT' &&
+                              e.paymentId != null &&
+                              widget.reversals != null
+                        ? () => _showPaymentDetails(e, d.customer)
+                        : null,
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },
@@ -1142,10 +1166,6 @@ class UtangDetailsDialog extends StatelessWidget {
           }
           final d = s.data!, items = d['items']! as List<Map<String, Object?>>;
           final at = DateTime.parse(d['occurred_at']! as String).toLocal();
-          final pieces = items.fold<int>(
-            0,
-            (n, x) => n + (x['quantity']! as int),
-          );
           String money(int c) => '₱${(c / 100).toStringAsFixed(2)}';
           return Padding(
             padding: const EdgeInsets.all(24),
@@ -1208,8 +1228,6 @@ class UtangDetailsDialog extends StatelessWidget {
                   ),
                 ),
                 const Divider(),
-                Text('${items.length} product types • $pieces total pieces'),
-                const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1576,7 +1594,7 @@ class UtangDetailsDialog extends StatelessWidget {
     if (x['selling_quantity_value'] == null) {
       return '${x['quantity']} × ${_money(x['unit_price_centavos']! as int)}';
     }
-    return '${_snapshotQuantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ${_money((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int)}\n${x['total_base_quantity'] ?? x['quantity']} ${x['base_unit_snapshot'] ?? 'piece'} deducted';
+    return '${_snapshotQuantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ${_money((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int)}';
   }
 
   String _money(int centavos) => '₱${(centavos / 100).toStringAsFixed(2)}';

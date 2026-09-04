@@ -18,6 +18,8 @@ class Product {
     this.baseUnitCode = 'PIECE',
     this.baseUnitLabel = 'piece',
     this.unitConfiguration,
+    this.defaultPurchasePackageName,
+    this.defaultPurchaseBaseQuantity,
   });
 
   final int id;
@@ -34,6 +36,8 @@ class Product {
   final String baseUnitCode;
   final String baseUnitLabel;
   final ProductUnitConfiguration? unitConfiguration;
+  final String? defaultPurchasePackageName;
+  final int? defaultPurchaseBaseQuantity;
 
   ProductStockStatus get stockStatus {
     if (currentQuantity == 0) {
@@ -59,6 +63,8 @@ class Product {
     updatedAt: DateTime.parse(map['updated_at']! as String),
     baseUnitCode: (map['base_unit_code'] as String?) ?? 'PIECE',
     baseUnitLabel: (map['base_unit_label'] as String?) ?? 'piece',
+    defaultPurchasePackageName: map['default_purchase_package_name'] as String?,
+    defaultPurchaseBaseQuantity: map['default_purchase_base_quantity'] as int?,
   );
 }
 

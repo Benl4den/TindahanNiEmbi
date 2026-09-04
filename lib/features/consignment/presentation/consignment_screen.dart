@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/consignment.dart';
 import '../../../models/product.dart';
+import '../../../models/product_unit.dart';
 import '../../../repositories/consignment_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/category_repository.dart';
@@ -373,11 +374,30 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     if (!mounted) return;
     int party = parties.first.id,
         product = products.isEmpty ? -1 : products.first.id;
+    final packageOptions = <int, List<PurchasePackage>>{};
+    for (final item in products) {
+      if (item.defaultPurchaseBaseQuantity != null) {
+        packageOptions[item.id] = [
+          PurchasePackage(
+            id: -item.id,
+            productId: item.id,
+            name: item.defaultPurchasePackageName ?? 'Package',
+            baseQuantity: item.defaultPurchaseBaseQuantity!,
+            isDefault: true,
+          ),
+        ];
+      }
+    }
+    var receiveAsPackage = true;
+    PurchasePackage? selectedPackage = product < 0
+        ? null
+        : packageOptions[product]?.firstOrNull;
     final boxes = TextEditingController(),
         units = TextEditingController(),
         cost = TextEditingController(),
         sell = TextEditingController(),
         notes = TextEditingController();
+    if (selectedPackage != null) units.text = '${selectedPackage.baseQuantity}';
     String? error;
     var saving = false;
     final ok = await showDialog<bool>(
@@ -418,11 +438,62 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => set(() => product = v!),
+                      onChanged: (v) => set(() {
+                        product = v!;
+                        selectedPackage = packageOptions[product]?.firstOrNull;
+                        if (selectedPackage != null) {
+                          units.text = '${selectedPackage!.baseQuantity}';
+                        }
+                      }),
                     ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Direct Units')),
+                      ButtonSegment(value: true, label: Text('Package')),
+                    ],
+                    selected: {receiveAsPackage},
+                    onSelectionChanged: (value) => set(() {
+                      receiveAsPackage = value.single;
+                      if (!receiveAsPackage) {
+                        units.text = '1';
+                      }
+                      if (receiveAsPackage && selectedPackage != null) {
+                        units.text = '${selectedPackage!.baseQuantity}';
+                      }
+                    }),
+                  ),
+                  if (receiveAsPackage && selectedPackage != null) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<PurchasePackage>(
+                      initialValue: selectedPackage,
+                      decoration: const InputDecoration(
+                        labelText: 'Purchase package',
+                      ),
+                      items: packageOptions[product]!
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(
+                                '${p.name} • ${p.baseQuantity} base units',
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) => set(() {
+                        selectedPackage = value;
+                        if (value != null) units.text = '${value.baseQuantity}';
+                      }),
+                    ),
+                  ],
                   ...[
-                    (boxes, 'Boxes received'),
-                    (units, 'Units per box'),
+                    (
+                      boxes,
+                      receiveAsPackage
+                          ? 'Packages received'
+                          : 'Quantity received',
+                    ),
+                    if (receiveAsPackage) (units, 'Base units per package'),
                     (cost, 'Cost per unit'),
                     (sell, 'Selling price per unit'),
                     (notes, 'Notes (optional)'),
@@ -454,7 +525,9 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'Total Units: $total\nMargin / Unit: ₱${(selling - unitCost).toStringAsFixed(2)}\nTotal Consigned Value: ₱${(total * unitCost).toStringAsFixed(2)}',
+                            receiveAsPackage
+                                ? '$boxCount ${selectedPackage?.name ?? 'packages'} × $perBox = $total base units received\nMargin / base unit: ₱${(selling - unitCost).toStringAsFixed(2)}\nTotal Consigned Value: ₱${(total * unitCost).toStringAsFixed(2)}'
+                                : '$total base units received\nMargin / unit: ₱${(selling - unitCost).toStringAsFixed(2)}\nTotal Consigned Value: ₱${(total * unitCost).toStringAsFixed(2)}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),

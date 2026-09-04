@@ -182,15 +182,16 @@ void main() {
     await t.tap(find.text('Select Existing Product'));
     await t.pumpAndSettle();
     for (final x in [
-      ('Boxes received', '1'),
-      ('Units per box', '24'),
+      ('Packages received', '1'),
+      ('Base units per package', '24'),
       ('Cost per unit', '1'),
       ('Selling price per unit', '2'),
     ]) {
+      expect(find.text(x.$1), findsOneWidget, reason: x.$1);
       await t.enterText(find.widgetWithText(TextField, x.$1), x.$2);
     }
     await t.pump();
-    expect(find.textContaining('Total Units: 24'), findsOneWidget);
+    expect(find.textContaining('= 24 base units received'), findsOneWidget);
     await t.tap(find.text('Receive').last);
     await t.pumpAndSettle();
     expect(repo.receipts, 1);

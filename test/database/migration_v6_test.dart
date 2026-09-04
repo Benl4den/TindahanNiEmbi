@@ -38,7 +38,7 @@ void main() {
           'schema_migrations',
           orderBy: 'version',
         )).map((x) => x['version']),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
       );
       expect(
         (await db.query('inventory_groups')).map((x) => x['code']),
@@ -75,7 +75,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 13);
+    expect(await db.getVersion(), 14);
     expect(
       (await db.query('inventory_groups')).map((x) => x['code']),
       containsAll(['SELECTA', 'CONSIGNMENT']),

@@ -16,6 +16,8 @@ import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/utang_repository.dart';
 import '../../../repositories/consignment_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
+import '../../../repositories/sale_draft_repository.dart';
+import '../../../repositories/transaction_history_repository.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/backup_service.dart';
 import '../../../services/product_photo_service.dart';
@@ -35,10 +37,11 @@ import '../../operations/presentation/restock_screen.dart';
 import '../../operations/presentation/storage_management_screen.dart';
 import '../../products/presentation/products_screen.dart';
 import '../../reports/presentation/reports_screen.dart';
-import '../../special_inventory/presentation/selecta_screen.dart';
+import '../../special_inventory/presentation/managed_brands_screen.dart';
 import '../../security/presentation/security_screen.dart';
 import '../../utang/presentation/utang_flow.dart';
 import '../../utang/presentation/utang_checkout.dart';
+import '../../transactions/transaction_history_screen.dart';
 import '../../../database/app_database.dart';
 import '../../../models/category.dart';
 import '../../../models/product.dart';
@@ -98,7 +101,7 @@ class _State extends State<AppShell> {
       NavigationDestination(icon: Icon(Icons.point_of_sale), label: 'Sales'),
       NavigationDestination(
         icon: Icon(Icons.icecream_outlined),
-        label: 'Selecta Products',
+        label: 'Managed Brands',
       ),
       NavigationDestination(
         icon: Icon(Icons.handshake_outlined),
@@ -124,8 +127,12 @@ class _State extends State<AppShell> {
         label: 'Reports',
       ),
       NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
+      NavigationDestination(
+        icon: Icon(Icons.history),
+        label: 'Transaction History',
+      ),
     ];
-    const navTargets = [0, 6, 1, 2, 3, 4, 5, 7, 8, 9, 10];
+    const navTargets = [0, 6, 3, 4, 1, 2, 11, 8, 9, 7, 5, 10];
     final destinations = [
       for (final target in navTargets) bodyDestinations[target],
     ];
@@ -192,6 +199,7 @@ class _State extends State<AppShell> {
           reversals: widget.role == UserRole.owner
               ? ReversalRepository(widget.database)
               : null,
+          drafts: SaleDraftRepository(widget.database),
           onUtang: (items) async {
             final ok = await showDialog<bool>(
               context: context,
@@ -218,7 +226,7 @@ class _State extends State<AppShell> {
         );
       },
     ),
-    1 => SelectaScreen(
+    1 => ManagedBrandsScreen(
       special: SpecialInventoryRepository(widget.database, actorRole: role),
       products: SqliteProductRepository(widget.database),
       inventory: InventoryRepository(widget.database, actorRole: role),
@@ -280,6 +288,9 @@ class _State extends State<AppShell> {
       widget.role == UserRole.owner
           ? ReportsScreen(repository: ReportsRepository(widget.database))
           : _denied(),
+    11 => TransactionHistoryScreen(
+      repository: TransactionHistoryRepository(widget.database),
+    ),
     _ => _more(),
   };
 
@@ -467,9 +478,9 @@ class _State extends State<AppShell> {
     final items =
         <({String label, IconData icon, Widget? page, VoidCallback? action})>[
           (
-            label: 'Selecta Products',
+            label: 'Managed Brands',
             icon: Icons.icecream_outlined,
-            page: SelectaScreen(
+            page: ManagedBrandsScreen(
               special: SpecialInventoryRepository(
                 widget.database,
                 actorRole: role,
@@ -621,7 +632,7 @@ class _State extends State<AppShell> {
     final management = items
         .where(
           (x) => const {
-            'Selecta Products',
+            'Managed Brands',
             'Consignment',
             'Restock',
             'Products',

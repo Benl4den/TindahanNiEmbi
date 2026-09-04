@@ -97,9 +97,36 @@ class SqliteCustomerRepository implements CustomerRepository {
       '''SELECT l.*, CASE WHEN l.utang_transaction_id IS NULL THEN NULL ELSE (SELECT COUNT(*) FROM utang_transaction_items i WHERE i.utang_transaction_id=l.utang_transaction_id) END item_count FROM customer_ledger_entries l WHERE l.customer_id=? ORDER BY l.occurred_at DESC, l.id DESC''',
       [id],
     );
+    final productRows = await _database.rawQuery(
+      '''SELECT i.*,u.occurred_at
+      FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id
+      WHERE u.customer_id=? ORDER BY u.occurred_at DESC,i.id DESC''',
+      [id],
+    );
     return CustomerDetails(
       customer: Customer.fromMap(customers.single),
       ledger: ledger.map(CustomerLedgerEntry.fromMap).toList(growable: false),
+      products: productRows
+          .map((x) {
+            final value =
+                (x['selling_quantity_value'] as int?) ?? x['quantity']! as int;
+            final scale = (x['selling_quantity_scale'] as int?) ?? 1;
+            final quantity = scale == 1
+                ? '$value'
+                : (value / scale)
+                      .toStringAsFixed(3)
+                      .replaceFirst(RegExp(r'0+$'), '')
+                      .replaceFirst(RegExp(r'\.$'), '');
+            return UtangProductHistory(
+              transactionId: x['utang_transaction_id']! as int,
+              name: x['product_name_snapshot']! as String,
+              quantity: quantity,
+              option: (x['selling_option_name_snapshot'] as String?) ?? 'Piece',
+              lineTotalCentavos: x['line_total_centavos']! as int,
+              occurredAt: DateTime.parse(x['occurred_at']! as String),
+            );
+          })
+          .toList(growable: false),
     );
   }
 

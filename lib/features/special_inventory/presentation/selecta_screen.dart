@@ -22,12 +22,17 @@ class SelectaScreen extends StatefulWidget {
     required this.inventory,
     required this.categories,
     required this.photoService,
+    this.groupCode = 'SELECTA',
+    this.groupName = 'Selecta',
+    this.lockFrozenCategory = true,
   });
   final SpecialInventoryRepository special;
   final ProductRepository products;
   final InventoryRepository inventory;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
+  final String groupCode, groupName;
+  final bool lockFrozenCategory;
   @override
   State<SelectaScreen> createState() => _SelectaScreenState();
 }
@@ -43,7 +48,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
-          title: const Text('Assign Selecta Product'),
+          title: Text('Assign to ${widget.groupName}'),
           content: SizedBox(
             width: 480,
             child: DropdownButtonFormField<int>(
@@ -74,7 +79,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
       ),
     );
     if (ok == true) {
-      await widget.special.assign(selected, 'SELECTA');
+      await widget.special.assign(selected, widget.groupCode);
       if (mounted) setState(() {});
     }
   }
@@ -90,7 +95,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
       return name == 'ice & frozen treats' ||
           name == 'ice cream & frozen treats';
     }).firstOrNull;
-    if (frozen == null) {
+    if (widget.lockFrozenCategory && frozen == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Active category “Ice & Frozen Treats” is required.'),
@@ -110,15 +115,15 @@ class _SelectaScreenState extends State<SelectaScreen> {
             repository: widget.products,
             photoService: widget.photoService,
             categories: categories,
-            initialCategoryId: frozen.id,
-            categoryInitiallyLocked: true,
+            initialCategoryId: widget.lockFrozenCategory ? frozen?.id : null,
+            categoryInitiallyLocked: widget.lockFrozenCategory,
             onSaved: (value) => created = value,
           ),
         ),
       ),
     );
     if (saved == true && created != null) {
-      await widget.special.assign(created!.id, 'SELECTA');
+      await widget.special.assign(created!.id, widget.groupCode);
       if (mounted) setState(() {});
     }
   }
@@ -154,17 +159,43 @@ class _SelectaScreenState extends State<SelectaScreen> {
     if (saved && mounted) setState(() {});
   }
 
+  Future<void> _remove(Product product) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove from brand?'),
+        content: Text(
+          '${product.name} will remain in Products, Inventory, Sales, and history. Only its ${widget.groupName} membership will be removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove from Brand'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) {
+      await widget.special.remove(product.id, widget.groupCode);
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Selecta Products'),
+      title: Text(widget.groupName),
       actions: [
         Padding(
           padding: const EdgeInsets.all(8),
           child: FilledButton.icon(
             onPressed: _create,
             icon: const Icon(Icons.add),
-            label: const Text('Add Selecta Product'),
+            label: Text('Add ${widget.groupName} Product'),
           ),
         ),
         Padding(
@@ -184,7 +215,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
           child: LayoutBuilder(
             builder: (_, box) {
               final search = AppSearchField(
-                hintText: 'Search Selecta products',
+                hintText: 'Search ${widget.groupName} products',
                 onChanged: (v) => setState(() => query = v),
               );
               final chips =
@@ -232,26 +263,28 @@ class _SelectaScreenState extends State<SelectaScreen> {
         Expanded(
           child: FutureBuilder<List<Product>>(
             future: widget.special.products(
-              'SELECTA',
+              widget.groupCode,
               query: query,
               status: status,
             ),
             builder: (_, s) {
               if (s.hasError) {
                 return AppStateView.error(
-                  title: 'Could not load Selecta products',
+                  title: 'Could not load ${widget.groupName} products',
                   actionLabel: 'Try Again',
                   onAction: () => setState(() {}),
                 );
               }
               if (!s.hasData) {
-                return const AppLoadingView(label: 'Loading Selecta products…');
+                return AppLoadingView(
+                  label: 'Loading ${widget.groupName} products…',
+                );
               }
               if (s.data!.isEmpty) {
                 return AppStateView.empty(
-                  title: 'No Selecta products found',
-                  message: 'Try another filter or add a Selecta product.',
-                  actionLabel: 'Add Selecta Product',
+                  title: 'No ${widget.groupName} products found',
+                  message: 'Assign an existing product or add a new one.',
+                  actionLabel: 'Add Product',
                   onAction: _create,
                 );
               }
@@ -329,10 +362,21 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                     ),
                                     Align(
                                       alignment: Alignment.centerRight,
-                                      child: TextButton.icon(
-                                        onPressed: () => _edit(p),
-                                        icon: const Icon(Icons.edit, size: 18),
-                                        label: const Text('Edit'),
+                                      child: Wrap(
+                                        children: [
+                                          TextButton(
+                                            onPressed: () => _remove(p),
+                                            child: const Text('Remove'),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: () => _edit(p),
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              size: 18,
+                                            ),
+                                            label: const Text('Edit'),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],

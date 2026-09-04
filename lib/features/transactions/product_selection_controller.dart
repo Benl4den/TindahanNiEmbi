@@ -119,6 +119,15 @@ class ProductSelectionController {
       lines.map((x) => x.product).toList(growable: false);
   List<UtangItemDraft> get drafts =>
       lines.map((x) => x.toDraft()).toList(growable: false);
+  void restore(Iterable<SaleCartLine> lines) {
+    _lines.clear();
+    for (final line in lines) {
+      if (line.baseQuantity <= line.product.currentQuantity) {
+        _lines[line.key] = line;
+      }
+    }
+  }
+
   void clear() => _lines.clear();
 }
 

@@ -93,10 +93,29 @@ class CustomerLedgerEntry {
       );
 }
 
+class UtangProductHistory {
+  const UtangProductHistory({
+    required this.transactionId,
+    required this.name,
+    required this.quantity,
+    required this.option,
+    required this.lineTotalCentavos,
+    required this.occurredAt,
+  });
+  final int transactionId, lineTotalCentavos;
+  final String name, quantity, option;
+  final DateTime occurredAt;
+}
+
 class CustomerDetails {
-  const CustomerDetails({required this.customer, required this.ledger});
+  const CustomerDetails({
+    required this.customer,
+    required this.ledger,
+    this.products = const [],
+  });
   final Customer customer;
   final List<CustomerLedgerEntry> ledger;
+  final List<UtangProductHistory> products;
   Iterable<CustomerLedgerEntry> get utangHistory =>
       ledger.where((e) => e.type == 'UTANG' || e.type == 'UTANG_REVERSAL');
   Iterable<CustomerLedgerEntry> get paymentHistory =>

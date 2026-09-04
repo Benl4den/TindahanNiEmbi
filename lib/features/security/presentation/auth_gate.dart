@@ -253,40 +253,45 @@ class _State extends State<AuthGate> {
               return SizedBox(
                 height: 76,
                 child: DropdownButtonFormField<int?>(
-                initialValue: selectedStaff?.id,
-                isDense: false,
-                itemHeight: 64,
-                decoration: const InputDecoration(
-                  labelText: 'Account',
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Owner'),
-                  ),
-                  ...accounts.map(
-                    (x) => DropdownMenuItem<int?>(
-                      value: x.id,
-                      child: Text(x.name),
+                  initialValue: selectedStaff?.id,
+                  isDense: false,
+                  itemHeight: 64,
+                  decoration: const InputDecoration(
+                    labelText: 'Account',
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
                     ),
                   ),
-                ],
-                selectedItemBuilder: (_) => [
-                  _accountIdentity('O', 'Owner', 'Owner'),
-                  ...accounts.map(
-                    (x) => _accountIdentity(
-                      x.name.substring(0, 1).toUpperCase(),
-                      x.name,
-                      'Cashier',
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('Owner'),
                     ),
-                  ),
-                ],
-                onChanged: (id) => setState(() {
-                  selectedStaff = accounts.where((x) => x.id == id).firstOrNull;
-                  pin.clear();
-                  error = null;
-                }),
+                    ...accounts.map(
+                      (x) => DropdownMenuItem<int?>(
+                        value: x.id,
+                        child: Text(x.name),
+                      ),
+                    ),
+                  ],
+                  selectedItemBuilder: (_) => [
+                    _accountIdentity('O', 'Owner', 'Owner'),
+                    ...accounts.map(
+                      (x) => _accountIdentity(
+                        x.name.substring(0, 1).toUpperCase(),
+                        x.name,
+                        'Cashier',
+                      ),
+                    ),
+                  ],
+                  onChanged: (id) => setState(() {
+                    selectedStaff = accounts
+                        .where((x) => x.id == id)
+                        .firstOrNull;
+                    pin.clear();
+                    error = null;
+                  }),
                 ),
               );
             },

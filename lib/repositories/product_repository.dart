@@ -51,7 +51,10 @@ class SqliteProductRepository implements ProductRepository {
       args.add(groupCode);
     }
     final rows = await _database.rawQuery(
-      'SELECT p.* FROM products p${clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}'} ORDER BY p.name COLLATE NOCASE',
+      '''SELECT p.*,
+        (SELECT k.name FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_archived=0 AND k.is_default=1 LIMIT 1) default_purchase_package_name,
+        (SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_archived=0 AND k.is_default=1 LIMIT 1) default_purchase_base_quantity
+        FROM products p${clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}'} ORDER BY p.name COLLATE NOCASE''',
       args,
     );
     return rows.map(Product.fromMap).toList(growable: false);

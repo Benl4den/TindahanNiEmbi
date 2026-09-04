@@ -74,7 +74,7 @@ void main() {
       expect(find.text('Historical Coke'), findsOneWidget);
       expect(find.text('2 × ₱150.00'), findsOneWidget);
       expect(find.text('₱300.00'), findsWidgets);
-      expect(find.textContaining('2 total pieces'), findsOneWidget);
+      expect(find.textContaining('deducted'), findsNothing);
       await tester.tap(find.widgetWithText(FilledButton, 'Close'));
       await tester.pumpAndSettle();
       expect(find.text('Open'), findsOneWidget);

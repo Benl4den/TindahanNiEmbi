@@ -39,7 +39,7 @@ class SaleDetailsScreen extends StatelessWidget {
               (x) => ListTile(
                 title: Text(x['product_name_snapshot']! as String),
                 subtitle: Text(
-                  '${_quantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ₱${(((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int) / 100).toStringAsFixed(2)}\n${x['total_base_quantity'] ?? x['quantity']} ${x['base_unit_snapshot'] ?? 'piece'} deducted',
+                  '${_quantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ₱${(((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int) / 100).toStringAsFixed(2)}',
                 ),
                 trailing: Text(
                   '₱${((x['line_total_centavos']! as int) / 100).toStringAsFixed(2)}',

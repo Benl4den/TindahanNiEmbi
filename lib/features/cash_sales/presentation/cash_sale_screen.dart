@@ -7,6 +7,7 @@ import '../../../models/product_unit.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/product_unit_repository.dart';
+import '../../../repositories/sale_draft_repository.dart';
 import '../../../widgets/app_search_field.dart';
 import '../../../widgets/app_alerts.dart';
 import '../../../widgets/product_image.dart';
@@ -26,6 +27,7 @@ class CashSaleScreen extends StatefulWidget {
     this.frequentProductNames = const {},
     this.selectaProductIds = const {},
     this.reversals,
+    this.drafts,
   }) : assert(repository != null || saveSale != null);
   final List<Product> products;
   final CashSaleRepository? repository;
@@ -37,6 +39,7 @@ class CashSaleScreen extends StatefulWidget {
   final Set<String> frequentProductNames;
   final Set<int> selectaProductIds;
   final ReversalRepository? reversals;
+  final SaleDraftRepository? drafts;
   @override
   State<CashSaleScreen> createState() => _State();
 }
@@ -51,6 +54,7 @@ class _State extends State<CashSaleScreen> {
   int todaySalesTotal = 0;
   int todayTransactionCount = 0;
   Map<int, List<SellingOption>> options = const {};
+  Future<void> _draftWrite = Future.value();
   @override
   void initState() {
     super.initState();
@@ -58,6 +62,39 @@ class _State extends State<CashSaleScreen> {
     c = ProductSelectionController(products);
     _loadSummary();
     _loadOptions();
+    _restoreDraft();
+  }
+
+  Future<void> _restoreDraft() async {
+    final repository = widget.drafts;
+    if (repository == null) return;
+    final lines = await repository.load(products);
+    if (!mounted || lines.isEmpty) return;
+    setState(() => c.restore(lines));
+  }
+
+  void _changeCart(VoidCallback change) {
+    setState(change);
+    final repository = widget.drafts;
+    if (repository != null) {
+      final snapshot = List<SaleCartLine>.of(c.lines);
+      _draftWrite = _draftWrite
+          .then((_) => repository.save(snapshot))
+          .catchError((Object error, StackTrace stack) {
+            if (mounted) {
+              showFriendlyError(
+                context,
+                title: 'Could Not Save Current Sale',
+                message: 'The cart is still open, but it could not be saved for recovery.',
+              );
+            }
+          });
+    }
+  }
+
+  Future<void> _clearSavedDraft() async {
+    await _draftWrite;
+    await widget.drafts?.clear();
   }
 
   @override
@@ -126,7 +163,7 @@ class _State extends State<CashSaleScreen> {
         product.baseUnitCode == 'GRAM' &&
         usable.any((x) => x.baseQuantity >= 1000);
     if (usable.length == 1 && !measured) {
-      setState(() => c.add(product, usable.single));
+      _changeCart(() => c.add(product, usable.single));
       return;
     }
     var selected = usable.first;
@@ -223,7 +260,7 @@ class _State extends State<CashSaleScreen> {
     );
     if (result != null && mounted) {
       try {
-        setState(
+        _changeCart(
           () => c.add(
             product,
             result.option,
@@ -380,6 +417,7 @@ class _State extends State<CashSaleScreen> {
         products = fresh;
         c = ProductSelectionController(fresh);
       });
+      await _clearSavedDraft();
       await _loadSummary();
       if (result != null && mounted) {
         await showDialog<void>(
@@ -423,6 +461,7 @@ class _State extends State<CashSaleScreen> {
           products = fresh;
           c = ProductSelectionController(fresh);
         });
+        await _clearSavedDraft();
       }
       await _loadSummary();
     }
@@ -451,7 +490,10 @@ class _State extends State<CashSaleScreen> {
         ],
       ),
     );
-    if (yes == true && mounted) setState(c.clear);
+    if (yes == true && mounted) {
+      _changeCart(c.clear);
+      await _clearSavedDraft();
+    }
   }
 
   @override
@@ -615,7 +657,7 @@ class _State extends State<CashSaleScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton.filledTonal(
-                          onPressed: () => setState(() => c.decrease(p)),
+                          onPressed: () => _changeCart(() => c.decrease(p)),
                           icon: const Icon(Icons.remove),
                         ),
                         Text(
@@ -749,8 +791,9 @@ class _State extends State<CashSaleScreen> {
                                       IconButton(
                                         tooltip: 'Remove item',
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: () =>
-                                            setState(() => c.removeLine(line)),
+                                        onPressed: () => _changeCart(
+                                          () => c.removeLine(line),
+                                        ),
                                         icon: const Icon(Icons.close, size: 19),
                                       ),
                                     ],
@@ -769,7 +812,7 @@ class _State extends State<CashSaleScreen> {
                                       ),
                                       IconButton.filledTonal(
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: () => setState(
+                                        onPressed: () => _changeCart(
                                           () => c.decreaseLine(line),
                                         ),
                                         icon: const Icon(
@@ -794,7 +837,7 @@ class _State extends State<CashSaleScreen> {
                                             ? null
                                             : () {
                                                 try {
-                                                  setState(
+                                                  _changeCart(
                                                     () => c.increaseLine(line),
                                                   );
                                                 } catch (_) {}

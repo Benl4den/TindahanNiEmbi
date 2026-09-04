@@ -2,10 +2,57 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
 
+class InventoryGroup {
+  const InventoryGroup({
+    required this.id,
+    required this.code,
+    required this.name,
+  });
+  final int id;
+  final String code, name;
+}
+
 class SpecialInventoryRepository {
   const SpecialInventoryRepository(this.db, {this.actorRole});
   final Database db;
   final String? actorRole;
+
+  Future<List<InventoryGroup>> managedBrands() async =>
+      (await db.query(
+            'inventory_groups',
+            where: "is_archived=0 AND code<>'CONSIGNMENT'",
+            orderBy: "CASE code WHEN 'SELECTA' THEN 0 ELSE 1 END,name COLLATE NOCASE",
+          ))
+          .map(
+            (x) => InventoryGroup(
+              id: x['id']! as int,
+              code: x['code']! as String,
+              name: x['name']! as String,
+            ),
+          )
+          .toList(growable: false);
+
+  Future<InventoryGroup> createBrand(String value) async {
+    final name = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (name.isEmpty) throw ArgumentError('Brand name is required.');
+    final now = DateTime.now().toUtc().toIso8601String();
+    final code = 'BRAND_${DateTime.now().microsecondsSinceEpoch}';
+    final id = await db.insert('inventory_groups', {
+      'code': code,
+      'name': name,
+      'created_at': now,
+    });
+    return InventoryGroup(id: id, code: code, name: name);
+  }
+
+  Future<void> remove(int productId, String code) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.rawUpdate(
+      '''UPDATE product_inventory_groups SET archived_at=?
+      WHERE product_id=? AND inventory_group_id=(SELECT id FROM inventory_groups WHERE code=?)''',
+      [now, productId, code],
+    );
+  }
 
   Future<List<Product>> products(
     String code, {
