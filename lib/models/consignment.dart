@@ -3,16 +3,19 @@ class Consignor {
     required this.id,
     required this.name,
     this.contactDetails,
+    this.defaultCategoryId,
     required this.isArchived,
   });
   final int id;
   final String name;
   final String? contactDetails;
+  final int? defaultCategoryId;
   final bool isArchived;
   factory Consignor.fromMap(Map<String, Object?> x) => Consignor(
     id: x['id']! as int,
     name: x['name']! as String,
     contactDetails: x['contact_details'] as String?,
+    defaultCategoryId: x['default_category_id'] as int?,
     isArchived: x['is_archived'] == 1,
   );
 }

@@ -3,9 +3,17 @@ import 'package:sqflite/sqflite.dart';
 import '../models/product.dart';
 
 class RestockItem {
-  const RestockItem(this.product, this.isConsignment, this.isSelecta);
+  const RestockItem(
+    this.product,
+    this.isConsignment,
+    this.isSelecta, {
+    this.consignorId,
+    this.consignorName,
+  });
   final Product product;
   final bool isConsignment, isSelecta;
+  final int? consignorId;
+  final String? consignorName;
   int get suggested =>
       (product.minimumStockLevel - product.currentQuantity).clamp(0, 1 << 31);
 }
@@ -45,15 +53,20 @@ class OperationsRepository {
   const OperationsRepository(this.db);
   final Database db;
   Future<List<RestockItem>> restock({String filter = 'NEEDS'}) async {
-    final rows = await db.rawQuery(
-      '''SELECT p.*,EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT') consigned,EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='SELECTA') selecta FROM products p WHERE p.is_archived=0 ORDER BY p.name COLLATE NOCASE''',
-    );
+    final rows = await db.rawQuery('''SELECT p.*,
+      EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT') consigned,
+      EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='SELECTA') selecta,
+      (SELECT b.consignor_id FROM consignment_batches b JOIN consignors c ON c.id=b.consignor_id WHERE b.product_id=p.id AND c.is_archived=0 ORDER BY b.received_at DESC,b.id DESC LIMIT 1) consignor_id,
+      (SELECT c.name FROM consignment_batches b JOIN consignors c ON c.id=b.consignor_id WHERE b.product_id=p.id AND c.is_archived=0 ORDER BY b.received_at DESC,b.id DESC LIMIT 1) consignor_name
+      FROM products p WHERE p.is_archived=0 ORDER BY p.name COLLATE NOCASE''');
     final result = rows
         .map(
           (x) => RestockItem(
             Product.fromMap(x),
             x['consigned'] == 1,
             x['selecta'] == 1,
+            consignorId: x['consignor_id'] as int?,
+            consignorName: x['consignor_name'] as String?,
           ),
         )
         .where(

@@ -18,7 +18,7 @@ class RestockScreen extends StatefulWidget {
   });
   final OperationsRepository operations;
   final InventoryRepository inventory;
-  final VoidCallback openConsignment;
+  final ValueChanged<int?> openConsignment;
   @override
   State<RestockScreen> createState() => _State();
 }
@@ -41,7 +41,7 @@ class _State extends State<RestockScreen> {
 
   Future<void> stock(RestockItem item) async {
     if (item.isConsignment) {
-      widget.openConsignment();
+      widget.openConsignment(item.consignorId);
       return;
     }
     final saved = await showPackageStockInDialog(
@@ -218,7 +218,7 @@ class _State extends State<RestockScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         subtitle: Text(
-                          'Current: ${standardNumber(x.product.currentQuantity)}   Minimum: ${standardNumber(x.product.minimumStockLevel)}\nSuggested Restock: +${standardNumber(x.suggested)}${x.isConsignment ? ' • Consignment' : ''}\n${out
+                          'Current: ${standardNumber(x.product.currentQuantity)}   Minimum: ${standardNumber(x.product.minimumStockLevel)}\nSuggested Restock: +${standardNumber(x.suggested)}${x.isConsignment ? ' • ${x.consignorName ?? 'Consignment'}' : ''}\n${out
                               ? 'OUT OF STOCK'
                               : low
                               ? 'LOW STOCK'

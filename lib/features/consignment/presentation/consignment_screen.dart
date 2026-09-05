@@ -20,24 +20,31 @@ class ConsignmentScreen extends StatefulWidget {
     required this.products,
     required this.categories,
     required this.photoService,
+    this.initialConsignorId,
   });
   final ConsignmentRepository repository;
   final ProductRepository products;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
+  final int? initialConsignorId;
   @override
   State<ConsignmentScreen> createState() => _ConsignmentScreenState();
 }
 
 class _AddConsignorDialog extends StatefulWidget {
-  const _AddConsignorDialog({required this.repository});
+  const _AddConsignorDialog({
+    required this.repository,
+    required this.categories,
+  });
   final ConsignmentRepository repository;
+  final List<Category> categories;
   @override
   State<_AddConsignorDialog> createState() => _AddConsignorDialogState();
 }
 
 class _AddConsignorDialogState extends State<_AddConsignorDialog> {
   final name = TextEditingController(), contact = TextEditingController();
+  int? categoryId;
   String? error;
   bool saving = false;
   @override
@@ -60,6 +67,7 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
       await widget.repository.createConsignor(
         name.text,
         contactDetails: contact.text,
+        defaultCategoryId: categoryId,
       );
       if (mounted) {
         Navigator.pop(context, true);
@@ -101,6 +109,18 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
               labelText: 'Contact details (optional)',
               border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: categoryId,
+            decoration: const InputDecoration(
+              labelText: 'Default product category (optional)',
+              border: OutlineInputBorder(),
+            ),
+            items: widget.categories
+                .map((x) => DropdownMenuItem(value: x.id, child: Text(x.name)))
+                .toList(),
+            onChanged: (value) => setState(() => categoryId = value),
           ),
         ],
       ),
@@ -276,12 +296,14 @@ class _NewCompanyProductFlow extends StatefulWidget {
     required this.categories,
     required this.photoService,
     required this.consignor,
+    this.initialCategoryId,
   });
   final ConsignmentRepository repository;
   final ProductRepository products;
   final List<Category> categories;
   final ProductPhotoService photoService;
   final Consignor consignor;
+  final int? initialCategoryId;
 
   @override
   State<_NewCompanyProductFlow> createState() => _NewCompanyProductFlowState();
@@ -317,18 +339,15 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
 
   Future<void> _save() async {
     final value = draft!;
-    final package = value.unitConfiguration!.purchasePackages.singleWhere(
-      (x) => x.isDefault,
-    );
     final option = value.unitConfiguration!.sellingOptions.singleWhere(
       (x) => x.isDefault,
     );
-    final packages = int.tryParse(numericInput(count.text)) ?? 0;
+    final quantity = int.tryParse(numericInput(count.text)) ?? 0;
     final supplierCost =
         ((double.tryParse(numericInput(cost.text)) ?? -1) * 100).round();
     final sellingPrice =
         ((double.tryParse(numericInput(price.text)) ?? -1) * 100).round();
-    if (packages <= 0 || supplierCost < 0 || sellingPrice <= 0) {
+    if (quantity <= 0 || supplierCost < 0 || sellingPrice <= 0) {
       setState(
         () => error = 'Enter a quantity, supplier cost, and selling price greater than zero.',
       );
@@ -342,11 +361,11 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
       await widget.repository.receiveNewProduct(
         product: value,
         consignorId: widget.consignor.id,
-        boxes: packages,
-        unitsPerBox: package.baseQuantity,
+        boxes: quantity,
+        unitsPerBox: 1,
         unitCostCentavos: supplierCost,
         supplierCostBasisQuantity: option.baseQuantity,
-        packageName: package.name,
+        packageName: 'Direct ${value.unitConfiguration!.baseUnit.label}',
         baseUnitLabel: value.unitConfiguration!.baseUnit.label,
         priceUnitName: option.name,
         sellingPriceCentavos: sellingPrice,
@@ -376,17 +395,15 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
         categories: widget.categories,
         allowStartingStock: false,
         closeAfterDraft: false,
+        initialCategoryId: widget.initialCategoryId,
+        categoryInitiallyLocked: widget.initialCategoryId != null,
         onDraft: _continue,
       );
     }
-    final package = value.unitConfiguration!.purchasePackages.singleWhere(
-      (x) => x.isDefault,
-    );
     final option = value.unitConfiguration!.sellingOptions.singleWhere(
       (x) => x.isDefault,
     );
-    final quantity =
-        (int.tryParse(numericInput(count.text)) ?? 0) * package.baseQuantity;
+    final quantity = int.tryParse(numericInput(count.text)) ?? 0;
     final unit = value.unitConfiguration!.baseUnit;
     final readable = unit == BaseUnit.gram
         ? '${standardNumber(quantity / 1000)} kg'
@@ -418,7 +435,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                   keyboardType: TextInputType.number,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    labelText: 'Number of ${package.name} packages',
+                    labelText: 'Quantity received (${unit.label})',
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -448,7 +465,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  '${count.text.isEmpty ? 0 : count.text} × ${package.name} (${package.baseQuantity} ${unit.label}) = $readable received',
+                  '$readable received',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (error != null)
@@ -497,7 +514,18 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   @override
   void initState() {
     super.initState();
+    selectedConsignorId = widget.initialConsignorId;
     _reload();
+  }
+
+  @override
+  void didUpdateWidget(covariant ConsignmentScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialConsignorId != oldWidget.initialConsignorId &&
+        widget.initialConsignorId != selectedConsignorId) {
+      selectedConsignorId = widget.initialConsignorId;
+      _reload();
+    }
   }
 
   void _reload() {
@@ -530,9 +558,14 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
 
   String money(int value) => '₱${(value / 100).toStringAsFixed(2)}';
   Future<void> _addConsignor() async {
+    final categories = await widget.categories.getActive();
+    if (!mounted) return;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _AddConsignorDialog(repository: widget.repository),
+      builder: (_) => _AddConsignorDialog(
+        repository: widget.repository,
+        categories: categories,
+      ),
     );
     if (saved == true && mounted) setState(_reload);
   }
@@ -604,6 +637,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               photoService: widget.photoService,
               categories: categories,
               consignor: parties.single,
+              initialCategoryId: parties.single.defaultCategoryId,
             ),
           ),
         ),
@@ -635,15 +669,12 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       BaseUnit.milliliter => '${standardNumber(amount / 1000)} L',
       _ => '${standardNumber(amount)} ${unitLabel()}${amount == 1 ? '' : 's'}',
     };
-    var receiveAsPackage = true;
-    PurchasePackageDraft selectedPackage = configuration().purchasePackages
-        .singleWhere((p) => p.isDefault);
     final boxes = TextEditingController(),
         units = TextEditingController(),
         cost = TextEditingController(),
         sell = TextEditingController(),
         notes = TextEditingController();
-    units.text = '${selectedPackage.baseQuantity}';
+    units.text = '1';
     sell.text = (sellingOption().priceCentavos / 100).toStringAsFixed(2);
     String? error;
     var saving = false;
@@ -681,11 +712,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                           .toList(),
                       onChanged: (v) => set(() {
                         product = v!;
-                        selectedPackage = configuration().purchasePackages
-                            .singleWhere((p) => p.isDefault);
-                        units.text = receiveAsPackage
-                            ? '${selectedPackage.baseQuantity}'
-                            : '1';
+                        units.text = '1';
                         sell.text = (sellingOption().priceCentavos / 100)
                             .toStringAsFixed(2);
                         cost.clear();
@@ -693,55 +720,8 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       }),
                     ),
                   const SizedBox(height: 12),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('Direct Units')),
-                      ButtonSegment(value: true, label: Text('Package')),
-                    ],
-                    selected: {receiveAsPackage},
-                    onSelectionChanged: (value) => set(() {
-                      receiveAsPackage = value.single;
-                      if (!receiveAsPackage) {
-                        units.text = '1';
-                      }
-                      if (receiveAsPackage) {
-                        units.text = '${selectedPackage.baseQuantity}';
-                      }
-                    }),
-                  ),
-                  if (receiveAsPackage) ...[
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<PurchasePackageDraft>(
-                      key: ValueKey('delivery-package-$product'),
-                      initialValue: selectedPackage,
-                      decoration: const InputDecoration(
-                        labelText: 'Purchase package',
-                      ),
-                      items: configuration().purchasePackages
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(
-                                '${p.name} • ${quantityLabel(p.baseQuantity)}',
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) => set(() {
-                        if (value == null) return;
-                        selectedPackage = value;
-                        units.text = '${value.baseQuantity}';
-                      }),
-                    ),
-                  ],
                   ...[
-                    (
-                      boxes,
-                      receiveAsPackage
-                          ? 'Packages received'
-                          : 'Quantity received (${unitLabel()})',
-                    ),
-                    if (receiveAsPackage) (units, '${unitLabel()} per package'),
+                    (boxes, 'Quantity received (${unitLabel()})'),
                     (cost, 'Supplier cost per ${sellingOption().name}'),
                     (sell, 'Selling price per ${sellingOption().name}'),
                     (notes, 'Notes (optional)'),
@@ -777,9 +757,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            receiveAsPackage
-                                ? '${standardNumber(boxCount)} × ${selectedPackage.name} (${quantityLabel(perBox)}) = ${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}'
-                                : '${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}',
+                            '${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
@@ -825,9 +803,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         sellingPriceCentavos:
                             ((double.tryParse(sell.text) ?? -1) * 100).round(),
                         supplierCostBasisQuantity: sellingOption().baseQuantity,
-                        packageName: receiveAsPackage
-                            ? selectedPackage.name
-                            : 'Direct ${unitLabel()}',
+                        packageName: 'Direct ${unitLabel()}',
                         baseUnitLabel: unitLabel(),
                         priceUnitName: sellingOption().name,
                         notes: notes.text,
@@ -1040,10 +1016,13 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   }
 
   Future<void> _editConsignor(Map<String, Object?> company) async {
+    final categories = await widget.categories.getActive();
+    if (!mounted) return;
     final name = TextEditingController(text: company['name']! as String);
     final contact = TextEditingController(
       text: company['contact_details'] as String? ?? '',
     );
+    var categoryId = company['default_category_id'] as int?;
     String? error;
     final saved = await showDialog<bool>(
       context: context,
@@ -1070,6 +1049,20 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     labelText: 'Contact details (optional)',
                   ),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: categoryId,
+                  decoration: const InputDecoration(
+                    labelText: 'Default product category (optional)',
+                  ),
+                  items: categories
+                      .map(
+                        (x) =>
+                            DropdownMenuItem(value: x.id, child: Text(x.name)),
+                      )
+                      .toList(),
+                  onChanged: (value) => categoryId = value,
+                ),
               ],
             ),
           ),
@@ -1085,6 +1078,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     company['id']! as int,
                     name: name.text,
                     contactDetails: contact.text,
+                    defaultCategoryId: categoryId,
                   );
                   if (dialogContext.mounted) Navigator.pop(dialogContext, true);
                 } on InvalidConsignmentOperation catch (e) {

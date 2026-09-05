@@ -91,6 +91,30 @@ void main() {
     },
   );
   test(
+    'restock exposes connected consignor for consignment products',
+    () async {
+      final cr = ConsignmentRepository(db),
+          cid = await cr.createConsignor('ABC');
+      await cr.receive(
+        ConsignmentReceiptDraft(
+          consignorId: cid,
+          productId: p.id,
+          boxes: 1,
+          unitsPerBox: 1,
+          unitCostCentavos: 150,
+          sellingPriceCentavos: 200,
+        ),
+      );
+
+      final item = (await OperationsRepository(
+        db,
+      ).restock()).where((x) => x.product.id == p.id).single;
+      expect(item.isConsignment, isTrue);
+      expect(item.consignorId, cid);
+      expect(item.consignorName, 'ABC');
+    },
+  );
+  test(
     'restock default and statuses use one authoritative boundary rule',
     () async {
       final category = (await SqliteCategoryRepository(db).getActive()).first;

@@ -18,6 +18,7 @@ class _Repo extends ConsignmentRepository {
   int? lastReceiptConsignorId;
   final companyBalances = <int, int>{};
   bool failCreate = false;
+  int? lastDefaultCategoryId;
   ConsignmentReceiptDraft? lastReceipt;
   @override
   Future<ProductUnitConfiguration> deliveryConfiguration(int productId) async =>
@@ -52,6 +53,7 @@ class _Repo extends ConsignmentRepository {
         'id': p.id,
         'name': p.name,
         'contact_details': p.contactDetails,
+        'default_category_id': p.defaultCategoryId,
         'product_count': receipts == 0 ? 0 : 1,
         'payable_centavos': payable,
       },
@@ -69,11 +71,16 @@ class _Repo extends ConsignmentRepository {
     for (final p in parties) p.id: companyBalances[p.id] ?? payable,
   };
   @override
-  Future<int> createConsignor(String n, {String? contactDetails}) async {
+  Future<int> createConsignor(
+    String n, {
+    String? contactDetails,
+    int? defaultCategoryId,
+  }) async {
     if (failCreate) {
       throw const InvalidConsignmentOperation('Could not save consignor.');
     }
     parties.add(Consignor(id: parties.length + 1, name: n, isArchived: false));
+    lastDefaultCategoryId = defaultCategoryId;
     return parties.length;
   }
 
@@ -122,7 +129,15 @@ class _Products implements ProductRepository {
 
 class _Categories implements CategoryRepository {
   @override
-  Future<List<Category>> getActive() async => [];
+  Future<List<Category>> getActive() async => [
+    Category(
+      id: 7,
+      name: 'Bread & Bakery',
+      isArchived: false,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    ),
+  ];
   @override
   Future<void> archive(int id) async {}
   @override
@@ -176,6 +191,7 @@ void main() {
       await t.tap(find.text('Save'));
       await t.pumpAndSettle();
       expect(repo.parties.single.name, 'ABC');
+      expect(repo.lastDefaultCategoryId, isNull);
       expect(find.text('Receive Consignment'), findsNothing);
       expect(find.text('Add Product'), findsNothing);
       await t.tap(find.text('ABC'));
@@ -185,6 +201,19 @@ void main() {
       expect(find.text('Select Existing Product'), findsOneWidget);
     },
   );
+  testWidgets('Add Consignor can save a default product category', (t) async {
+    await pump(t);
+    await t.tap(find.text('Add Consignor'));
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextField, 'Company / Name'), 'ABC');
+    await t.tap(find.text('Default product category (optional)'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Bread & Bakery').last);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+    expect(repo.lastDefaultCategoryId, 7);
+  });
   testWidgets(
     'company list is first and summary appears only after selection',
     (t) async {
@@ -211,7 +240,7 @@ void main() {
     await t.tap(find.text('Select Existing Product'));
     await t.pumpAndSettle();
     for (final x in [
-      ('Packages received', '1'),
+      ('Quantity received (piece)', '1'),
       ('Supplier cost per Piece', '1'),
       ('Selling price per Piece', '2'),
     ]) {
@@ -219,11 +248,11 @@ void main() {
       await t.enterText(find.widgetWithText(TextField, x.$1), x.$2);
     }
     await t.pump();
-    expect(find.textContaining('= 24 pieces received'), findsOneWidget);
+    expect(find.textContaining('1 piece received'), findsOneWidget);
     await t.tap(find.text('Receive').last);
     await t.pumpAndSettle();
     expect(repo.receipts, 1);
-    expect(repo.lastReceipt!.unitsPerBox, 24);
+    expect(repo.lastReceipt!.unitsPerBox, 1);
     repo.payable = 300;
     await t.tap(find.text('Record Remittance'));
     await t.pumpAndSettle();
@@ -269,58 +298,35 @@ void main() {
     expect(repo.receipts, 0);
   });
 
-  for (final direct in [false, true]) {
-    testWidgets('saved alternative package and direct quantity ($direct)', (
-      t,
-    ) async {
-      repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
-      await pump(t);
-      await t.tap(find.text('ABC'));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Add Product'));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Select Existing Product'));
-      await t.pumpAndSettle();
-      await t.tap(find.byType(DropdownButtonFormField<PurchasePackageDraft>));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Pack • 6 pieces').last);
-      await t.pumpAndSettle();
-      expect(
-        t
-            .widget<TextField>(
-              find.widgetWithText(TextField, 'piece per package'),
-            )
-            .readOnly,
-        isTrue,
-      );
-      if (direct) {
-        await t.tap(find.text('Direct Units'));
-        await t.pumpAndSettle();
-      }
-      await t.enterText(
-        find.widgetWithText(
-          TextField,
-          direct ? 'Quantity received (piece)' : 'Packages received',
-        ),
-        '2',
-      );
-      await t.enterText(
-        find.widgetWithText(TextField, 'Supplier cost per Piece'),
-        '1',
-      );
-      await t.pump();
-      expect(
-        find.textContaining(
-          direct ? '2 pieces received' : '= 12 pieces received',
-        ),
-        findsOneWidget,
-      );
-      await t.tap(find.text('Receive').last);
-      await t.pumpAndSettle();
-      expect(repo.lastReceipt!.totalUnits, direct ? 2 : 12);
-      expect(repo.lastReceipt!.sellingPriceCentavos, 200);
-    });
-  }
+  testWidgets('consignment delivery uses direct counted quantity', (t) async {
+    repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
+    await pump(t);
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Add Product'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Select Existing Product'));
+    await t.pumpAndSettle();
+    expect(
+      find.byType(DropdownButtonFormField<PurchasePackageDraft>),
+      findsNothing,
+    );
+    await t.enterText(
+      find.widgetWithText(TextField, 'Quantity received (piece)'),
+      '2',
+    );
+    await t.enterText(
+      find.widgetWithText(TextField, 'Supplier cost per Piece'),
+      '1',
+    );
+    await t.pump();
+    expect(find.textContaining('2 pieces received'), findsOneWidget);
+    await t.tap(find.text('Receive').last);
+    await t.pumpAndSettle();
+    expect(repo.lastReceipt!.totalUnits, 2);
+    expect(repo.lastReceipt!.unitsPerBox, 1);
+    expect(repo.lastReceipt!.sellingPriceCentavos, 200);
+  });
 
   testWidgets('another company payable does not enable remittance', (t) async {
     repo.parties.addAll([

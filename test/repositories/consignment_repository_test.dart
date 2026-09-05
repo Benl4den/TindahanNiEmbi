@@ -200,6 +200,25 @@ void main() {
   );
 
   test(
+    'company cards and active product list exclude archived products',
+    () async {
+      await receive(units: 5, cost: 100, sell: 300);
+      var companies = await consignment.companyCards();
+      expect(companies.single['product_count'], 1);
+      expect(
+        await consignment.productCardsForConsignor(consignor),
+        hasLength(1),
+      );
+
+      await SqliteProductRepository(db).archive(product.id);
+
+      companies = await consignment.companyCards();
+      expect(companies.single['product_count'], 0);
+      expect(await consignment.productCardsForConsignor(consignor), isEmpty);
+    },
+  );
+
+  test(
     'receipt math, FIFO historical costs, payable and margin are preserved',
     () async {
       await receive(units: 5, cost: 100, sell: 300);

@@ -75,16 +75,24 @@ class ConsignmentRepository {
     return {for (final row in rows) row['id']! as int: row['payable']! as int};
   }
 
-  Future<int> createConsignor(String name, {String? contactDetails}) async {
+  Future<int> createConsignor(
+    String name, {
+    String? contactDetails,
+    int? defaultCategoryId,
+  }) async {
     final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (clean.isEmpty) {
       throw const InvalidConsignmentOperation('Consignor name is required.');
+    }
+    if (defaultCategoryId != null) {
+      await _requireActiveCategory(db, defaultCategoryId);
     }
     final now = DateTime.now().toUtc().toIso8601String();
     try {
       return await db.insert('consignors', {
         'name': clean,
         'contact_details': contactDetails?.trim(),
+        'default_category_id': defaultCategoryId,
         'is_archived': 0,
         'created_at': now,
         'updated_at': now,
@@ -118,6 +126,7 @@ class ConsignmentRepository {
     int id, {
     required String name,
     String? contactDetails,
+    int? defaultCategoryId,
   }) async {
     final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (clean.isEmpty) {
@@ -125,12 +134,16 @@ class ConsignmentRepository {
         'Company or consignor name is required.',
       );
     }
+    if (defaultCategoryId != null) {
+      await _requireActiveCategory(db, defaultCategoryId);
+    }
     try {
       final changed = await db.update(
         'consignors',
         {
           'name': clean,
           'contact_details': contactDetails?.trim(),
+          'default_category_id': defaultCategoryId,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         },
         where: 'id=? AND is_archived=0',
@@ -267,6 +280,19 @@ class ConsignmentRepository {
       ),
     );
   });
+
+  Future<void> _requireActiveCategory(DatabaseExecutor executor, int id) async {
+    final category = await executor.query(
+      'categories',
+      columns: ['id'],
+      where: 'id=? AND is_archived=0',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (category.isEmpty) {
+      throw const InvalidConsignmentOperation('Active category is required.');
+    }
+  }
 
   Future<int> _receiveWith(
     DatabaseExecutor tx,
@@ -568,17 +594,19 @@ class ConsignmentRepository {
     );
   }
 
-  Future<List<Map<String, Object?>>> companyCards() => db.rawQuery('''SELECT c.id,c.name,c.contact_details,COUNT(DISTINCT b.product_id) product_count,MAX(b.received_at) last_receipt_at,
+  Future<List<Map<String, Object?>>> companyCards() => db.rawQuery('''SELECT c.id,c.name,c.contact_details,c.default_category_id,cat.name default_category_name,COUNT(DISTINCT CASE WHEN p.is_archived=0 THEN b.product_id END) product_count,MAX(b.received_at) last_receipt_at,
       (SELECT MAX(r.remitted_at) FROM consignor_remittances r WHERE r.consignor_id=c.id) last_remittance_at,
       COALESCE((SELECT SUM(l.amount_change_centavos) FROM consignor_ledger_entries l WHERE l.consignor_id=c.id),0)+
       COALESCE((SELECT SUM(r.payable_change_centavos) FROM consignment_allocation_reversals r WHERE r.consignor_id=c.id),0) payable_centavos
       FROM consignors c LEFT JOIN consignment_batches b ON b.consignor_id=c.id
+      LEFT JOIN products p ON p.id=b.product_id
+      LEFT JOIN categories cat ON cat.id=c.default_category_id
       WHERE c.is_archived=0 GROUP BY c.id ORDER BY c.name COLLATE NOCASE''');
 
   Future<List<Map<String, Object?>>> productCardsForConsignor(
     int consignorId,
   ) => db.rawQuery(
-    '''SELECT b.product_id,p.name,p.photo_path,p.base_unit_label,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.consignor_id=? GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
+    '''SELECT b.product_id,p.name,p.photo_path,p.base_unit_label,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.consignor_id=? AND p.is_archived=0 GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
     [consignorId],
   );
 

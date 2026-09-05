@@ -66,6 +66,7 @@ class AppShell extends StatefulWidget {
 class _State extends State<AppShell> {
   int selected = 0;
   int salesRevision = 0;
+  int? pendingConsignorId;
   bool railExpanded = true;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
 
@@ -238,6 +239,7 @@ class _State extends State<AppShell> {
       products: SqliteProductRepository(widget.database),
       categories: SqliteCategoryRepository(widget.database),
       photoService: LocalProductPhotoService(),
+      initialConsignorId: pendingConsignorId,
     ),
     3 => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
@@ -248,7 +250,10 @@ class _State extends State<AppShell> {
           ? RestockScreen(
               operations: OperationsRepository(widget.database),
               inventory: InventoryRepository(widget.database, actorRole: role),
-              openConsignment: () => setState(() => selected = 2),
+              openConsignment: (consignorId) => setState(() {
+                pendingConsignorId = consignorId;
+                selected = 2;
+              }),
             )
           : _denied(),
     5 =>
@@ -503,6 +508,7 @@ class _State extends State<AppShell> {
               products: SqliteProductRepository(widget.database),
               categories: SqliteCategoryRepository(widget.database),
               photoService: LocalProductPhotoService(),
+              initialConsignorId: pendingConsignorId,
             ),
             action: null,
           ),
@@ -516,9 +522,12 @@ class _State extends State<AppShell> {
                   widget.database,
                   actorRole: role,
                 ),
-                openConsignment: () {
+                openConsignment: (consignorId) {
                   Navigator.pop(context);
-                  setState(() => selected = 2);
+                  setState(() {
+                    pendingConsignorId = consignorId;
+                    selected = 2;
+                  });
                 },
               ),
               action: null,
