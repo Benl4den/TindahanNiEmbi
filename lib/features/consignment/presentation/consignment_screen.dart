@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../models/consignment.dart';
+import '../../../models/category.dart';
 import '../../../models/product.dart';
 import '../../../models/product_unit.dart';
 import '../../../repositories/consignment_repository.dart';
@@ -58,7 +61,9 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
         name.text,
         contactDetails: contact.text,
       );
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -264,8 +269,222 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
   }
 }
 
+class _NewCompanyProductFlow extends StatefulWidget {
+  const _NewCompanyProductFlow({
+    required this.repository,
+    required this.products,
+    required this.categories,
+    required this.photoService,
+    required this.consignor,
+  });
+  final ConsignmentRepository repository;
+  final ProductRepository products;
+  final List<Category> categories;
+  final ProductPhotoService photoService;
+  final Consignor consignor;
+
+  @override
+  State<_NewCompanyProductFlow> createState() => _NewCompanyProductFlowState();
+}
+
+class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
+  ProductDraft? draft;
+  final count = TextEditingController(),
+      cost = TextEditingController(),
+      price = TextEditingController();
+  bool saving = false;
+  String? error;
+
+  @override
+  void dispose() {
+    count.dispose();
+    cost.dispose();
+    price.dispose();
+    super.dispose();
+  }
+
+  void _continue(ProductDraft value) {
+    final option = value.unitConfiguration!.sellingOptions.singleWhere(
+      (x) => x.isDefault,
+    );
+    setState(() {
+      draft = value;
+      count.text = '1';
+      cost.text = (value.purchasePriceCentavos / 100).toStringAsFixed(2);
+      price.text = (option.priceCentavos / 100).toStringAsFixed(2);
+    });
+  }
+
+  Future<void> _save() async {
+    final value = draft!;
+    final package = value.unitConfiguration!.purchasePackages.singleWhere(
+      (x) => x.isDefault,
+    );
+    final option = value.unitConfiguration!.sellingOptions.singleWhere(
+      (x) => x.isDefault,
+    );
+    final packages = int.tryParse(numericInput(count.text)) ?? 0;
+    final supplierCost =
+        ((double.tryParse(numericInput(cost.text)) ?? -1) * 100).round();
+    final sellingPrice =
+        ((double.tryParse(numericInput(price.text)) ?? -1) * 100).round();
+    if (packages <= 0 || supplierCost < 0 || sellingPrice <= 0) {
+      setState(
+        () => error = 'Enter a quantity, supplier cost, and selling price greater than zero.',
+      );
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      await widget.repository.receiveNewProduct(
+        product: value,
+        consignorId: widget.consignor.id,
+        boxes: packages,
+        unitsPerBox: package.baseQuantity,
+        unitCostCentavos: supplierCost,
+        supplierCostBasisQuantity: option.baseQuantity,
+        packageName: package.name,
+        baseUnitLabel: value.unitConfiguration!.baseUnit.label,
+        priceUnitName: option.name,
+        sellingPriceCentavos: sellingPrice,
+      );
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          saving = false;
+          error = e is InvalidConsignmentOperation
+              ? e.message
+              : 'Could not save the product and delivery.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = draft;
+    if (value == null) {
+      return ProductFormScreen(
+        repository: widget.products,
+        photoService: widget.photoService,
+        categories: widget.categories,
+        allowStartingStock: false,
+        closeAfterDraft: false,
+        onDraft: _continue,
+      );
+    }
+    final package = value.unitConfiguration!.purchasePackages.singleWhere(
+      (x) => x.isDefault,
+    );
+    final option = value.unitConfiguration!.sellingOptions.singleWhere(
+      (x) => x.isDefault,
+    );
+    final quantity =
+        (int.tryParse(numericInput(count.text)) ?? 0) * package.baseQuantity;
+    final unit = value.unitConfiguration!.baseUnit;
+    final readable = unit == BaseUnit.gram
+        ? '${standardNumber(quantity / 1000)} kg'
+        : unit == BaseUnit.milliliter
+        ? '${standardNumber(quantity / 1000)} L'
+        : '${standardNumber(quantity)} ${unit.label}${quantity == 1 ? '' : 's'}';
+    return Scaffold(
+      appBar: AppBar(title: const Text('First Delivery')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '${widget.consignor.name} • ${value.name}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Add the first delivery now. Product and delivery save together once.',
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: count,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Number of ${package.name} packages',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: cost,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Supplier cost per ${option.name}',
+                    prefixText: '₱ ',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: price,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Selling price per ${option.name}',
+                    prefixText: '₱ ',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  '${count.text.isEmpty ? 0 : count.text} × ${package.name} (${package.baseQuantity} ${unit.label}) = $readable received',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: saving ? null : _save,
+                  child: Text(
+                    saving ? 'Saving…' : 'Save Product & First Delivery',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: saving ? null : () => setState(() => draft = null),
+                  child: const Text('Back to Product Details'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ConsignmentScreenState extends State<ConsignmentScreen> {
   int? selectedConsignorId;
+  int _companyTab = 0;
   late Future<
     ({
       ConsignmentSummary? summary,
@@ -318,37 +537,57 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     if (saved == true && mounted) setState(_reload);
   }
 
-  Future<void> _receive() async {
-    final parties = await widget.repository.consignors(),
-        products = await widget.products.searchActive();
+  Future<void> _receive({bool addProduct = false}) async {
+    final companyId = selectedConsignorId;
+    if (companyId == null) return;
+    final parties = (await widget.repository.consignors())
+        .where((p) => p.id == companyId)
+        .toList();
+    var products = await widget.products.searchActive();
+    if (!addProduct) {
+      final companyProducts = await widget.repository.productCardsForConsignor(
+        companyId,
+      );
+      final ids = companyProducts.map((p) => p['product_id']).toSet();
+      products = products.where((p) => ids.contains(p.id)).toList();
+    }
     if (!mounted) return;
     if (parties.isEmpty) {
       _message('Add a consignor before receiving consignment.');
       return;
     }
-    final createNew = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Receive Consignment'),
-        content: const Text('Choose how to identify the delivered product.'),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Select Existing Product'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Create New Product'),
-          ),
-        ],
-      ),
-    );
+    if (!addProduct && products.isEmpty) {
+      _message(
+        'Add a product inside this company before receiving another delivery.',
+      );
+      return;
+    }
+    final createNew = !addProduct
+        ? false
+        : await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: const Text('Add Product to Company'),
+              content: const Text(
+                'Choose how to identify the delivered product.',
+              ),
+              actions: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: const Text('Select Existing Product'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(c, true),
+                  child: const Text('Create New Product'),
+                ),
+              ],
+            ),
+          );
     if (createNew == null) return;
     if (!createNew && products.isEmpty) {
       _message('No products are available. Choose Create New Product.');
       return;
     }
-    ProductDraft? newProduct;
     if (createNew) {
       final categories = await widget.categories.getActive();
       if (!mounted) return;
@@ -359,45 +598,53 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           clipBehavior: Clip.antiAlias,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 820, maxHeight: 900),
-            child: ProductFormScreen(
-              repository: widget.products,
+            child: _NewCompanyProductFlow(
+              repository: widget.repository,
+              products: widget.products,
               photoService: widget.photoService,
               categories: categories,
-              allowStartingStock: false,
-              onDraft: (draft) => newProduct = draft,
+              consignor: parties.single,
             ),
           ),
         ),
       );
-      if (completed != true || newProduct == null) return;
+      if (completed == true && mounted) setState(_reload);
+      return;
     }
     if (!mounted) return;
-    int party = parties.first.id,
-        product = products.isEmpty ? -1 : products.first.id;
-    final packageOptions = <int, List<PurchasePackage>>{};
-    for (final item in products) {
-      if (item.defaultPurchaseBaseQuantity != null) {
-        packageOptions[item.id] = [
-          PurchasePackage(
-            id: -item.id,
-            productId: item.id,
-            name: item.defaultPurchasePackageName ?? 'Package',
-            baseQuantity: item.defaultPurchaseBaseQuantity!,
-            isDefault: true,
-          ),
-        ];
+    final party = parties.single.id;
+    var product = products.first.id;
+    final configurations = <int, ProductUnitConfiguration>{};
+    try {
+      for (final item in products) {
+        configurations[item.id] = await widget.repository.deliveryConfiguration(
+          item.id,
+        );
       }
+    } catch (e) {
+      if (mounted) _message(_friendly(e));
+      return;
     }
+    if (!mounted) return;
+    ProductUnitConfiguration configuration() => configurations[product]!;
+    SellingOptionDraft sellingOption() =>
+        configuration().sellingOptions.singleWhere((o) => o.isDefault);
+    String unitLabel() => configuration().baseUnit.label;
+    String quantityLabel(int amount) => switch (configuration().baseUnit) {
+      BaseUnit.gram => '${standardNumber(amount / 1000)} kg',
+      BaseUnit.milliliter => '${standardNumber(amount / 1000)} L',
+      _ => '${standardNumber(amount)} ${unitLabel()}${amount == 1 ? '' : 's'}',
+    };
     var receiveAsPackage = true;
-    PurchasePackage? selectedPackage = product < 0
-        ? null
-        : packageOptions[product]?.firstOrNull;
+    PurchasePackageDraft selectedPackage = configuration().purchasePackages
+        .singleWhere((p) => p.isDefault);
     final boxes = TextEditingController(),
         units = TextEditingController(),
         cost = TextEditingController(),
         sell = TextEditingController(),
         notes = TextEditingController();
-    if (selectedPackage != null) units.text = '${selectedPackage.baseQuantity}';
+    units.text = '${selectedPackage.baseQuantity}';
+    sell.text = (sellingOption().priceCentavos / 100).toStringAsFixed(2);
     String? error;
     var saving = false;
     final ok = await showDialog<bool>(
@@ -411,18 +658,12 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: party,
-                    decoration: const InputDecoration(labelText: 'Consignor'),
-                    items: parties
-                        .map(
-                          (v) => DropdownMenuItem(
-                            value: v.id,
-                            child: Text(v.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => set(() => party = v!),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      parties.single.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   if (!createNew)
                     DropdownButtonFormField<int>(
@@ -440,10 +681,15 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                           .toList(),
                       onChanged: (v) => set(() {
                         product = v!;
-                        selectedPackage = packageOptions[product]?.firstOrNull;
-                        if (selectedPackage != null) {
-                          units.text = '${selectedPackage!.baseQuantity}';
-                        }
+                        selectedPackage = configuration().purchasePackages
+                            .singleWhere((p) => p.isDefault);
+                        units.text = receiveAsPackage
+                            ? '${selectedPackage.baseQuantity}'
+                            : '1';
+                        sell.text = (sellingOption().priceCentavos / 100)
+                            .toStringAsFixed(2);
+                        cost.clear();
+                        boxes.clear();
                       }),
                     ),
                   const SizedBox(height: 12),
@@ -458,31 +704,33 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       if (!receiveAsPackage) {
                         units.text = '1';
                       }
-                      if (receiveAsPackage && selectedPackage != null) {
-                        units.text = '${selectedPackage!.baseQuantity}';
+                      if (receiveAsPackage) {
+                        units.text = '${selectedPackage.baseQuantity}';
                       }
                     }),
                   ),
-                  if (receiveAsPackage && selectedPackage != null) ...[
+                  if (receiveAsPackage) ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<PurchasePackage>(
+                    DropdownButtonFormField<PurchasePackageDraft>(
+                      key: ValueKey('delivery-package-$product'),
                       initialValue: selectedPackage,
                       decoration: const InputDecoration(
                         labelText: 'Purchase package',
                       ),
-                      items: packageOptions[product]!
+                      items: configuration().purchasePackages
                           .map(
                             (p) => DropdownMenuItem(
                               value: p,
                               child: Text(
-                                '${p.name} • ${p.baseQuantity} base units',
+                                '${p.name} • ${quantityLabel(p.baseQuantity)}',
                               ),
                             ),
                           )
                           .toList(),
                       onChanged: (value) => set(() {
+                        if (value == null) return;
                         selectedPackage = value;
-                        if (value != null) units.text = '${value.baseQuantity}';
+                        units.text = '${value.baseQuantity}';
                       }),
                     ),
                   ],
@@ -491,17 +739,18 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       boxes,
                       receiveAsPackage
                           ? 'Packages received'
-                          : 'Quantity received',
+                          : 'Quantity received (${unitLabel()})',
                     ),
-                    if (receiveAsPackage) (units, 'Base units per package'),
-                    (cost, 'Cost per unit'),
-                    (sell, 'Selling price per unit'),
+                    if (receiveAsPackage) (units, '${unitLabel()} per package'),
+                    (cost, 'Supplier cost per ${sellingOption().name}'),
+                    (sell, 'Selling price per ${sellingOption().name}'),
                     (notes, 'Notes (optional)'),
                   ].map(
                     (f) => Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: TextField(
                         controller: f.$1,
+                        readOnly: f.$1 == units,
                         onChanged: (_) => set(() {}),
                         keyboardType: f.$1 == notes
                             ? TextInputType.text
@@ -515,24 +764,33 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   ),
                   Builder(
                     builder: (_) {
-                      final boxCount = int.tryParse(boxes.text) ?? 0;
+                      final boxCount =
+                          int.tryParse(numericInput(boxes.text)) ?? 0;
                       final perBox = int.tryParse(units.text) ?? 0;
                       final unitCost = double.tryParse(cost.text) ?? 0;
-                      final selling = double.tryParse(sell.text) ?? 0;
                       final total = boxCount * perBox;
+                      final costBasis = sellingOption().baseQuantity;
+                      final totalCost =
+                          (total * (unitCost * 100)).round() / costBasis / 100;
                       return Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
                             receiveAsPackage
-                                ? '$boxCount ${selectedPackage?.name ?? 'packages'} × $perBox = $total base units received\nMargin / base unit: ₱${(selling - unitCost).toStringAsFixed(2)}\nTotal Consigned Value: ₱${(total * unitCost).toStringAsFixed(2)}'
-                                : '$total base units received\nMargin / unit: ₱${(selling - unitCost).toStringAsFixed(2)}\nTotal Consigned Value: ₱${(total * unitCost).toStringAsFixed(2)}',
+                                ? '${standardNumber(boxCount)} × ${selectedPackage.name} (${quantityLabel(perBox)}) = ${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}'
+                                : '${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
                       );
                     },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Text(
+                      'Selling price updates the current Sales price. Previous transactions keep their original prices.',
+                    ),
                   ),
                   if (error != null)
                     Padding(
@@ -560,20 +818,26 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       final receipt = ConsignmentReceiptDraft(
                         consignorId: party,
                         productId: product,
-                        boxes: int.tryParse(boxes.text) ?? 0,
+                        boxes: int.tryParse(numericInput(boxes.text)) ?? 0,
                         unitsPerBox: int.tryParse(units.text) ?? 0,
                         unitCostCentavos:
                             ((double.tryParse(cost.text) ?? -1) * 100).round(),
                         sellingPriceCentavos:
                             ((double.tryParse(sell.text) ?? -1) * 100).round(),
+                        supplierCostBasisQuantity: sellingOption().baseQuantity,
+                        packageName: receiveAsPackage
+                            ? selectedPackage.name
+                            : 'Direct ${unitLabel()}',
+                        baseUnitLabel: unitLabel(),
+                        priceUnitName: sellingOption().name,
                         notes: notes.text,
                       );
                       if (receipt.boxes <= 0 ||
                           receipt.unitsPerBox <= 0 ||
                           receipt.unitCostCentavos < 0 ||
-                          receipt.sellingPriceCentavos < 0) {
+                          receipt.sellingPriceCentavos <= 0) {
                         set(
-                          () => error = 'Enter valid boxes, units, cost, and selling price.',
+                          () => error = 'Enter valid quantities, cost, and a selling price greater than zero.',
                         );
                         return;
                       }
@@ -582,19 +846,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         error = null;
                       });
                       try {
-                        if (newProduct == null) {
-                          await widget.repository.receive(receipt);
-                        } else {
-                          await widget.repository.receiveNewProduct(
-                            product: newProduct!,
-                            consignorId: party,
-                            boxes: receipt.boxes,
-                            unitsPerBox: receipt.unitsPerBox,
-                            unitCostCentavos: receipt.unitCostCentavos,
-                            sellingPriceCentavos: receipt.sellingPriceCentavos,
-                            notes: receipt.notes,
-                          );
-                        }
+                        await widget.repository.receive(receipt);
                         if (x.mounted) Navigator.pop(x, true);
                       } catch (e) {
                         if (x.mounted) {
@@ -626,7 +878,11 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   Future<void> _remit() async {
-    final parties = await widget.repository.consignors();
+    final companyId = selectedConsignorId;
+    if (companyId == null) return;
+    final parties = (await widget.repository.consignors())
+        .where((p) => p.id == companyId)
+        .toList();
     if (!mounted) return;
     if (parties.isEmpty) {
       _message('Add a consignor before recording a remittance.');
@@ -634,7 +890,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     }
     final balances = await widget.repository.payableByConsignor();
     if (!mounted) return;
-    if (!balances.values.any((value) => value > 0)) {
+    if ((balances[companyId] ?? 0) <= 0) {
       _message('There is no outstanding supplier payable to remit.');
       return;
     }
@@ -652,6 +908,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   Future<void> _details(Map<String, Object?> product) async {
     final rows = await widget.repository.productHistory(
       product['product_id']! as int,
+      consignorId: selectedConsignorId,
     );
     if (!mounted) return;
     await showDialog<void>(
@@ -782,9 +1039,73 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     }
   }
 
+  Future<void> _editConsignor(Map<String, Object?> company) async {
+    final name = TextEditingController(text: company['name']! as String);
+    final contact = TextEditingController(
+      text: company['contact_details'] as String? ?? '',
+    );
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, setDialog) => AlertDialog(
+          title: const Text('Edit Consignor'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Company / Name',
+                    errorText: error,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: contact,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact details (optional)',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  await widget.repository.updateConsignor(
+                    company['id']! as int,
+                    name: name.text,
+                    contactDetails: contact.text,
+                  );
+                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                } on InvalidConsignmentOperation catch (e) {
+                  setDialog(() => error = e.message);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    name.dispose();
+    contact.dispose();
+    if (saved == true && mounted) setState(_reload);
+  }
+
   Future<void> _returnStock(Map<String, Object?> product) async {
     final batches = await widget.repository.returnableBatches(
       product['product_id']! as int,
+      consignorId: selectedConsignorId,
     );
     if (!mounted || batches.isEmpty) return;
     var batchId = batches.first['id']! as int;
@@ -897,11 +1218,6 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     icon: const Icon(Icons.business),
                     label: const Text('Add Consignor'),
                   ),
-                  FilledButton.icon(
-                    onPressed: _receive,
-                    icon: const Icon(Icons.add_box),
-                    label: const Text('Receive Consignment'),
-                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -934,6 +1250,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() {
                       selectedConsignorId = x['id']! as int;
+                      _companyTab = 0;
                       _reload();
                     }),
                   ),
@@ -971,14 +1288,24 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   label: const Text('Company List'),
                 ),
                 FilledButton.icon(
-                  onPressed: _receive,
+                  onPressed: () => _receive(addProduct: true),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Product'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _receive(),
                   icon: const Icon(Icons.add_box),
-                  label: const Text('Receive Consignment'),
+                  label: const Text('Receive Delivery'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _remit,
                   icon: const Icon(Icons.payments),
                   label: const Text('Record Remittance'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _editConsignor(company),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit Consignor'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
@@ -1001,8 +1328,9 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   value: money(summary.payableCentavos),
                 ),
                 SummaryCard(
-                  label: 'Remaining Consigned Stock',
-                  value: '${summary.remainingUnits}',
+                  label: 'Products with Remaining Stock',
+                  value:
+                      '${cards.where((p) => (p['remaining']! as int) > 0).length}',
                 ),
                 SummaryCard(
                   label: 'Consigned Inventory Value',
@@ -1015,41 +1343,182 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            Text(
-              'Consigned Products',
-              style: Theme.of(context).textTheme.headlineSmall,
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('Products')),
+                ButtonSegment(value: 1, label: Text('Deliveries')),
+                ButtonSegment(value: 2, label: Text('Payable')),
+                ButtonSegment(value: 3, label: Text('Returns')),
+              ],
+              selected: {_companyTab},
+              onSelectionChanged: (value) =>
+                  setState(() => _companyTab = value.single),
             ),
             const SizedBox(height: 12),
-            if (cards.isEmpty)
+            if (_companyTab == 0 && cards.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(40),
                 child: Center(child: Text('No consignment receipts yet.')),
               ),
-            ...cards.map(
-              (x) => Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(18),
-                  title: Text(
-                    x['name']! as String,
-                    style: Theme.of(context).textTheme.titleLarge,
+            if (_companyTab == 0)
+              ...cards.map(
+                (x) => Card(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(18),
+                    title: Text(
+                      x['name']! as String,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    subtitle: Text(
+                      '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount to Remit: ${money(x['payable_centavos']! as int)}',
+                    ),
+                    isThreeLine: true,
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _details(x),
                   ),
-                  subtitle: Text(
-                    '${x['consignor_name']}\nReceived: ${x['received']}   Remaining: ${x['remaining']}   Sold: ${x['sold']}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount to Remit: ${money(x['payable_centavos']! as int)}',
-                  ),
-                  isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _details(x),
                 ),
               ),
-            ),
+            if (_companyTab == 1) _deliveriesTab(selectedConsignorId!),
+            if (_companyTab == 2)
+              _payableTab(selectedConsignorId!, summary.payableCentavos),
+            if (_companyTab == 3) _returnsTab(cards),
           ],
         );
       },
     ),
   );
 
+  Widget _deliveriesTab(
+    int consignorId,
+  ) => FutureBuilder<List<Map<String, Object?>>>(
+    future: widget.repository.deliveriesForConsignor(consignorId),
+    builder: (_, snapshot) {
+      if (!snapshot.hasData) {
+        return const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      final rows = snapshot.data!;
+      if (rows.isEmpty) {
+        return const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: Text('No deliveries yet.')),
+        );
+      }
+      return Column(
+        children: rows.map((row) {
+          final package = row['package_name'] as String? ?? 'Package';
+          final count = row['package_count'] ?? 1;
+          final total = row['units_received']! as int;
+          final unit = row['base_unit_label'] as String? ?? 'units';
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.local_shipping_outlined),
+              title: Text(row['name']! as String),
+              subtitle: Text(
+                '$count × $package = ${standardNumber(total)} $unit\n${_shortDate(row['received_at'])}',
+              ),
+              isThreeLine: true,
+              trailing: Text(
+                'Cost ${money(row['supplier_cost_centavos']! as int)}\nper ${row['price_unit_name'] ?? unit}',
+                textAlign: TextAlign.end,
+              ),
+            ),
+          );
+        }).toList(),
+      );
+    },
+  );
+
+  Widget _payableTab(
+    int consignorId,
+    int payable,
+  ) => FutureBuilder<List<Map<String, Object?>>>(
+    future: widget.repository.remittancesForConsignor(consignorId),
+    builder: (_, snapshot) {
+      if (!snapshot.hasData) {
+        return const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      final rows = snapshot.data!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text('Outstanding Supplier Payable'),
+              trailing: Text(
+                money(payable),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Remittance History',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('No remittances recorded.'),
+            ),
+          ...rows.map(
+            (row) => ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: Text(money(row['amount_centavos']! as int)),
+              subtitle: Text(
+                '${_shortDate(row['remitted_at'])}${(row['notes'] as String?)?.trim().isNotEmpty == true ? ' • ${row['notes']}' : ''}',
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  Widget _returnsTab(List<Map<String, Object?>> cards) {
+    final returnable = cards
+        .where((x) => (x['remaining']! as int) > 0)
+        .toList();
+    if (returnable.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: Text('No stock is available to return.')),
+      );
+    }
+    return Column(
+      children: returnable
+          .map(
+            (x) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.assignment_return_outlined),
+                title: Text(x['name']! as String),
+                subtitle: Text('${x['remaining']} units available to return'),
+                trailing: OutlinedButton(
+                  onPressed: () => _details(x),
+                  child: const Text('View / Return'),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
   String _shortDate(Object? value) => value == null
       ? 'None'
       : MaterialLocalizations.of(context)
             .formatShortDate(DateTime.parse(value as String).toLocal());
+
+  String _quantity(int amount, String? unit) {
+    if (unit == 'g') return '${standardNumber(amount / 1000)} kg';
+    if (unit == 'mL') return '${standardNumber(amount / 1000)} L';
+    final label = unit ?? 'unit';
+    return '${standardNumber(amount)} $label${amount == 1 ? '' : 's'}';
+  }
 }

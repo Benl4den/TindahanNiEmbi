@@ -236,7 +236,9 @@ class ReversalRepository {
             ),
           ) ??
           0;
-      final payable = a['payable_centavos']! as int;
+      final payable =
+          (a['actual_payable_centavos'] as int?) ??
+          a['payable_centavos']! as int;
       if (balance - payable < 0) {
         throw const ReversalException(
           'Supplier payable was already remitted; reverse the remittance first.',

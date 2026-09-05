@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/consignment.dart';
 import '../models/product.dart';
 import '../models/product_unit.dart';
+import 'product_unit_repository.dart';
 
 class InvalidConsignmentOperation implements Exception {
   const InvalidConsignmentOperation(this.message);
@@ -13,6 +14,53 @@ class ConsignmentRepository {
   const ConsignmentRepository(this.db, {this.actorRole});
   final Database db;
   final String? actorRole;
+
+  /// Read the product's saved configuration, never infer it from its category.
+  Future<ProductUnitConfiguration> deliveryConfiguration(int productId) async {
+    final rows = await db.query(
+      'products',
+      columns: ['base_unit_code'],
+      where: 'id=? AND is_archived=0',
+      whereArgs: [productId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw const InvalidConsignmentOperation('Active product is required.');
+    }
+    final units = ProductUnitRepository(db);
+    final packages = await units.purchasePackages(productId);
+    final options = await units.sellingOptions(productId);
+    if (packages.where((p) => p.isDefault).length != 1 ||
+        options.where((p) => p.isDefault).length != 1) {
+      throw const InvalidConsignmentOperation(
+        'Complete this product’s units and packaging before receiving a delivery.',
+      );
+    }
+    return ProductUnitConfiguration(
+      baseUnit: BaseUnit.values.singleWhere(
+        (u) => u.code == rows.single['base_unit_code'],
+      ),
+      purchasePackages: packages
+          .map(
+            (p) => PurchasePackageDraft(
+              name: p.name,
+              baseQuantity: p.baseQuantity,
+              isDefault: p.isDefault,
+            ),
+          )
+          .toList(),
+      sellingOptions: options
+          .map(
+            (p) => SellingOptionDraft(
+              name: p.name,
+              baseQuantity: p.baseQuantity,
+              priceCentavos: p.priceCentavos,
+              isDefault: p.isDefault,
+            ),
+          )
+          .toList(),
+    );
+  }
 
   Future<List<Consignor>> consignors({bool activeOnly = true}) async =>
       (await db.query(
@@ -66,9 +114,45 @@ class ConsignmentRepository {
     }
   }
 
+  Future<void> updateConsignor(
+    int id, {
+    required String name,
+    String? contactDetails,
+  }) async {
+    final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (clean.isEmpty) {
+      throw const InvalidConsignmentOperation(
+        'Company or consignor name is required.',
+      );
+    }
+    try {
+      final changed = await db.update(
+        'consignors',
+        {
+          'name': clean,
+          'contact_details': contactDetails?.trim(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        where: 'id=? AND is_archived=0',
+        whereArgs: [id],
+      );
+      if (changed == 0) {
+        throw const InvalidConsignmentOperation('Consignor not found.');
+      }
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        throw const InvalidConsignmentOperation(
+          'A consignor with this name already exists.',
+        );
+      }
+      rethrow;
+    }
+  }
+
   Future<int> receive(ConsignmentReceiptDraft draft) async {
     if (draft.boxes <= 0 ||
         draft.unitsPerBox <= 0 ||
+        draft.supplierCostBasisQuantity <= 0 ||
         draft.unitCostCentavos < 0 ||
         draft.sellingPriceCentavos <= 0) {
       throw const InvalidConsignmentOperation('Invalid receipt values.');
@@ -83,6 +167,10 @@ class ConsignmentRepository {
     required int unitsPerBox,
     required int unitCostCentavos,
     required int sellingPriceCentavos,
+    int supplierCostBasisQuantity = 1,
+    String? packageName,
+    String? baseUnitLabel,
+    String? priceUnitName,
     String? notes,
   }) => db.transaction((tx) async {
     final name = product.name.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -170,6 +258,10 @@ class ConsignmentRepository {
         boxes: boxes,
         unitsPerBox: unitsPerBox,
         unitCostCentavos: unitCostCentavos,
+        supplierCostBasisQuantity: supplierCostBasisQuantity,
+        packageName: packageName,
+        baseUnitLabel: baseUnitLabel,
+        priceUnitName: priceUnitName,
         sellingPriceCentavos: sellingPriceCentavos,
         notes: notes,
       ),
@@ -219,7 +311,7 @@ class ConsignmentRepository {
       'quantity_change': units,
       'quantity_before': before,
       'quantity_after': before + units,
-      'unit_cost_centavos': draft.unitCostCentavos,
+      'unit_cost_centavos': draft.costForQuantity(1),
       'created_at': now,
     });
     final batchId = await tx.insert('consignment_batches', {
@@ -229,7 +321,15 @@ class ConsignmentRepository {
       'boxes_received': draft.boxes,
       'units_per_box': draft.unitsPerBox,
       'units_received': units,
-      'unit_cost_centavos': draft.unitCostCentavos,
+      'unit_cost_centavos': draft.costForQuantity(1),
+      'supplier_cost_centavos': draft.unitCostCentavos,
+      'supplier_cost_basis_quantity': draft.supplierCostBasisQuantity,
+      'package_name': draft.packageName,
+      'package_count': draft.boxes,
+      'base_quantity_per_package': draft.unitsPerBox,
+      'base_unit_label': draft.baseUnitLabel,
+      'price_unit_name': draft.priceUnitName,
+      'price_unit_base_quantity': draft.supplierCostBasisQuantity,
       'selling_price_centavos': draft.sellingPriceCentavos,
       'notes': draft.notes?.trim(),
       'received_at': now,
@@ -364,8 +464,9 @@ class ConsignmentRepository {
       final balance =
           Sqflite.firstIntValue(
             await tx.rawQuery(
-              'SELECT COALESCE(SUM(amount_change_centavos),0) FROM consignor_ledger_entries WHERE consignor_id=?',
-              [consignorId],
+              '''SELECT COALESCE((SELECT SUM(amount_change_centavos) FROM consignor_ledger_entries WHERE consignor_id=?),0)+
+              COALESCE((SELECT SUM(payable_change_centavos) FROM consignment_allocation_reversals WHERE consignor_id=?),0)''',
+              [consignorId, consignorId],
             ),
           ) ??
           0;
@@ -412,13 +513,16 @@ class ConsignmentRepository {
           ),
         ) ??
         0;
-    final stock = await db.rawQuery(
-      'SELECT COALESCE(SUM(units_received-units_allocated-units_returned),0) units,COALESCE(SUM((units_received-units_allocated-units_returned)*unit_cost_centavos),0) value FROM consignment_batches',
-    );
+    final stock = await db.rawQuery('''SELECT COALESCE(SUM(units_received-units_allocated-units_returned),0) units,
+      COALESCE(SUM(((units_received-units_allocated-units_returned)*
+        COALESCE(supplier_cost_centavos,unit_cost_centavos)+
+        COALESCE(supplier_cost_basis_quantity,1)/2)/
+        COALESCE(supplier_cost_basis_quantity,1)),0) value
+      FROM consignment_batches''');
     final margin =
         Sqflite.firstIntValue(
           await db.rawQuery(
-            '''SELECT COALESCE((SELECT SUM(margin_centavos) FROM consignment_allocations),0)+COALESCE((SELECT SUM(margin_change_centavos) FROM consignment_allocation_reversals),0)''',
+            '''SELECT COALESCE((SELECT SUM(COALESCE(actual_margin_centavos,margin_centavos)) FROM consignment_allocations),0)+COALESCE((SELECT SUM(margin_change_centavos) FROM consignment_allocation_reversals),0)''',
           ),
         ) ??
         0;
@@ -440,13 +544,18 @@ class ConsignmentRepository {
         ) ??
         0;
     final stock = (await db.rawQuery(
-      '''SELECT COALESCE(SUM(units_received-units_allocated-units_returned),0) units,COALESCE(SUM((units_received-units_allocated-units_returned)*unit_cost_centavos),0) value FROM consignment_batches WHERE consignor_id=?''',
+      '''SELECT COALESCE(SUM(units_received-units_allocated-units_returned),0) units,
+      COALESCE(SUM(((units_received-units_allocated-units_returned)*
+        COALESCE(supplier_cost_centavos,unit_cost_centavos)+
+        COALESCE(supplier_cost_basis_quantity,1)/2)/
+        COALESCE(supplier_cost_basis_quantity,1)),0) value
+      FROM consignment_batches WHERE consignor_id=?''',
       [consignorId],
     )).single;
     final margin =
         Sqflite.firstIntValue(
           await db.rawQuery(
-            '''SELECT COALESCE((SELECT SUM(a.margin_centavos) FROM consignment_allocations a JOIN consignment_batches b ON b.id=a.batch_id WHERE b.consignor_id=?),0)+COALESCE((SELECT SUM(margin_change_centavos) FROM consignment_allocation_reversals WHERE consignor_id=?),0)''',
+            '''SELECT COALESCE((SELECT SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)) FROM consignment_allocations a JOIN consignment_batches b ON b.id=a.batch_id WHERE b.consignor_id=?),0)+COALESCE((SELECT SUM(margin_change_centavos) FROM consignment_allocation_reversals WHERE consignor_id=?),0)''',
             [consignorId, consignorId],
           ),
         ) ??
@@ -469,7 +578,7 @@ class ConsignmentRepository {
   Future<List<Map<String, Object?>>> productCardsForConsignor(
     int consignorId,
   ) => db.rawQuery(
-    '''SELECT b.product_id,p.name,p.photo_path,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.consignor_id=? GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
+    '''SELECT b.product_id,p.name,p.photo_path,p.base_unit_label,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.consignor_id=? GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
     [consignorId],
   );
 
@@ -481,31 +590,64 @@ class ConsignmentRepository {
     consignorId == null ? null : [consignorId],
   );
 
-  Future<List<Map<String, Object?>>> productHistory(int productId) =>
+  Future<List<Map<String, Object?>>> deliveriesForConsignor(int consignorId) =>
       db.rawQuery(
-        '''SELECT 'RECEIPT' event_type,b.received_at occurred_at,b.units_received quantity,
+        '''SELECT b.id,b.received_at,p.name,b.package_name,b.package_count,
+          b.base_quantity_per_package,b.base_unit_label,b.units_received,
+          b.supplier_cost_centavos,b.supplier_cost_basis_quantity,b.price_unit_name,
+          b.selling_price_centavos,b.notes
+          FROM consignment_batches b JOIN products p ON p.id=b.product_id
+          WHERE b.consignor_id=? ORDER BY b.received_at DESC,b.id DESC''',
+        [consignorId],
+      );
+
+  Future<List<Map<String, Object?>>> remittancesForConsignor(int consignorId) =>
+      db.rawQuery(
+        '''SELECT amount_centavos,notes,remitted_at FROM consignor_remittances
+          WHERE consignor_id=? ORDER BY remitted_at DESC,id DESC''',
+        [consignorId],
+      );
+
+  Future<List<Map<String, Object?>>> productHistory(
+    int productId, {
+    int? consignorId,
+  }) => db.rawQuery(
+    '''SELECT 'RECEIPT' event_type,b.received_at occurred_at,b.units_received quantity,
           b.unit_cost_centavos,b.selling_price_centavos,0 payable_centavos,0 margin_centavos,b.notes
-        FROM consignment_batches b WHERE b.product_id=?
+        FROM consignment_batches b WHERE b.product_id=? AND (? IS NULL OR b.consignor_id=?)
         UNION ALL
         SELECT CASE WHEN a.cash_sale_item_id IS NOT NULL THEN 'CASH SALE' ELSE 'UTANG' END,
           a.occurred_at,-a.quantity,a.unit_cost_centavos,a.selling_price_centavos,
-          a.payable_centavos,a.margin_centavos,NULL
-        FROM consignment_allocations a JOIN consignment_batches b ON b.id=a.batch_id WHERE b.product_id=?
+          COALESCE(a.actual_payable_centavos,a.payable_centavos) payable_centavos,
+          COALESCE(a.actual_margin_centavos,a.margin_centavos) margin_centavos,NULL
+        FROM consignment_allocations a JOIN consignment_batches b ON b.id=a.batch_id WHERE b.product_id=? AND (? IS NULL OR b.consignor_id=?)
         UNION ALL
         SELECT 'RETURN',r.returned_at,-r.quantity,r.unit_cost_centavos,b.selling_price_centavos,
           0,0,r.notes
-        FROM consignment_returns r JOIN consignment_batches b ON b.id=r.batch_id WHERE b.product_id=?
+        FROM consignment_returns r JOIN consignment_batches b ON b.id=r.batch_id WHERE b.product_id=? AND (? IS NULL OR b.consignor_id=?)
         ORDER BY occurred_at DESC''',
-        [productId, productId, productId],
-      );
+    [
+      productId,
+      consignorId,
+      consignorId,
+      productId,
+      consignorId,
+      consignorId,
+      productId,
+      consignorId,
+      consignorId,
+    ],
+  );
 
-  Future<List<Map<String, Object?>>> returnableBatches(int productId) =>
-      db.rawQuery(
-        '''SELECT b.id,b.received_at,b.units_received-b.units_allocated-b.units_returned available,
+  Future<List<Map<String, Object?>>> returnableBatches(
+    int productId, {
+    int? consignorId,
+  }) => db.rawQuery(
+    '''SELECT b.id,b.received_at,b.units_received-b.units_allocated-b.units_returned available,
           b.unit_cost_centavos,c.name consignor_name
         FROM consignment_batches b JOIN consignors c ON c.id=b.consignor_id
-        WHERE b.product_id=? AND b.units_received-b.units_allocated-b.units_returned>0
+        WHERE b.product_id=? AND (? IS NULL OR b.consignor_id=?) AND b.units_received-b.units_allocated-b.units_returned>0
         ORDER BY b.received_at,b.id''',
-        [productId],
-      );
+    [productId, consignorId, consignorId],
+  );
 }

@@ -30,10 +30,17 @@ class ConsignmentAllocation {
           (batch['units_returned']! as int);
       final take = remaining < available ? remaining : available;
       final cost = batch['unit_cost_centavos']! as int;
+      final costRate = (batch['supplier_cost_centavos'] as int?) ?? cost;
+      final costBasis = (batch['supplier_cost_basis_quantity'] as int?) ?? 1;
+      final allocatedBefore = batch['units_allocated']! as int;
+      int costThrough(int units) =>
+          (units * costRate + costBasis ~/ 2) ~/ costBasis;
+      final exactPayable =
+          costThrough(allocatedBefore + take) - costThrough(allocatedBefore);
       final revenue = take == remaining
           ? remainingRevenue
           : (remainingRevenue * take) ~/ remaining;
-      final actualMargin = revenue - take * cost;
+      final actualMargin = revenue - exactPayable;
       final allocationId = await tx.insert('consignment_allocations', {
         'batch_id': batch['id'],
         'cash_sale_item_id': cashSaleItemId,
@@ -42,6 +49,7 @@ class ConsignmentAllocation {
         'unit_cost_centavos': cost,
         'selling_price_centavos': sellingPriceCentavos,
         'payable_centavos': take * cost,
+        'actual_payable_centavos': exactPayable,
         'margin_centavos': take * (sellingPriceCentavos - cost),
         'sale_revenue_centavos': revenue,
         'actual_margin_centavos': actualMargin,
@@ -56,7 +64,7 @@ class ConsignmentAllocation {
       await tx.insert('consignor_ledger_entries', {
         'consignor_id': batch['consignor_id'],
         'entry_type': 'SALE',
-        'amount_change_centavos': take * cost,
+        'amount_change_centavos': exactPayable,
         'allocation_id': allocationId,
         'description': '$take consigned unit(s) sold',
         'occurred_at': occurredAt,

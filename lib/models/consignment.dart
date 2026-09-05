@@ -25,6 +25,10 @@ class ConsignmentReceiptDraft {
     required this.unitsPerBox,
     required this.unitCostCentavos,
     required this.sellingPriceCentavos,
+    this.supplierCostBasisQuantity = 1,
+    this.packageName,
+    this.baseUnitLabel,
+    this.priceUnitName,
     this.notes,
   });
   final int consignorId,
@@ -33,9 +37,15 @@ class ConsignmentReceiptDraft {
       unitsPerBox,
       unitCostCentavos,
       sellingPriceCentavos;
+  final int supplierCostBasisQuantity;
+  final String? packageName, baseUnitLabel, priceUnitName;
   final String? notes;
   int get totalUnits => boxes * unitsPerBox;
   int get consignedValueCentavos => totalUnits * unitCostCentavos;
+  int costForQuantity(int quantity) =>
+      (quantity * unitCostCentavos + supplierCostBasisQuantity ~/ 2) ~/
+      supplierCostBasisQuantity;
+  int get exactConsignedValueCentavos => costForQuantity(totalUnits);
   int get marginPerUnitCentavos => sellingPriceCentavos - unitCostCentavos;
 }
 

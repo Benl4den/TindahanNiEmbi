@@ -103,6 +103,16 @@ class DataIntegrityService {
         '${missingSupplierLedger.length} consignment allocation ledger problem(s).',
       );
     }
+    final incorrectSupplierLedger = await db.rawQuery(
+      '''SELECT a.id FROM consignment_allocations a
+      JOIN consignor_ledger_entries l ON l.allocation_id=a.id
+      WHERE l.amount_change_centavos<>COALESCE(a.actual_payable_centavos,a.payable_centavos)''',
+    );
+    if (incorrectSupplierLedger.isNotEmpty) {
+      consignmentIssues.add(
+        '${incorrectSupplierLedger.length} consignment payable snapshot mismatch(es).',
+      );
+    }
     final invalidRemittance = await db.rawQuery(
       '''SELECT consignor_id FROM consignor_ledger_entries
       GROUP BY consignor_id HAVING SUM(amount_change_centavos)<0''',

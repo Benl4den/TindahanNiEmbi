@@ -5,6 +5,7 @@ import 'package:tindahan_ni_embi/features/consignment/presentation/consignment_s
 import 'package:tindahan_ni_embi/models/category.dart';
 import 'package:tindahan_ni_embi/models/consignment.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
+import 'package:tindahan_ni_embi/models/product_unit.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/consignment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
@@ -14,7 +15,27 @@ class _Repo extends ConsignmentRepository {
   _Repo(super.db);
   final parties = <Consignor>[];
   int payable = 0, receipts = 0;
+  int? lastReceiptConsignorId;
+  final companyBalances = <int, int>{};
   bool failCreate = false;
+  ConsignmentReceiptDraft? lastReceipt;
+  @override
+  Future<ProductUnitConfiguration> deliveryConfiguration(int productId) async =>
+      const ProductUnitConfiguration(
+        baseUnit: BaseUnit.piece,
+        purchasePackages: [
+          PurchasePackageDraft(name: 'Box', baseQuantity: 24, isDefault: true),
+          PurchasePackageDraft(name: 'Pack', baseQuantity: 6),
+        ],
+        sellingOptions: [
+          SellingOptionDraft(
+            name: 'Piece',
+            baseQuantity: 1,
+            priceCentavos: 200,
+            isDefault: true,
+          ),
+        ],
+      );
   @override
   Future<ConsignmentSummary> summary() async => ConsignmentSummary(
     payableCentavos: payable,
@@ -45,7 +66,7 @@ class _Repo extends ConsignmentRepository {
   Future<List<Consignor>> consignors({bool activeOnly = true}) async => parties;
   @override
   Future<Map<int, int>> payableByConsignor() async => {
-    for (final p in parties) p.id: payable,
+    for (final p in parties) p.id: companyBalances[p.id] ?? payable,
   };
   @override
   Future<int> createConsignor(String n, {String? contactDetails}) async {
@@ -58,6 +79,8 @@ class _Repo extends ConsignmentRepository {
 
   @override
   Future<int> receive(ConsignmentReceiptDraft d) async {
+    lastReceipt = d;
+    lastReceiptConsignorId = d.consignorId;
     receipts++;
     return receipts;
   }
@@ -153,7 +176,11 @@ void main() {
       await t.tap(find.text('Save'));
       await t.pumpAndSettle();
       expect(repo.parties.single.name, 'ABC');
-      await t.tap(find.text('Receive Consignment'));
+      expect(find.text('Receive Consignment'), findsNothing);
+      expect(find.text('Add Product'), findsNothing);
+      await t.tap(find.text('ABC'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Add Product'));
       await t.pumpAndSettle();
       expect(find.text('Select Existing Product'), findsOneWidget);
     },
@@ -177,27 +204,27 @@ void main() {
   ) async {
     repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
     await pump(t);
-    await t.tap(find.text('Receive Consignment'));
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Add Product'));
     await t.pumpAndSettle();
     await t.tap(find.text('Select Existing Product'));
     await t.pumpAndSettle();
     for (final x in [
       ('Packages received', '1'),
-      ('Base units per package', '24'),
-      ('Cost per unit', '1'),
-      ('Selling price per unit', '2'),
+      ('Supplier cost per Piece', '1'),
+      ('Selling price per Piece', '2'),
     ]) {
       expect(find.text(x.$1), findsOneWidget, reason: x.$1);
       await t.enterText(find.widgetWithText(TextField, x.$1), x.$2);
     }
     await t.pump();
-    expect(find.textContaining('= 24 base units received'), findsOneWidget);
+    expect(find.textContaining('= 24 pieces received'), findsOneWidget);
     await t.tap(find.text('Receive').last);
     await t.pumpAndSettle();
     expect(repo.receipts, 1);
+    expect(repo.lastReceipt!.unitsPerBox, 24);
     repo.payable = 300;
-    await t.tap(find.text('ABC'));
-    await t.pumpAndSettle();
     await t.tap(find.text('Record Remittance'));
     await t.pumpAndSettle();
     expect(find.text('Outstanding Payable: ₱3.00'), findsOneWidget);
@@ -223,5 +250,93 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Could not save consignor.'), findsOneWidget);
     expect(find.text('Add Consignor'), findsWidgets);
+  });
+
+  testWidgets('empty company cannot receive another company products', (
+    t,
+  ) async {
+    repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
+    await pump(t);
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Receive Delivery'));
+    await t.pumpAndSettle();
+    expect(
+      find.textContaining('Add a product inside this company'),
+      findsOneWidget,
+    );
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(repo.receipts, 0);
+  });
+
+  for (final direct in [false, true]) {
+    testWidgets('saved alternative package and direct quantity ($direct)', (
+      t,
+    ) async {
+      repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
+      await pump(t);
+      await t.tap(find.text('ABC'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Add Product'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Select Existing Product'));
+      await t.pumpAndSettle();
+      await t.tap(find.byType(DropdownButtonFormField<PurchasePackageDraft>));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Pack • 6 pieces').last);
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<TextField>(
+              find.widgetWithText(TextField, 'piece per package'),
+            )
+            .readOnly,
+        isTrue,
+      );
+      if (direct) {
+        await t.tap(find.text('Direct Units'));
+        await t.pumpAndSettle();
+      }
+      await t.enterText(
+        find.widgetWithText(
+          TextField,
+          direct ? 'Quantity received (piece)' : 'Packages received',
+        ),
+        '2',
+      );
+      await t.enterText(
+        find.widgetWithText(TextField, 'Supplier cost per Piece'),
+        '1',
+      );
+      await t.pump();
+      expect(
+        find.textContaining(
+          direct ? '2 pieces received' : '= 12 pieces received',
+        ),
+        findsOneWidget,
+      );
+      await t.tap(find.text('Receive').last);
+      await t.pumpAndSettle();
+      expect(repo.lastReceipt!.totalUnits, direct ? 2 : 12);
+      expect(repo.lastReceipt!.sellingPriceCentavos, 200);
+    });
+  }
+
+  testWidgets('another company payable does not enable remittance', (t) async {
+    repo.parties.addAll([
+      const Consignor(id: 1, name: 'ABC', isArchived: false),
+      const Consignor(id: 2, name: 'XYZ', isArchived: false),
+    ]);
+    repo.companyBalances.addAll({1: 0, 2: 10000});
+    await pump(t);
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Record Remittance'));
+    await t.pumpAndSettle();
+    expect(
+      find.text('There is no outstanding supplier payable to remit.'),
+      findsOneWidget,
+    );
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }

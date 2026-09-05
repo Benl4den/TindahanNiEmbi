@@ -21,6 +21,7 @@ class ProductFormScreen extends StatefulWidget {
     this.onSaved,
     this.allowStartingStock = true,
     this.onDraft,
+    this.closeAfterDraft = true,
     this.initialCategoryId,
     this.categoryInitiallyLocked = false,
   });
@@ -31,6 +32,7 @@ class ProductFormScreen extends StatefulWidget {
   final ValueChanged<Product>? onSaved;
   final bool allowStartingStock;
   final ValueChanged<ProductDraft>? onDraft;
+  final bool closeAfterDraft;
   final int? initialCategoryId;
   final bool categoryInitiallyLocked;
 
@@ -177,7 +179,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         );
         if (widget.onDraft != null) {
           widget.onDraft!(draft);
-          if (mounted) Navigator.pop(context, true);
+          if (mounted && widget.closeAfterDraft) Navigator.pop(context, true);
           return;
         }
         final saved = await widget.repository.create(draft);

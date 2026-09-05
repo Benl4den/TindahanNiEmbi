@@ -11,6 +11,8 @@ import 'package:tindahan_ni_embi/repositories/consignment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/inventory_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/product_unit_repository.dart';
+import 'package:tindahan_ni_embi/models/product_unit.dart';
 import 'package:tindahan_ni_embi/repositories/special_inventory_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 
@@ -60,6 +62,67 @@ void main() {
     ),
   );
 
+  test('delivery reads all saved packages and authoritative price, not category defaults', () async {
+    await ProductUnitRepository(db).configure(
+      productId: product.id,
+      baseUnit: BaseUnit.bottle,
+      purchasePackages: [
+        (name: 'Crate', baseQuantity: 12, isDefault: true),
+        (name: 'Small Pack', baseQuantity: 4, isDefault: false),
+      ],
+      sellingOptions: [
+        (name: 'Bottle', baseQuantity: 1, priceCentavos: 4500, isDefault: true),
+        (
+          name: 'Crate',
+          baseQuantity: 12,
+          priceCentavos: 50000,
+          isDefault: false,
+        ),
+      ],
+    );
+    final config = await consignment.deliveryConfiguration(product.id);
+    expect(config.baseUnit, BaseUnit.bottle);
+    expect(config.purchasePackages.map((p) => p.baseQuantity), [12, 4]);
+    expect(
+      config.sellingOptions.singleWhere((p) => p.isDefault).priceCentavos,
+      4500,
+    );
+    await SqliteProductRepository(db).archive(product.id);
+    await expectLater(
+      consignment.deliveryConfiguration(product.id),
+      throwsA(isA<InvalidConsignmentOperation>()),
+    );
+  });
+
+  test('measured supplier cost remains exact through FIFO payable', () async {
+    await consignment.receive(
+      ConsignmentReceiptDraft(
+        consignorId: consignor,
+        productId: product.id,
+        boxes: 1,
+        unitsPerBox: 2000,
+        unitCostCentavos: 7500,
+        supplierCostBasisQuantity: 1000,
+        packageName: '2 kg Sack',
+        baseUnitLabel: 'g',
+        priceUnitName: '1 kg',
+        sellingPriceCentavos: 10000,
+      ),
+    );
+    final batch = (await db.query('consignment_batches')).single;
+    expect(batch['supplier_cost_centavos'], 7500);
+    expect(batch['supplier_cost_basis_quantity'], 1000);
+    expect(batch['package_name'], '2 kg Sack');
+    expect((await consignment.summary()).inventoryValueCentavos, 15000);
+
+    await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: product.id, quantity: 1000)]);
+    final allocation = (await db.query('consignment_allocations')).single;
+    expect(allocation['actual_payable_centavos'], 7500);
+    expect((await consignment.payableByConsignor())[consignor], 7500);
+    expect((await consignment.summary()).inventoryValueCentavos, 7500);
+  });
+
   test(
     'V6 installs reusable groups and Selecta shares product stock truth',
     () async {
@@ -84,6 +147,38 @@ void main() {
         2,
       );
       expect((await db.query('inventory_movements')).length, 2);
+    },
+  );
+
+  test(
+    'company product history and return batches exclude other consignors',
+    () async {
+      await receive(units: 4, cost: 200, sell: 300);
+      final other = await consignment.createConsignor('Other company');
+      await consignment.receive(
+        ConsignmentReceiptDraft(
+          consignorId: other,
+          productId: product.id,
+          boxes: 1,
+          unitsPerBox: 9,
+          unitCostCentavos: 100,
+          sellingPriceCentavos: 300,
+        ),
+      );
+      expect(await consignment.productHistory(product.id), hasLength(2));
+      final history = await consignment.productHistory(
+        product.id,
+        consignorId: consignor,
+      );
+      expect(history, hasLength(1));
+      expect(history.single['quantity'], 4);
+      final batches = await consignment.returnableBatches(
+        product.id,
+        consignorId: consignor,
+      );
+      expect(batches, hasLength(1));
+      expect(batches.single['available'], 4);
+      expect(await consignment.returnableBatches(product.id), hasLength(2));
     },
   );
 

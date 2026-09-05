@@ -46,7 +46,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 14);
+    expect(await db.getVersion(), 15);
     expect(
       await db.query('categories', where: "name='Preserved'"),
       hasLength(1),
