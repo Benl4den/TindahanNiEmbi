@@ -97,14 +97,15 @@ void main() {
 
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 16);
+    expect(await db.getVersion(), 17);
     final legacy = (await db.query(
       'consignment_allocations',
       where: 'id=?',
       whereArgs: [allocation],
     )).single;
-    expect(legacy['sale_revenue_centavos'], isNull);
-    expect(legacy['actual_margin_centavos'], isNull);
+    expect(legacy['sale_revenue_centavos'], 2000);
+    expect(legacy['actual_margin_centavos'], 600);
+    expect(legacy['actual_payable_centavos'], 1400);
     await expectLater(
       db.update(
         'consignment_allocations',
@@ -129,7 +130,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 16);
+    expect(await db.getVersion(), 17);
     final columns = await db.rawQuery('PRAGMA table_info(cash_sale_items)');
     expect(
       columns.map((x) => x['name']),

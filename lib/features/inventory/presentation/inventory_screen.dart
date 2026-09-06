@@ -68,7 +68,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       .map(
                         (p) => DropdownMenuItem(
                           value: p.id,
-                          child: Text('${p.name} (${p.currentQuantity})'),
+                          child: Text(
+                            '${p.name} (${productQuantityText(p, p.currentQuantity)})',
+                          ),
                         ),
                       )
                       .toList(),
@@ -307,7 +309,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           children: [
                             const Text('Stock'),
                             Text(
-                              '${p.currentQuantity}',
+                              productQuantityText(p, p.currentQuantity),
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
                             Text(

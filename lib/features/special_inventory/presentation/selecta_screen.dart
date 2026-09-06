@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
 import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/category_repository.dart';
@@ -333,7 +334,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                   '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)}',
                                 ),
                                 Text(
-                                  'Stock ${p.currentQuantity}  •  Minimum ${p.minimumStockLevel}',
+                                  'Stock ${productQuantityText(p, p.currentQuantity)}  •  Minimum ${productQuantityText(p, p.minimumStockLevel)}',
                                 ),
                                 StatusBadge(
                                   label: out

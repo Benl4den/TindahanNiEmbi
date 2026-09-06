@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/customer.dart';
 import '../../../models/product.dart';
 import '../../../models/product_unit.dart';
@@ -445,7 +446,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       Text(
-                        '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)} • Stock: ${p.currentQuantity}',
+                        '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)} • Stock: ${productQuantityText(p, p.currentQuantity)}',
                       ),
                       if (p.currentQuantity == 0)
                         const Text(AppStrings.outOfStock)

@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
+import '../services/app_refresh_controller.dart';
 
 class InventoryGroup {
   const InventoryGroup({
@@ -42,6 +43,7 @@ class SpecialInventoryRepository {
       'name': name,
       'created_at': now,
     });
+    AppRefreshController.instance.dataChanged();
     return InventoryGroup(id: id, code: code, name: name);
   }
 
@@ -52,6 +54,7 @@ class SpecialInventoryRepository {
       WHERE product_id=? AND inventory_group_id=(SELECT id FROM inventory_groups WHERE code=?)''',
       [now, productId, code],
     );
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<List<Product>> products(
@@ -134,5 +137,6 @@ class SpecialInventoryRepository {
         'created_at': now,
       });
     });
+    AppRefreshController.instance.dataChanged();
   }
 }

@@ -90,7 +90,7 @@ class ConsignmentRepository {
     }
     final now = DateTime.now().toUtc().toIso8601String();
     try {
-      return await db.insert('consignors', {
+      final id = await db.insert('consignors', {
         'name': clean,
         'contact_details': contactDetails?.trim(),
         'default_category_id': defaultCategoryId,
@@ -98,6 +98,8 @@ class ConsignmentRepository {
         'created_at': now,
         'updated_at': now,
       });
+      AppRefreshController.instance.dataChanged();
+      return id;
     } on DatabaseException catch (error) {
       if (error.isUniqueConstraintError()) {
         throw const InvalidConsignmentOperation(
@@ -121,6 +123,7 @@ class ConsignmentRepository {
     if (changed == 0) {
       throw const InvalidConsignmentOperation('Consignor not found.');
     }
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<void> updateConsignor(
@@ -153,6 +156,7 @@ class ConsignmentRepository {
       if (changed == 0) {
         throw const InvalidConsignmentOperation('Consignor not found.');
       }
+      AppRefreshController.instance.dataChanged();
     } on DatabaseException catch (error) {
       if (error.isUniqueConstraintError()) {
         throw const InvalidConsignmentOperation(
@@ -474,6 +478,7 @@ class ConsignmentRepository {
         'created_at': now,
       });
     });
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<int> remit({
@@ -484,58 +489,60 @@ class ConsignmentRepository {
     if (amountCentavos <= 0) {
       throw const InvalidConsignmentOperation('Amount must be positive.');
     }
-    return db.transaction((tx) async {
-      final party = await tx.query(
-        'consignors',
-        where: 'id=?',
-        whereArgs: [consignorId],
-        limit: 1,
-      );
-      if (party.isEmpty) {
-        throw const InvalidConsignmentOperation('Consignor not found.');
-      }
-      final balance =
-          Sqflite.firstIntValue(
-            await tx.rawQuery(
-              '''SELECT COALESCE((SELECT SUM(amount_change_centavos) FROM consignor_ledger_entries WHERE consignor_id=?),0)+
-              COALESCE((SELECT SUM(payable_change_centavos) FROM consignment_allocation_reversals WHERE consignor_id=?),0)''',
-              [consignorId, consignorId],
-            ),
-          ) ??
-          0;
-      if (amountCentavos > balance) {
-        throw const InvalidConsignmentOperation(
-          'Remittance exceeds outstanding payable.',
+    return AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final party = await tx.query(
+          'consignors',
+          where: 'id=?',
+          whereArgs: [consignorId],
+          limit: 1,
         );
-      }
-      final now = DateTime.now().toUtc().toIso8601String();
-      final id = await tx.insert('consignor_remittances', {
-        'consignor_id': consignorId,
-        'amount_centavos': amountCentavos,
-        'notes': notes?.trim(),
-        'remitted_at': now,
-        'created_at': now,
-      });
-      await tx.insert('consignor_ledger_entries', {
-        'consignor_id': consignorId,
-        'entry_type': 'REMITTANCE',
-        'amount_change_centavos': -amountCentavos,
-        'remittance_id': id,
-        'description': 'Supplier remittance',
-        'occurred_at': now,
-        'created_at': now,
-      });
-      await tx.insert('activity_logs', {
-        'event_type': 'CONSIGNMENT_REMITTANCE',
-        'description':
-            '₱${(amountCentavos / 100).toStringAsFixed(2)} remitted to ${party.single['name']}',
-        'actor_role': actorRole,
-        'related_entity_type': 'CONSIGNOR_REMITTANCE',
-        'related_entity_id': id,
-        'created_at': now,
-      });
-      return id;
-    });
+        if (party.isEmpty) {
+          throw const InvalidConsignmentOperation('Consignor not found.');
+        }
+        final balance =
+            Sqflite.firstIntValue(
+              await tx.rawQuery(
+                '''SELECT COALESCE((SELECT SUM(amount_change_centavos) FROM consignor_ledger_entries WHERE consignor_id=?),0)+
+              COALESCE((SELECT SUM(payable_change_centavos) FROM consignment_allocation_reversals WHERE consignor_id=?),0)''',
+                [consignorId, consignorId],
+              ),
+            ) ??
+            0;
+        if (amountCentavos > balance) {
+          throw const InvalidConsignmentOperation(
+            'Remittance exceeds outstanding payable.',
+          );
+        }
+        final now = DateTime.now().toUtc().toIso8601String();
+        final id = await tx.insert('consignor_remittances', {
+          'consignor_id': consignorId,
+          'amount_centavos': amountCentavos,
+          'notes': notes?.trim(),
+          'remitted_at': now,
+          'created_at': now,
+        });
+        await tx.insert('consignor_ledger_entries', {
+          'consignor_id': consignorId,
+          'entry_type': 'REMITTANCE',
+          'amount_change_centavos': -amountCentavos,
+          'remittance_id': id,
+          'description': 'Supplier remittance',
+          'occurred_at': now,
+          'created_at': now,
+        });
+        await tx.insert('activity_logs', {
+          'event_type': 'CONSIGNMENT_REMITTANCE',
+          'description':
+              '₱${(amountCentavos / 100).toStringAsFixed(2)} remitted to ${party.single['name']}',
+          'actor_role': actorRole,
+          'related_entity_type': 'CONSIGNOR_REMITTANCE',
+          'related_entity_id': id,
+          'created_at': now,
+        });
+        return id;
+      }),
+    );
   }
 
   Future<ConsignmentSummary> summary() async {

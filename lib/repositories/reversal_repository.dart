@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../services/app_refresh_controller.dart';
+
 class ReversalException implements Exception {
   const ReversalException(this.message);
   final String message;
@@ -22,24 +24,28 @@ class ReversalRepository {
     int id,
     String reason, {
     required bool ownerPinAuthorized,
-  }) => db.transaction(
-    (tx) => reverseCashSaleWith(
-      tx,
-      id,
-      reason,
-      ownerPinAuthorized: ownerPinAuthorized,
+  }) => AppRefreshController.instance.after(
+    db.transaction(
+      (tx) => reverseCashSaleWith(
+        tx,
+        id,
+        reason,
+        ownerPinAuthorized: ownerPinAuthorized,
+      ),
     ),
   );
   Future<int> reverseUtang(
     int id,
     String reason, {
     required bool ownerPinAuthorized,
-  }) => db.transaction(
-    (tx) => reverseUtangWith(
-      tx,
-      id,
-      reason,
-      ownerPinAuthorized: ownerPinAuthorized,
+  }) => AppRefreshController.instance.after(
+    db.transaction(
+      (tx) => reverseUtangWith(
+        tx,
+        id,
+        reason,
+        ownerPinAuthorized: ownerPinAuthorized,
+      ),
     ),
   );
   Future<int> reverseCashSaleWith(
@@ -60,12 +66,14 @@ class ReversalRepository {
     required bool ownerPinAuthorized,
   }) async {
     _reason(reason, ownerPinAuthorized);
-    return db.transaction(
-      (tx) => reversePaymentWith(
-        tx,
-        id,
-        reason,
-        ownerPinAuthorized: ownerPinAuthorized,
+    return AppRefreshController.instance.after(
+      db.transaction(
+        (tx) => reversePaymentWith(
+          tx,
+          id,
+          reason,
+          ownerPinAuthorized: ownerPinAuthorized,
+        ),
       ),
     );
   }

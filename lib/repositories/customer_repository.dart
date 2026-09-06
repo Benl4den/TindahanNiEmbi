@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/customer.dart';
+import '../services/app_refresh_controller.dart';
 
 class InvalidCustomerException implements Exception {
   const InvalidCustomerException(this.message);
@@ -48,7 +49,9 @@ class SqliteCustomerRepository implements CustomerRepository {
       'created_at': now,
       'updated_at': now,
     });
-    return (await details(id)).customer;
+    final customer = (await details(id)).customer;
+    AppRefreshController.instance.dataChanged();
+    return customer;
   }
 
   @override
@@ -65,7 +68,9 @@ class SqliteCustomerRepository implements CustomerRepository {
     if (changed == 0) {
       throw const InvalidCustomerException('Customer not found.');
     }
-    return (await details(id)).customer;
+    final customer = (await details(id)).customer;
+    AppRefreshController.instance.dataChanged();
+    return customer;
   }
 
   @override
@@ -82,6 +87,7 @@ class SqliteCustomerRepository implements CustomerRepository {
     if (changed == 0) {
       throw const InvalidCustomerException('Customer not found.');
     }
+    AppRefreshController.instance.dataChanged();
   }
 
   @override

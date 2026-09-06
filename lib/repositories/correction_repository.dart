@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/utang_draft.dart';
+import '../services/app_refresh_controller.dart';
 import 'cash_sale_repository.dart';
 import 'payment_repository.dart';
 import 'reversal_repository.dart';
@@ -42,30 +43,32 @@ class CorrectionRepository {
     required bool ownerPinAuthorized,
   }) async {
     _authorize(ownerPinAuthorized, reason);
-    return db.transaction((tx) async {
-      final reversal = await ReversalRepository(
-        db,
-        actorRole: actorRole,
-      ).reverseCashSaleWith(tx, originalId, reason, ownerPinAuthorized: true);
-      final replacement = await CashSaleRepository(
-        db,
-        actorRole: actorRole,
-      ).saveWithExecutor(tx, correctedItems);
-      final correction = await _link(
-        tx,
-        'CASH_SALE',
-        originalId,
-        replacement.id,
-        reversal,
-        reason,
-        replacement.reference,
-      );
-      return CorrectionResult(
-        correction,
-        replacement.id,
-        replacement.reference,
-      );
-    });
+    return AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final reversal = await ReversalRepository(
+          db,
+          actorRole: actorRole,
+        ).reverseCashSaleWith(tx, originalId, reason, ownerPinAuthorized: true);
+        final replacement = await CashSaleRepository(
+          db,
+          actorRole: actorRole,
+        ).saveWithExecutor(tx, correctedItems);
+        final correction = await _link(
+          tx,
+          'CASH_SALE',
+          originalId,
+          replacement.id,
+          reversal,
+          reason,
+          replacement.reference,
+        );
+        return CorrectionResult(
+          correction,
+          replacement.id,
+          replacement.reference,
+        );
+      }),
+    );
   }
 
   Future<CorrectionResult> correctUtang({
@@ -75,27 +78,29 @@ class CorrectionRepository {
     required bool ownerPinAuthorized,
   }) async {
     _authorize(ownerPinAuthorized, reason);
-    return db.transaction((tx) async {
-      final reversal = await ReversalRepository(
-        db,
-        actorRole: actorRole,
-      ).reverseUtangWith(tx, originalId, reason, ownerPinAuthorized: true);
-      final replacementId = await UtangRepository(
-        db,
-        actorRole: actorRole,
-      ).saveWithExecutor(tx, corrected);
-      final reference = 'UTG-${replacementId.toString().padLeft(6, '0')}';
-      final correction = await _link(
-        tx,
-        'UTANG',
-        originalId,
-        replacementId,
-        reversal,
-        reason,
-        reference,
-      );
-      return CorrectionResult(correction, replacementId, reference);
-    });
+    return AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final reversal = await ReversalRepository(
+          db,
+          actorRole: actorRole,
+        ).reverseUtangWith(tx, originalId, reason, ownerPinAuthorized: true);
+        final replacementId = await UtangRepository(
+          db,
+          actorRole: actorRole,
+        ).saveWithExecutor(tx, corrected);
+        final reference = 'UTG-${replacementId.toString().padLeft(6, '0')}';
+        final correction = await _link(
+          tx,
+          'UTANG',
+          originalId,
+          replacementId,
+          reversal,
+          reason,
+          reference,
+        );
+        return CorrectionResult(correction, replacementId, reference);
+      }),
+    );
   }
 
   Future<CorrectionResult> correctPayment({
@@ -111,41 +116,43 @@ class CorrectionRepository {
         'Corrected payment must be greater than zero.',
       );
     }
-    return db.transaction((tx) async {
-      final original = await tx.query(
-        'utang_payments',
-        where: "id=? AND status='POSTED'",
-        whereArgs: [originalId],
-        limit: 1,
-      );
-      if (original.isEmpty) {
-        throw const CorrectionException(
-          'Payment is unavailable or already reversed.',
+    return AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final original = await tx.query(
+          'utang_payments',
+          where: "id=? AND status='POSTED'",
+          whereArgs: [originalId],
+          limit: 1,
         );
-      }
-      final reversal = await ReversalRepository(
-        db,
-        actorRole: actorRole,
-      ).reversePaymentWith(tx, originalId, reason, ownerPinAuthorized: true);
-      final replacementId = await PaymentRepository(db, actorRole: actorRole)
-          .recordWithExecutor(
-            tx,
-            customerId: original.single['customer_id']! as int,
-            amountCentavos: correctedAmountCentavos,
-            notes: notes,
+        if (original.isEmpty) {
+          throw const CorrectionException(
+            'Payment is unavailable or already reversed.',
           );
-      final reference = 'PAY-${replacementId.toString().padLeft(6, '0')}';
-      final correction = await _link(
-        tx,
-        'PAYMENT',
-        originalId,
-        replacementId,
-        reversal,
-        reason,
-        reference,
-      );
-      return CorrectionResult(correction, replacementId, reference);
-    });
+        }
+        final reversal = await ReversalRepository(
+          db,
+          actorRole: actorRole,
+        ).reversePaymentWith(tx, originalId, reason, ownerPinAuthorized: true);
+        final replacementId = await PaymentRepository(db, actorRole: actorRole)
+            .recordWithExecutor(
+              tx,
+              customerId: original.single['customer_id']! as int,
+              amountCentavos: correctedAmountCentavos,
+              notes: notes,
+            );
+        final reference = 'PAY-${replacementId.toString().padLeft(6, '0')}';
+        final correction = await _link(
+          tx,
+          'PAYMENT',
+          originalId,
+          replacementId,
+          reversal,
+          reason,
+          reference,
+        );
+        return CorrectionResult(correction, replacementId, reference);
+      }),
+    );
   }
 
   Future<int> _link(

@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/expense.dart';
+import '../services/app_refresh_controller.dart';
 
 class ExpenseException implements Exception {
   const ExpenseException(this.message);
@@ -34,10 +35,12 @@ class ExpenseRepository {
       throw const ExpenseException('Category name is required.');
     }
     try {
-      return await db.insert('expense_categories', {
+      final id = await db.insert('expense_categories', {
         'name': value,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
+      AppRefreshController.instance.dataChanged();
+      return id;
     } on DatabaseException {
       throw const ExpenseException('That expense category already exists.');
     }
@@ -54,10 +57,11 @@ class ExpenseRepository {
       where: 'id=? AND is_archived=0',
       whereArgs: [id],
     );
+    AppRefreshController.instance.dataChanged();
   }
 
-  Future<Expense> add(ExpenseDraft draft) =>
-      db.transaction((tx) => _add(tx, draft));
+  Future<Expense> add(ExpenseDraft draft) => AppRefreshController.instance
+      .after(db.transaction((tx) => _add(tx, draft)));
 
   Future<Expense> _add(DatabaseExecutor tx, ExpenseDraft draft) async {
     _owner();
@@ -169,29 +173,31 @@ class ExpenseRepository {
     required bool ownerPinAuthorized,
   }) async {
     _authorize(reason, ownerPinAuthorized);
-    return db.transaction((tx) async {
-      final original = await _posted(tx, id);
-      final reversalId = await _reverse(tx, original, reason, 'CORRECTED');
-      final replacement = await _add(tx, corrected);
-      final now = DateTime.now().toUtc().toIso8601String();
-      await tx.insert('expense_corrections', {
-        'original_expense_id': id,
-        'replacement_expense_id': replacement.id,
-        'expense_reversal_id': reversalId,
-        'reason': reason.trim(),
-        'occurred_at': now,
-      });
-      await tx.insert('activity_logs', {
-        'event_type': 'EXPENSE_CORRECTED',
-        'description':
-            '${original.reference} corrected to ${replacement.reference}. Reason: ${reason.trim()}',
-        'actor_role': actorRole,
-        'related_entity_type': 'EXPENSE',
-        'related_entity_id': id,
-        'created_at': now,
-      });
-      return replacement;
-    });
+    return AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final original = await _posted(tx, id);
+        final reversalId = await _reverse(tx, original, reason, 'CORRECTED');
+        final replacement = await _add(tx, corrected);
+        final now = DateTime.now().toUtc().toIso8601String();
+        await tx.insert('expense_corrections', {
+          'original_expense_id': id,
+          'replacement_expense_id': replacement.id,
+          'expense_reversal_id': reversalId,
+          'reason': reason.trim(),
+          'occurred_at': now,
+        });
+        await tx.insert('activity_logs', {
+          'event_type': 'EXPENSE_CORRECTED',
+          'description':
+              '${original.reference} corrected to ${replacement.reference}. Reason: ${reason.trim()}',
+          'actor_role': actorRole,
+          'related_entity_type': 'EXPENSE',
+          'related_entity_id': id,
+          'created_at': now,
+        });
+        return replacement;
+      }),
+    );
   }
 
   Future<void> reverse(
@@ -213,6 +219,7 @@ class ExpenseRepository {
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     });
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<int> _reverse(

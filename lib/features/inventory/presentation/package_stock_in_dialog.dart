@@ -196,11 +196,5 @@ Future<bool> showPackageStockInDialog({
 }
 
 String _friendly(int quantity, Product product) {
-  if (product.baseUnitCode == 'GRAM') {
-    return '${standardNumber(quantity / 1000)} kg';
-  }
-  if (product.baseUnitCode == 'MILLILITER') {
-    return '${standardNumber(quantity / 1000)} L';
-  }
-  return '${standardNumber(quantity)} ${product.baseUnitLabel}${quantity == 1 ? '' : 's'}';
+  return productQuantityText(product, quantity);
 }
