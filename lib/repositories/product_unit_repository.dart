@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/product_unit.dart';
+import '../services/app_refresh_controller.dart';
 
 class InvalidProductUnit implements Exception {
   const InvalidProductUnit(this.message);
@@ -55,73 +56,77 @@ class ProductUnitRepository {
         'Enter valid packages and select one default.',
       );
     }
-    await db.transaction((tx) async {
-      final product = await tx.query(
-        'products',
-        columns: ['id'],
-        where: 'id=? AND is_archived=0',
-        whereArgs: [productId],
-        limit: 1,
-      );
-      if (product.isEmpty) throw const InvalidProductUnit('Product not found.');
-      final now = DateTime.now().toUtc().toIso8601String();
-      await tx.update(
-        'product_purchase_packages',
-        {'is_archived': 1, 'is_default': 0, 'updated_at': now},
-        where: 'product_id=? AND is_archived=0',
-        whereArgs: [productId],
-      );
-      await tx.update(
-        'product_selling_options',
-        {'is_archived': 1, 'is_default': 0, 'updated_at': now},
-        where: 'product_id=? AND is_archived=0',
-        whereArgs: [productId],
-      );
-      await tx.update(
-        'products',
-        {
-          'base_unit_code': baseUnit.code,
-          'base_unit_label': baseUnit.label,
-          'selling_price_centavos': sellingOptions
-              .singleWhere((x) => x.isDefault)
-              .priceCentavos,
-          'updated_at': now,
-        },
-        where: 'id=?',
-        whereArgs: [productId],
-      );
-      for (final p in purchasePackages) {
-        await tx.insert('product_purchase_packages', {
-          'product_id': productId,
-          'name': p.name.trim(),
-          'base_quantity': p.baseQuantity,
-          'is_default': p.isDefault ? 1 : 0,
-          'is_archived': 0,
+    await AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final product = await tx.query(
+          'products',
+          columns: ['id'],
+          where: 'id=? AND is_archived=0',
+          whereArgs: [productId],
+          limit: 1,
+        );
+        if (product.isEmpty) {
+          throw const InvalidProductUnit('Product not found.');
+        }
+        final now = DateTime.now().toUtc().toIso8601String();
+        await tx.update(
+          'product_purchase_packages',
+          {'is_archived': 1, 'is_default': 0, 'updated_at': now},
+          where: 'product_id=? AND is_archived=0',
+          whereArgs: [productId],
+        );
+        await tx.update(
+          'product_selling_options',
+          {'is_archived': 1, 'is_default': 0, 'updated_at': now},
+          where: 'product_id=? AND is_archived=0',
+          whereArgs: [productId],
+        );
+        await tx.update(
+          'products',
+          {
+            'base_unit_code': baseUnit.code,
+            'base_unit_label': baseUnit.label,
+            'selling_price_centavos': sellingOptions
+                .singleWhere((x) => x.isDefault)
+                .priceCentavos,
+            'updated_at': now,
+          },
+          where: 'id=?',
+          whereArgs: [productId],
+        );
+        for (final p in purchasePackages) {
+          await tx.insert('product_purchase_packages', {
+            'product_id': productId,
+            'name': p.name.trim(),
+            'base_quantity': p.baseQuantity,
+            'is_default': p.isDefault ? 1 : 0,
+            'is_archived': 0,
+            'created_at': now,
+            'updated_at': now,
+          });
+        }
+        for (final o in sellingOptions) {
+          await tx.insert('product_selling_options', {
+            'product_id': productId,
+            'name': o.name.trim(),
+            'base_quantity': o.baseQuantity,
+            'price_centavos': o.priceCentavos,
+            'is_default': o.isDefault ? 1 : 0,
+            'is_archived': 0,
+            'created_at': now,
+            'updated_at': now,
+          });
+        }
+        await tx.insert('activity_logs', {
+          'event_type': 'PRODUCT_UNITS_CONFIGURED',
+          'description': 'Product units configured',
+          'actor_role': actorRole,
+          'related_entity_type': 'PRODUCT',
+          'related_entity_id': productId,
           'created_at': now,
-          'updated_at': now,
         });
-      }
-      for (final o in sellingOptions) {
-        await tx.insert('product_selling_options', {
-          'product_id': productId,
-          'name': o.name.trim(),
-          'base_quantity': o.baseQuantity,
-          'price_centavos': o.priceCentavos,
-          'is_default': o.isDefault ? 1 : 0,
-          'is_archived': 0,
-          'created_at': now,
-          'updated_at': now,
-        });
-      }
-      await tx.insert('activity_logs', {
-        'event_type': 'PRODUCT_UNITS_CONFIGURED',
-        'description': 'Product units configured',
-        'actor_role': actorRole,
-        'related_entity_type': 'PRODUCT',
-        'related_entity_id': productId,
-        'created_at': now,
-      });
-    });
+      }),
+    );
   }
 
   Future<void> receive({
@@ -137,47 +142,49 @@ class ProductUnitRepository {
         'Enter a valid received quantity and cost.',
       );
     }
-    await db.transaction((tx) async {
-      final rows = await tx.rawQuery(
-        '''SELECT p.current_quantity,p.name,k.name package_name,k.base_quantity
+    await AppRefreshController.instance.after(
+      db.transaction((tx) async {
+        final rows = await tx.rawQuery(
+          '''SELECT p.current_quantity,p.name,k.name package_name,k.base_quantity
         FROM products p JOIN product_purchase_packages k ON k.product_id=p.id
         WHERE p.id=? AND k.id=? AND p.is_archived=0 AND k.is_archived=0''',
-        [productId, packageId],
-      );
-      if (rows.isEmpty) {
-        throw const InvalidProductUnit('Purchase package is unavailable.');
-      }
-      final row = rows.single, before = row['current_quantity']! as int;
-      final perPackage = row['base_quantity']! as int,
-          baseQuantity = packageCount * perPackage;
-      final now = DateTime.now().toUtc().toIso8601String();
-      final transaction = await tx.insert('inventory_transactions', {
-        'type': 'STOCK_IN',
-        'notes': notes,
-        'occurred_at': now,
-        'created_at': now,
-      });
-      await tx.insert('inventory_movements', {
-        'inventory_transaction_id': transaction,
-        'product_id': productId,
-        'quantity_change': baseQuantity,
-        'quantity_before': before,
-        'quantity_after': before + baseQuantity,
-        'unit_cost_centavos': packageCostCentavos,
-        'entered_quantity': packageCount,
-        'entered_unit_snapshot': row['package_name'],
-        'base_quantity_per_entered_unit': perPackage,
-        'created_at': now,
-      });
-      await tx.insert('activity_logs', {
-        'event_type': 'INVENTORY_STOCK_IN',
-        'description':
-            'Stock In — ${row['name']} +$packageCount ${row['package_name']}',
-        'actor_role': actorRole,
-        'related_entity_type': 'PRODUCT',
-        'related_entity_id': productId,
-        'created_at': now,
-      });
-    });
+          [productId, packageId],
+        );
+        if (rows.isEmpty) {
+          throw const InvalidProductUnit('Purchase package is unavailable.');
+        }
+        final row = rows.single, before = row['current_quantity']! as int;
+        final perPackage = row['base_quantity']! as int,
+            baseQuantity = packageCount * perPackage;
+        final now = DateTime.now().toUtc().toIso8601String();
+        final transaction = await tx.insert('inventory_transactions', {
+          'type': 'STOCK_IN',
+          'notes': notes,
+          'occurred_at': now,
+          'created_at': now,
+        });
+        await tx.insert('inventory_movements', {
+          'inventory_transaction_id': transaction,
+          'product_id': productId,
+          'quantity_change': baseQuantity,
+          'quantity_before': before,
+          'quantity_after': before + baseQuantity,
+          'unit_cost_centavos': packageCostCentavos,
+          'entered_quantity': packageCount,
+          'entered_unit_snapshot': row['package_name'],
+          'base_quantity_per_entered_unit': perPackage,
+          'created_at': now,
+        });
+        await tx.insert('activity_logs', {
+          'event_type': 'INVENTORY_STOCK_IN',
+          'description':
+              'Stock In — ${row['name']} +$packageCount ${row['package_name']}',
+          'actor_role': actorRole,
+          'related_entity_type': 'PRODUCT',
+          'related_entity_id': productId,
+          'created_at': now,
+        });
+      }),
+    );
   }
 }

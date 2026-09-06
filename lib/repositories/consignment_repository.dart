@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/consignment.dart';
 import '../models/product.dart';
 import '../models/product_unit.dart';
+import '../services/app_refresh_controller.dart';
 import 'product_unit_repository.dart';
 
 class InvalidConsignmentOperation implements Exception {
@@ -170,7 +171,9 @@ class ConsignmentRepository {
         draft.sellingPriceCentavos <= 0) {
       throw const InvalidConsignmentOperation('Invalid receipt values.');
     }
-    return db.transaction((tx) => _receiveWith(tx, draft));
+    return AppRefreshController.instance.after(
+      db.transaction((tx) => _receiveWith(tx, draft)),
+    );
   }
 
   Future<int> receiveNewProduct({
@@ -185,101 +188,105 @@ class ConsignmentRepository {
     String? baseUnitLabel,
     String? priceUnitName,
     String? notes,
-  }) => db.transaction((tx) async {
-    final name = product.name.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (name.isEmpty ||
-        product.photoPath.trim().isEmpty ||
-        product.purchasePriceCentavos < 0 ||
-        product.minimumStockLevel < 0) {
-      throw const InvalidConsignmentOperation(
-        'Valid product details are required.',
+  }) => AppRefreshController.instance.after(
+    db.transaction((tx) async {
+      final name = product.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      if (name.isEmpty ||
+          product.photoPath.trim().isEmpty ||
+          product.purchasePriceCentavos < 0 ||
+          product.minimumStockLevel < 0) {
+        throw const InvalidConsignmentOperation(
+          'Valid product details are required.',
+        );
+      }
+      final category = await tx.query(
+        'categories',
+        where: 'id=? AND is_archived=0',
+        whereArgs: [product.categoryId],
+        limit: 1,
       );
-    }
-    final category = await tx.query(
-      'categories',
-      where: 'id=? AND is_archived=0',
-      whereArgs: [product.categoryId],
-      limit: 1,
-    );
-    if (category.isEmpty) {
-      throw const InvalidConsignmentOperation('Active category is required.');
-    }
-    final now = DateTime.now().toUtc().toIso8601String();
-    final units =
-        product.unitConfiguration ??
-        ProductUnitPreset.forCategory('', sellingPriceCentavos);
-    final synchronizedSales = units.sellingOptions
-        .map(
-          (x) => SellingOptionDraft(
-            name: x.name,
-            baseQuantity: x.baseQuantity,
-            priceCentavos: x.isDefault ? sellingPriceCentavos : x.priceCentavos,
-            isDefault: x.isDefault,
-          ),
-        )
-        .toList();
-    final productId = await tx.insert('products', {
-      'category_id': product.categoryId,
-      'name': name,
-      'photo_path': product.photoPath.trim(),
-      'purchase_price_centavos': product.purchasePriceCentavos,
-      'selling_price_centavos': sellingPriceCentavos,
-      'current_quantity': 0,
-      'minimum_stock_level': product.minimumStockLevel,
-      'is_archived': 0,
-      'created_at': now,
-      'updated_at': now,
-      'base_unit_code': units.baseUnit.code,
-      'base_unit_label': units.baseUnit.label,
-    });
-    for (final package in units.purchasePackages) {
-      await tx.insert('product_purchase_packages', {
-        'product_id': productId,
-        'name': package.name.trim(),
-        'base_quantity': package.baseQuantity,
-        'is_default': package.isDefault ? 1 : 0,
+      if (category.isEmpty) {
+        throw const InvalidConsignmentOperation('Active category is required.');
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      final units =
+          product.unitConfiguration ??
+          ProductUnitPreset.forCategory('', sellingPriceCentavos);
+      final synchronizedSales = units.sellingOptions
+          .map(
+            (x) => SellingOptionDraft(
+              name: x.name,
+              baseQuantity: x.baseQuantity,
+              priceCentavos: x.isDefault
+                  ? sellingPriceCentavos
+                  : x.priceCentavos,
+              isDefault: x.isDefault,
+            ),
+          )
+          .toList();
+      final productId = await tx.insert('products', {
+        'category_id': product.categoryId,
+        'name': name,
+        'photo_path': product.photoPath.trim(),
+        'purchase_price_centavos': product.purchasePriceCentavos,
+        'selling_price_centavos': sellingPriceCentavos,
+        'current_quantity': 0,
+        'minimum_stock_level': product.minimumStockLevel,
         'is_archived': 0,
         'created_at': now,
         'updated_at': now,
+        'base_unit_code': units.baseUnit.code,
+        'base_unit_label': units.baseUnit.label,
       });
-    }
-    for (final option in synchronizedSales) {
-      await tx.insert('product_selling_options', {
-        'product_id': productId,
-        'name': option.name.trim(),
-        'base_quantity': option.baseQuantity,
-        'price_centavos': option.priceCentavos,
-        'is_default': option.isDefault ? 1 : 0,
-        'is_archived': 0,
+      for (final package in units.purchasePackages) {
+        await tx.insert('product_purchase_packages', {
+          'product_id': productId,
+          'name': package.name.trim(),
+          'base_quantity': package.baseQuantity,
+          'is_default': package.isDefault ? 1 : 0,
+          'is_archived': 0,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+      for (final option in synchronizedSales) {
+        await tx.insert('product_selling_options', {
+          'product_id': productId,
+          'name': option.name.trim(),
+          'base_quantity': option.baseQuantity,
+          'price_centavos': option.priceCentavos,
+          'is_default': option.isDefault ? 1 : 0,
+          'is_archived': 0,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+      await tx.insert('activity_logs', {
+        'event_type': 'PRODUCT_CREATED',
+        'description': 'Product created — $name',
+        'actor_role': actorRole,
+        'related_entity_type': 'PRODUCT',
+        'related_entity_id': productId,
         'created_at': now,
-        'updated_at': now,
       });
-    }
-    await tx.insert('activity_logs', {
-      'event_type': 'PRODUCT_CREATED',
-      'description': 'Product created — $name',
-      'actor_role': actorRole,
-      'related_entity_type': 'PRODUCT',
-      'related_entity_id': productId,
-      'created_at': now,
-    });
-    return _receiveWith(
-      tx,
-      ConsignmentReceiptDraft(
-        consignorId: consignorId,
-        productId: productId,
-        boxes: boxes,
-        unitsPerBox: unitsPerBox,
-        unitCostCentavos: unitCostCentavos,
-        supplierCostBasisQuantity: supplierCostBasisQuantity,
-        packageName: packageName,
-        baseUnitLabel: baseUnitLabel,
-        priceUnitName: priceUnitName,
-        sellingPriceCentavos: sellingPriceCentavos,
-        notes: notes,
-      ),
-    );
-  });
+      return _receiveWith(
+        tx,
+        ConsignmentReceiptDraft(
+          consignorId: consignorId,
+          productId: productId,
+          boxes: boxes,
+          unitsPerBox: unitsPerBox,
+          unitCostCentavos: unitCostCentavos,
+          supplierCostBasisQuantity: supplierCostBasisQuantity,
+          packageName: packageName,
+          baseUnitLabel: baseUnitLabel,
+          priceUnitName: priceUnitName,
+          sellingPriceCentavos: sellingPriceCentavos,
+          notes: notes,
+        ),
+      );
+    }),
+  );
 
   Future<void> _requireActiveCategory(DatabaseExecutor executor, int id) async {
     final category = await executor.query(

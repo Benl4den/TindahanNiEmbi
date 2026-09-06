@@ -66,6 +66,7 @@ class AppShell extends StatefulWidget {
 class _State extends State<AppShell> {
   int selected = 0;
   int salesRevision = 0;
+  int restockCount = 0;
   int? pendingConsignorId;
   int? pendingConsignmentProductId;
   bool railExpanded = true;
@@ -75,11 +76,26 @@ class _State extends State<AppShell> {
   void initState() {
     super.initState();
     AppRefreshController.instance.addListener(_dataChanged);
+    _refreshRestockCount();
   }
 
   void _dataChanged() {
     if (mounted) {
       setState(() {});
+      _refreshRestockCount();
+    }
+  }
+
+  Future<void> _refreshRestockCount() async {
+    try {
+      final count = (await OperationsRepository(
+        widget.database,
+      ).restock()).length;
+      if (mounted && count != restockCount) {
+        setState(() => restockCount = count);
+      }
+    } catch (_) {
+      // Keep navigation usable if the indicator query cannot be loaded.
     }
   }
 
@@ -101,37 +117,53 @@ class _State extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final bodyDestinations = const [
-      NavigationDestination(icon: Icon(Icons.point_of_sale), label: 'Sales'),
-      NavigationDestination(
+    final bodyDestinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.point_of_sale),
+        label: 'Sales',
+      ),
+      const NavigationDestination(
         icon: Icon(Icons.icecream_outlined),
         label: 'Managed Brands',
       ),
-      NavigationDestination(
+      const NavigationDestination(
         icon: Icon(Icons.handshake_outlined),
         label: 'Consignment',
       ),
-      NavigationDestination(
+      const NavigationDestination(
         icon: Icon(Icons.inventory_2_outlined),
         label: 'Inventory',
       ),
       NavigationDestination(
-        icon: Icon(Icons.add_shopping_cart),
+        icon: Badge(
+          isLabelVisible: restockCount > 0,
+          label: Text('$restockCount'),
+          child: const Icon(Icons.add_shopping_cart),
+        ),
         label: 'Restock',
       ),
-      NavigationDestination(icon: Icon(Icons.inventory), label: 'Products'),
-      NavigationDestination(
+      const NavigationDestination(
+        icon: Icon(Icons.inventory),
+        label: 'Products',
+      ),
+      const NavigationDestination(
         icon: Icon(Icons.people_alt_outlined),
         label: 'UTANG',
       ),
-      NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Expenses'),
-      NavigationDestination(icon: Icon(Icons.today), label: 'Daily Closing'),
-      NavigationDestination(
+      const NavigationDestination(
+        icon: Icon(Icons.receipt_long),
+        label: 'Expenses',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.today),
+        label: 'Daily Closing',
+      ),
+      const NavigationDestination(
         icon: Icon(Icons.assessment_outlined),
         label: 'Reports',
       ),
-      NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
-      NavigationDestination(
+      const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
+      const NavigationDestination(
         icon: Icon(Icons.history),
         label: 'Transaction History',
       ),

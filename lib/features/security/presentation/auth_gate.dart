@@ -72,7 +72,12 @@ class _State extends State<AuthGate> {
       if (setup) {
         if (pin.text != confirm.text) throw ArgumentError();
         await widget.auth.setPin(UserRole.owner, pin.text);
-        if (mounted) setState(() => role = UserRole.owner);
+        if (mounted) {
+          setState(() {
+            configured = Future.value(true);
+            role = UserRole.owner;
+          });
+        }
       } else {
         final found = await widget.auth.verify(
           pin.text,
@@ -136,6 +141,7 @@ class _State extends State<AuthGate> {
 
   void _lock() => setState(() {
     role = null;
+    configured = widget.auth.hasOwner;
     selectedStaff = null;
     failedAttempts = 0;
     error = null;
