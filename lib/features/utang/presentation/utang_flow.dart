@@ -14,12 +14,14 @@ import '../../../repositories/payment_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/correction_repository.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/app_refresh_controller.dart';
 import '../../payments/presentation/payment_screen.dart';
 import '../../../repositories/utang_repository.dart';
 import '../../customers/presentation/customer_form_screen.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'utang_customer_card.dart';
 import '../../../widgets/app_search_field.dart';
+import '../../../widgets/app_alerts.dart';
 
 class UtangCustomerScreen extends StatefulWidget {
   const UtangCustomerScreen({
@@ -47,6 +49,17 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
   void initState() {
     super.initState();
     reload();
+    AppRefreshController.instance.addListener(_refreshFromChange);
+  }
+
+  void _refreshFromChange() {
+    if (mounted) setState(reload);
+  }
+
+  @override
+  void dispose() {
+    AppRefreshController.instance.removeListener(_refreshFromChange);
+    super.dispose();
   }
 
   void reload() {
@@ -539,6 +552,14 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
             .showSnackBar(const SnackBar(content: Text('UTANG sale saved.')));
         Navigator.pop(context, true);
       }
+    } catch (error) {
+      if (mounted) {
+        await showFriendlyError(
+          context,
+          title: 'Could Not Complete UTANG Sale',
+          message: transactionFailureMessage(error),
+        );
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -622,6 +643,17 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
   void initState() {
     super.initState();
     reload();
+    AppRefreshController.instance.addListener(_refreshDetails);
+  }
+
+  void _refreshDetails() {
+    if (mounted) setState(reload);
+  }
+
+  @override
+  void dispose() {
+    AppRefreshController.instance.removeListener(_refreshDetails);
+    super.dispose();
   }
 
   void reload() => data = widget.customers.details(widget.customerId);
@@ -768,69 +800,84 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 ),
               )
             else
-              ...entries.map(
-                (e) => Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: CircleAvatar(
-                      child: Icon(
-                        e.type.startsWith('UTANG')
-                            ? Icons.receipt_long
-                            : Icons.payments,
-                      ),
-                    ),
+              ..._groupByDay(entries).entries.map(
+                (group) => Card(
+                  child: ExpansionTile(
+                    initiallyExpanded: true,
                     title: Text(
-                      e.type.startsWith('UTANG')
-                          ? MaterialLocalizations.of(context)
-                                .formatMediumDate(e.occurredAt.toLocal())
-                          : 'Payment',
+                      MaterialLocalizations.of(context).formatMediumDate(
+                        group.value.first.occurredAt.toLocal(),
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     subtitle: Text(
-                      '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
-                      '${e.description == null ? '' : ' • ${e.description}'}\n'
-                      '${e.itemCount == null ? '' : '${e.itemCount} items'}',
+                      '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
                     ),
-                    trailing: e.type == 'UTANG'
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '+${_money(e.amountCentavos.abs())}',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade800,
-                                ),
+                    children: group.value
+                        .map(
+                          (e) => ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            leading: CircleAvatar(
+                              child: Icon(
+                                e.type.startsWith('UTANG')
+                                    ? Icons.receipt_long
+                                    : Icons.payments,
                               ),
-                              const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'View Details',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
+                            ),
+                            title: Text(
+                              e.type.startsWith('UTANG') ? 'UTANG' : 'Payment',
+                            ),
+                            subtitle: Text(
+                              '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
+                              '${e.description == null ? '' : ' • ${e.description}'}\n'
+                              '${e.itemCount == null ? '' : '${e.itemCount} items'}',
+                            ),
+                            trailing: e.type == 'UTANG'
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '+${_money(e.amountCentavos.abs())}',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange.shade800,
+                                        ),
+                                      ),
+                                      const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'View Details',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Icon(Icons.chevron_right),
+                                        ],
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    '-${_money(e.amountCentavos.abs())}',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  Icon(Icons.chevron_right),
-                                ],
-                              ),
-                            ],
-                          )
-                        : Text(
-                            '-${_money(e.amountCentavos.abs())}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            onTap:
+                                e.type == 'UTANG' &&
+                                    e.utangTransactionId != null
+                                ? () => _showDetails(d, e)
+                                : e.type == 'PAYMENT' &&
+                                      e.paymentId != null &&
+                                      widget.reversals != null
+                                ? () => _showPaymentDetails(e, d.customer)
+                                : null,
                           ),
-                    onTap: e.type == 'UTANG' && e.utangTransactionId != null
-                        ? () => _showDetails(d, e)
-                        : e.type == 'PAYMENT' &&
-                              e.paymentId != null &&
-                              widget.reversals != null
-                        ? () => _showPaymentDetails(e, d.customer)
-                        : null,
+                        )
+                        .toList(),
                   ),
                 ),
               ),
@@ -840,6 +887,18 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
     ),
   );
   String _money(int c) => '₱${(c / 100).toStringAsFixed(2)}';
+  Map<String, List<CustomerLedgerEntry>> _groupByDay(
+    List<CustomerLedgerEntry> entries,
+  ) {
+    final groups = <String, List<CustomerLedgerEntry>>{};
+    for (final entry in entries) {
+      final day = entry.occurredAt.toLocal();
+      final key = '${day.year}-${day.month}-${day.day}';
+      groups.putIfAbsent(key, () => []).add(entry);
+    }
+    return groups;
+  }
+
   String _date(DateTime d) =>
       '${MaterialLocalizations.of(context).formatMediumDate(d)} • ${TimeOfDay.fromDateTime(d).format(context)}';
   Future<void> _showDetails(

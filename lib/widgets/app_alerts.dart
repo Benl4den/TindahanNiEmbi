@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
 
+String transactionFailureMessage(Object error) {
+  final raw = error.toString().replaceFirst(
+    RegExp(r'^[A-Za-z]+Exception:\s*'),
+    '',
+  );
+  if (raw.contains('Not enough') || raw.contains('INSUFFICIENT_STOCK')) {
+    return 'There is not enough stock for the selected quantity. $raw';
+  }
+  if (raw.contains('selling option')) return raw;
+  if (raw.contains('STALE_PRODUCT_QUANTITY')) {
+    return 'Inventory changed while the sale was being saved. Refresh and try once more.';
+  }
+  return 'The transaction could not be saved. Your cart is safe. Details: $raw';
+}
+
 Future<void> showFriendlyError(
   BuildContext context, {
   required String title,

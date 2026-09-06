@@ -123,6 +123,32 @@ void main() {
     expect((await consignment.summary()).inventoryValueCentavos, 7500);
   });
 
+  test('zero-cost consignment can be sold by Cash and UTANG', () async {
+    await receive(units: 4, cost: 0, sell: 300);
+
+    await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: product.id, quantity: 1)]);
+    final customer = await SqliteCustomerRepository(db)
+        .create(const CustomerDraft(fullName: 'Maria'));
+    await UtangRepository(db).save(
+      UtangDraft(
+        customerId: customer.id,
+        items: [UtangItemDraft(productId: product.id, quantity: 1)],
+      ),
+    );
+
+    expect((await db.query('consignment_allocations')), hasLength(2));
+    expect((await db.query('consignor_ledger_entries')), isEmpty);
+    expect(
+      (await db.query(
+        'products',
+        where: 'id=?',
+        whereArgs: [product.id],
+      )).single['current_quantity'],
+      2,
+    );
+  });
+
   test(
     'V6 installs reusable groups and Selecta shares product stock truth',
     () async {
@@ -215,6 +241,11 @@ void main() {
       companies = await consignment.companyCards();
       expect(companies.single['product_count'], 0);
       expect(await consignment.productCardsForConsignor(consignor), isEmpty);
+      expect(await consignment.productCards(), isEmpty);
+      expect(
+        await consignment.archivedProductCardsForConsignor(consignor),
+        hasLength(1),
+      );
     },
   );
 

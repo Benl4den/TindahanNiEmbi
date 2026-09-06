@@ -67,6 +67,7 @@ class _State extends State<AppShell> {
   int selected = 0;
   int salesRevision = 0;
   int? pendingConsignorId;
+  int? pendingConsignmentProductId;
   bool railExpanded = true;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
 
@@ -90,6 +91,8 @@ class _State extends State<AppShell> {
 
   void _select(int destination) {
     setState(() {
+      pendingConsignorId = null;
+      pendingConsignmentProductId = null;
       selected = destination;
       if (destination == 0) salesRevision++;
     });
@@ -240,6 +243,7 @@ class _State extends State<AppShell> {
       categories: SqliteCategoryRepository(widget.database),
       photoService: LocalProductPhotoService(),
       initialConsignorId: pendingConsignorId,
+      initialReceiveProductId: pendingConsignmentProductId,
     ),
     3 => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
@@ -250,8 +254,9 @@ class _State extends State<AppShell> {
           ? RestockScreen(
               operations: OperationsRepository(widget.database),
               inventory: InventoryRepository(widget.database, actorRole: role),
-              openConsignment: (consignorId) => setState(() {
+              openConsignment: (consignorId, productId) => setState(() {
                 pendingConsignorId = consignorId;
+                pendingConsignmentProductId = productId;
                 selected = 2;
               }),
             )
@@ -509,6 +514,7 @@ class _State extends State<AppShell> {
               categories: SqliteCategoryRepository(widget.database),
               photoService: LocalProductPhotoService(),
               initialConsignorId: pendingConsignorId,
+              initialReceiveProductId: pendingConsignmentProductId,
             ),
             action: null,
           ),
@@ -522,10 +528,11 @@ class _State extends State<AppShell> {
                   widget.database,
                   actorRole: role,
                 ),
-                openConsignment: (consignorId) {
+                openConsignment: (consignorId, productId) {
                   Navigator.pop(context);
                   setState(() {
                     pendingConsignorId = consignorId;
+                    pendingConsignmentProductId = productId;
                     selected = 2;
                   });
                 },
@@ -796,12 +803,12 @@ class _State extends State<AppShell> {
         child: Row(
           children: [
             ActionChip(
-              label: Text('Low Stock ${s.lowStock}'),
+              label: Text('Low Stock (${s.lowStock})'),
               onPressed: () => setState(() => selected = 3),
             ),
             const SizedBox(width: 8),
             ActionChip(
-              label: Text('Out of Stock ${s.outOfStock}'),
+              label: Text('Out of Stock (${s.outOfStock})'),
               onPressed: () => setState(() => selected = 3),
             ),
             const SizedBox(width: 8),

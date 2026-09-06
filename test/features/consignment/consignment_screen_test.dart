@@ -17,6 +17,7 @@ class _Repo extends ConsignmentRepository {
   int payable = 0, receipts = 0;
   int? lastReceiptConsignorId;
   final companyBalances = <int, int>{};
+  final companyProducts = <Map<String, Object?>>[];
   bool failCreate = false;
   int? lastDefaultCategoryId;
   ConsignmentReceiptDraft? lastReceipt;
@@ -54,7 +55,7 @@ class _Repo extends ConsignmentRepository {
         'name': p.name,
         'contact_details': p.contactDetails,
         'default_category_id': p.defaultCategoryId,
-        'product_count': receipts == 0 ? 0 : 1,
+        'product_count': companyProducts.length,
         'payable_centavos': payable,
       },
   ];
@@ -63,7 +64,7 @@ class _Repo extends ConsignmentRepository {
   @override
   Future<List<Map<String, Object?>>> productCardsForConsignor(
     int consignorId,
-  ) async => [];
+  ) async => companyProducts;
   @override
   Future<List<Consignor>> consignors({bool activeOnly = true}) async => parties;
   @override
@@ -326,6 +327,34 @@ void main() {
     expect(repo.lastReceipt!.totalUnits, 2);
     expect(repo.lastReceipt!.unitsPerBox, 1);
     expect(repo.lastReceipt!.sellingPriceCentavos, 200);
+  });
+
+  testWidgets('Receive Again opens delivery for the company product', (
+    t,
+  ) async {
+    repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
+    repo.receipts = 1;
+    repo.companyProducts.add({
+      'product_id': 1,
+      'name': 'Juice',
+      'consignor_name': 'ABC',
+      'received': 1,
+      'remaining': 1,
+      'sold': 0,
+      'base_unit_label': 'piece',
+      'selling_price_centavos': 200,
+      'payable_centavos': 0,
+    });
+    await pump(t);
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.drag(find.byType(ListView), const Offset(0, -500));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Receive Again'));
+    await t.pumpAndSettle();
+    expect(find.text('Receive Consignment'), findsOneWidget);
+    expect(find.text('Existing Product'), findsOneWidget);
+    expect(find.text('Juice'), findsWidgets);
   });
 
   testWidgets('another company payable does not enable remittance', (t) async {

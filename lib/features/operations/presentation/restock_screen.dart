@@ -18,7 +18,7 @@ class RestockScreen extends StatefulWidget {
   });
   final OperationsRepository operations;
   final InventoryRepository inventory;
-  final ValueChanged<int?> openConsignment;
+  final void Function(int? consignorId, int? productId) openConsignment;
   @override
   State<RestockScreen> createState() => _State();
 }
@@ -41,7 +41,7 @@ class _State extends State<RestockScreen> {
 
   Future<void> stock(RestockItem item) async {
     if (item.isConsignment) {
-      widget.openConsignment(item.consignorId);
+      widget.openConsignment(item.consignorId, item.product.id);
       return;
     }
     final saved = await showPackageStockInDialog(
@@ -83,13 +83,13 @@ class _State extends State<RestockScreen> {
                       Icons.add_shopping_cart,
                     ),
                     _metric(
-                      'Low Stock',
+                      'Low Stock ($low)',
                       low,
                       Icons.warning_amber,
                       Colors.orange.shade800,
                     ),
                     _metric(
-                      'Out of Stock',
+                      'Out of Stock ($out)',
                       out,
                       Icons.error_outline,
                       Colors.red.shade700,

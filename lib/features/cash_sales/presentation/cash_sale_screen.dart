@@ -436,12 +436,12 @@ class _State extends State<CashSaleScreen> {
           ),
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         await showFriendlyError(
           context,
           title: 'Could Not Complete Sale',
-          message: 'Your cart has been kept. Check the available stock and try again.',
+          message: transactionFailureMessage(error),
         );
       }
     } finally {

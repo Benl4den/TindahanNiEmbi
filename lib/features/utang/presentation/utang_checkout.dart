@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_alerts.dart';
+
 import '../../../models/customer.dart';
 import '../../../models/product.dart';
 import '../../../models/utang_draft.dart';
@@ -180,14 +182,10 @@ class _ReviewState extends State<UtangCheckoutReview> {
         UtangDraft(customerId: widget.customer.id, items: widget.items),
       );
       if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'The UTANG sale could not be completed. Your cart has been kept. Please try again.',
-            ),
-          ),
+          SnackBar(content: Text(transactionFailureMessage(error))),
         );
       }
     } finally {

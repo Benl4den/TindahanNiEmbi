@@ -610,8 +610,15 @@ class ConsignmentRepository {
     [consignorId],
   );
 
+  Future<List<Map<String, Object?>>> archivedProductCardsForConsignor(
+    int consignorId,
+  ) => db.rawQuery(
+    '''SELECT b.product_id,p.name,p.photo_path,p.base_unit_label,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.consignor_id=? AND p.is_archived=1 GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
+    [consignorId],
+  );
+
   Future<List<Map<String, Object?>>> productCards() => db.rawQuery(
-    '''SELECT b.product_id,p.name,p.photo_path,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
+    '''SELECT b.product_id,p.name,p.photo_path,c.name consignor_name,SUM(b.units_received) received,SUM(b.units_allocated) sold,SUM(b.units_received-b.units_allocated-b.units_returned) remaining,MAX(b.selling_price_centavos) selling_price_centavos,SUM(b.units_allocated*b.unit_cost_centavos) payable_centavos,SUM(b.units_allocated*(b.selling_price_centavos-b.unit_cost_centavos)) margin_centavos FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE p.is_archived=0 GROUP BY b.product_id,b.consignor_id ORDER BY p.name COLLATE NOCASE''',
   );
   Future<List<Map<String, Object?>>> history({int? consignorId}) => db.rawQuery(
     '''SELECT l.*,c.name consignor_name FROM consignor_ledger_entries l JOIN consignors c ON c.id=l.consignor_id ${consignorId == null ? '' : 'WHERE l.consignor_id=?'} ORDER BY l.occurred_at DESC,l.id DESC''',

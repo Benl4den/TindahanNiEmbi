@@ -106,9 +106,9 @@ void main() {
         ),
       );
 
-      final item = (await OperationsRepository(
-        db,
-      ).restock()).where((x) => x.product.id == p.id).single;
+      final item = (await OperationsRepository(db).restock(filter: 'ALL'))
+          .where((x) => x.product.id == p.id)
+          .single;
       expect(item.isConsignment, isTrue);
       expect(item.consignorId, cid);
       expect(item.consignorName, 'ABC');

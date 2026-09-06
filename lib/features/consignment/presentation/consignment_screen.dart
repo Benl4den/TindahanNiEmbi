@@ -10,7 +10,7 @@ import '../../../repositories/consignment_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../services/product_photo_service.dart';
-import '../../products/presentation/product_form_screen.dart';
+import '../../../widgets/product_image.dart';
 import '../../../widgets/summary_card.dart';
 
 class ConsignmentScreen extends StatefulWidget {
@@ -21,12 +21,14 @@ class ConsignmentScreen extends StatefulWidget {
     required this.categories,
     required this.photoService,
     this.initialConsignorId,
+    this.initialReceiveProductId,
   });
   final ConsignmentRepository repository;
   final ProductRepository products;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
   final int? initialConsignorId;
+  final int? initialReceiveProductId;
   @override
   State<ConsignmentScreen> createState() => _ConsignmentScreenState();
 }
@@ -310,49 +312,109 @@ class _NewCompanyProductFlow extends StatefulWidget {
 }
 
 class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
-  ProductDraft? draft;
-  final count = TextEditingController(),
+  final name = TextEditingController(),
+      count = TextEditingController(),
       cost = TextEditingController(),
-      price = TextEditingController();
-  bool saving = false;
+      price = TextEditingController(),
+      minimum = TextEditingController(text: '1');
+  late int? categoryId;
+  String photoPath = '';
+  bool saving = false, choosingPhoto = false, changeCategory = false;
   String? error;
 
   @override
+  void initState() {
+    super.initState();
+    categoryId =
+        widget.initialCategoryId ??
+        (widget.categories.isEmpty ? null : widget.categories.first.id);
+  }
+
+  @override
   void dispose() {
+    name.dispose();
     count.dispose();
     cost.dispose();
     price.dispose();
+    minimum.dispose();
     super.dispose();
   }
 
-  void _continue(ProductDraft value) {
-    final option = value.unitConfiguration!.sellingOptions.singleWhere(
-      (x) => x.isDefault,
-    );
-    setState(() {
-      draft = value;
-      count.text = '1';
-      cost.text = (value.purchasePriceCentavos / 100).toStringAsFixed(2);
-      price.text = (option.priceCentavos / 100).toStringAsFixed(2);
-    });
+  Future<void> _choosePhoto({required bool gallery}) async {
+    setState(() => choosingPhoto = true);
+    try {
+      final selected =
+          gallery && widget.photoService is ProductGalleryPhotoService
+          ? await (widget.photoService as ProductGalleryPhotoService)
+                .chooseFromGallery()
+          : await widget.photoService.capture();
+      if (mounted && selected != null) setState(() => photoPath = selected);
+    } catch (_) {
+      if (mounted) {
+        setState(() => error = 'Could not add the photo. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => choosingPhoto = false);
+    }
   }
 
   Future<void> _save() async {
-    final value = draft!;
-    final option = value.unitConfiguration!.sellingOptions.singleWhere(
-      (x) => x.isDefault,
-    );
+    final productName = name.text.trim();
     final quantity = int.tryParse(numericInput(count.text)) ?? 0;
     final supplierCost =
         ((double.tryParse(numericInput(cost.text)) ?? -1) * 100).round();
     final sellingPrice =
         ((double.tryParse(numericInput(price.text)) ?? -1) * 100).round();
-    if (quantity <= 0 || supplierCost < 0 || sellingPrice <= 0) {
+    final lowStock = int.tryParse(numericInput(minimum.text)) ?? -1;
+    if (productName.isEmpty || categoryId == null || photoPath.isEmpty) {
+      setState(() => error = 'Add the product name, category, and photo.');
+      return;
+    }
+    if (quantity <= 0 ||
+        supplierCost < 0 ||
+        sellingPrice <= 0 ||
+        lowStock < 0) {
       setState(
-        () => error = 'Enter a quantity, supplier cost, and selling price greater than zero.',
+        () => error = 'Enter a valid quantity, supplier cost, selling price, and low-stock level.',
       );
       return;
     }
+    final duplicate = (await widget.products.searchActive(productName)).any(
+      (product) =>
+          product.name.trim().toLowerCase() == productName.toLowerCase(),
+    );
+    if (duplicate) {
+      if (mounted) {
+        setState(
+          () => error = 'A product with this name already exists. Use Select Existing Product instead.',
+        );
+      }
+      return;
+    }
+    final units = ProductUnitConfiguration(
+      baseUnit: BaseUnit.piece,
+      purchasePackages: const [
+        PurchasePackageDraft(name: 'Piece', baseQuantity: 1, isDefault: true),
+      ],
+      sellingOptions: [
+        SellingOptionDraft(
+          name: 'Piece',
+          baseQuantity: 1,
+          priceCentavos: sellingPrice,
+          isDefault: true,
+        ),
+      ],
+    );
+    final value = ProductDraft(
+      categoryId: categoryId!,
+      name: productName,
+      photoPath: photoPath,
+      purchasePriceCentavos: supplierCost,
+      sellingPriceCentavos: sellingPrice,
+      startingQuantity: 0,
+      minimumStockLevel: lowStock,
+      unitConfiguration: units,
+    );
     setState(() {
       saving = true;
       error = null;
@@ -364,10 +426,10 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
         boxes: quantity,
         unitsPerBox: 1,
         unitCostCentavos: supplierCost,
-        supplierCostBasisQuantity: option.baseQuantity,
-        packageName: 'Direct ${value.unitConfiguration!.baseUnit.label}',
-        baseUnitLabel: value.unitConfiguration!.baseUnit.label,
-        priceUnitName: option.name,
+        supplierCostBasisQuantity: 1,
+        packageName: 'Direct piece',
+        baseUnitLabel: 'piece',
+        priceUnitName: 'Piece',
         sellingPriceCentavos: sellingPrice,
       );
       if (mounted) {
@@ -387,31 +449,15 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
 
   @override
   Widget build(BuildContext context) {
-    final value = draft;
-    if (value == null) {
-      return ProductFormScreen(
-        repository: widget.products,
-        photoService: widget.photoService,
-        categories: widget.categories,
-        allowStartingStock: false,
-        closeAfterDraft: false,
-        initialCategoryId: widget.initialCategoryId,
-        categoryInitiallyLocked: widget.initialCategoryId != null,
-        onDraft: _continue,
-      );
-    }
-    final option = value.unitConfiguration!.sellingOptions.singleWhere(
-      (x) => x.isDefault,
-    );
     final quantity = int.tryParse(numericInput(count.text)) ?? 0;
-    final unit = value.unitConfiguration!.baseUnit;
-    final readable = unit == BaseUnit.gram
-        ? '${standardNumber(quantity / 1000)} kg'
-        : unit == BaseUnit.milliliter
-        ? '${standardNumber(quantity / 1000)} L'
-        : '${standardNumber(quantity)} ${unit.label}${quantity == 1 ? '' : 's'}';
+    final supplier = double.tryParse(numericInput(cost.text)) ?? 0;
+    final selling = double.tryParse(numericInput(price.text)) ?? 0;
+    final selectedCategory = widget.categories
+        .where((category) => category.id == categoryId)
+        .map((category) => category.name)
+        .firstOrNull;
     return Scaffold(
-      appBar: AppBar(title: const Text('First Delivery')),
+      appBar: AppBar(title: const Text('Add Consignment Product')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
         child: Center(
@@ -421,22 +467,84 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '${widget.consignor.name} • ${value.name}',
+                  widget.consignor.name,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Add the first delivery now. Product and delivery save together once.',
+                  'Count the delivered pieces. The product and first delivery save together.',
                 ),
                 const SizedBox(height: 20),
+                SizedBox(height: 150, child: ProductImage(path: photoPath)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: choosingPhoto
+                            ? null
+                            : () => _choosePhoto(gallery: false),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Take Photo'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: choosingPhoto
+                            ? null
+                            : () => _choosePhoto(gallery: true),
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Upload Image'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Product Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (!changeCategory && selectedCategory != null)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Category'),
+                    subtitle: Text(selectedCategory),
+                    trailing: TextButton(
+                      onPressed: () => setState(() => changeCategory = true),
+                      child: const Text('Change'),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<int>(
+                    initialValue: categoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: widget.categories
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category.id,
+                            child: Text(category.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setState(() => categoryId = value),
+                  ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: count,
-                  autofocus: true,
                   keyboardType: TextInputType.number,
                   onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'Quantity received (${unit.label})',
-                    border: const OutlineInputBorder(),
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity Received (pieces)',
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -445,10 +553,11 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: InputDecoration(
-                    labelText: 'Supplier cost per ${option.name}',
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Supplier Price per Piece',
                     prefixText: '₱ ',
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -457,15 +566,25 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: InputDecoration(
-                    labelText: 'Selling price per ${option.name}',
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Selling Price per Piece',
                     prefixText: '₱ ',
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: minimum,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Low-Stock Level',
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  '$readable received',
+                  '$quantity pieces • Supplier total: ₱${(quantity * supplier).toStringAsFixed(2)} • Expected profit: ₱${(quantity * (selling - supplier)).toStringAsFixed(2)}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (error != null)
@@ -481,14 +600,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(
-                    saving ? 'Saving…' : 'Save Product & First Delivery',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: saving ? null : () => setState(() => draft = null),
-                  child: const Text('Back to Product Details'),
+                  child: Text(saving ? 'Saving…' : 'Add & Receive Product'),
                 ),
               ],
             ),
@@ -501,6 +613,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
 
 class _ConsignmentScreenState extends State<ConsignmentScreen> {
   int? selectedConsignorId;
+  int? _pendingReceiveProductId;
   int _companyTab = 0;
   late Future<
     ({
@@ -515,17 +628,31 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   void initState() {
     super.initState();
     selectedConsignorId = widget.initialConsignorId;
+    _pendingReceiveProductId = widget.initialReceiveProductId;
     _reload();
+    _scheduleInitialReceive();
   }
 
   @override
   void didUpdateWidget(covariant ConsignmentScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialConsignorId != oldWidget.initialConsignorId &&
-        widget.initialConsignorId != selectedConsignorId) {
-      selectedConsignorId = widget.initialConsignorId;
+    if (widget.initialConsignorId != oldWidget.initialConsignorId ||
+        widget.initialReceiveProductId != oldWidget.initialReceiveProductId) {
+      selectedConsignorId = widget.initialConsignorId ?? selectedConsignorId;
+      _pendingReceiveProductId = widget.initialReceiveProductId;
       _reload();
+      _scheduleInitialReceive();
     }
+  }
+
+  void _scheduleInitialReceive() {
+    if (_pendingReceiveProductId == null || selectedConsignorId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _pendingReceiveProductId == null) return;
+      final productId = _pendingReceiveProductId;
+      _pendingReceiveProductId = null;
+      await _receive(initialProductId: productId);
+    });
   }
 
   void _reload() {
@@ -570,7 +697,10 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     if (saved == true && mounted) setState(_reload);
   }
 
-  Future<void> _receive({bool addProduct = false}) async {
+  Future<void> _receive({
+    bool addProduct = false,
+    int? initialProductId,
+  }) async {
     final companyId = selectedConsignorId;
     if (companyId == null) return;
     final parties = (await widget.repository.consignors())
@@ -647,7 +777,11 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     }
     if (!mounted) return;
     final party = parties.single.id;
-    var product = products.first.id;
+    var product =
+        initialProductId != null &&
+            products.any((p) => p.id == initialProductId)
+        ? initialProductId
+        : products.first.id;
     final configurations = <int, ProductUnitConfiguration>{};
     try {
       for (final item in products) {
@@ -1026,6 +1160,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     String? error;
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (_, setDialog) => AlertDialog(
           title: const Text('Edit Consignor'),
@@ -1237,7 +1372,8 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     subtitle: Text(
-                      '${x['product_count']} products • ${money(x['payable_centavos']! as int)} payable\n'
+                      '${x['product_count']} products • ${money(x['payable_centavos']! as int)} payable'
+                      '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'}\n'
                       'Last receipt: ${_shortDate(x['last_receipt_at'])} • Last remittance: ${_shortDate(x['last_remittance_at'])}',
                     ),
                     isThreeLine: true,
@@ -1268,6 +1404,8 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
             ),
             if (company['contact_details'] != null)
               Text(company['contact_details']! as String),
+            if (company['default_category_name'] != null)
+              Text('Default category: ${company['default_category_name']}'),
             const SizedBox(height: 16),
             Wrap(
               spacing: 12,
@@ -1343,6 +1481,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 ButtonSegment(value: 1, label: Text('Deliveries')),
                 ButtonSegment(value: 2, label: Text('Payable')),
                 ButtonSegment(value: 3, label: Text('Returns')),
+                ButtonSegment(value: 4, label: Text('Archived')),
               ],
               selected: {_companyTab},
               onSelectionChanged: (value) =>
@@ -1357,18 +1496,35 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
             if (_companyTab == 0)
               ...cards.map(
                 (x) => Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(18),
-                    title: Text(
-                      x['name']! as String,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    subtitle: Text(
-                      '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount to Remit: ${money(x['payable_centavos']! as int)}',
-                    ),
-                    isThreeLine: true,
-                    trailing: const Icon(Icons.chevron_right),
+                  child: InkWell(
                     onTap: () => _details(x),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            x['name']! as String,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount to Remit: ${money(x['payable_centavos']! as int)}',
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              onPressed: () => _receive(
+                                initialProductId: x['product_id']! as int,
+                              ),
+                              icon: const Icon(Icons.add_box_outlined),
+                              label: const Text('Receive Again'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1376,6 +1532,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
             if (_companyTab == 2)
               _payableTab(selectedConsignorId!, summary.payableCentavos),
             if (_companyTab == 3) _returnsTab(cards),
+            if (_companyTab == 4) _archivedProductsTab(selectedConsignorId!),
           ],
         );
       },
@@ -1406,12 +1563,14 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           final count = row['package_count'] ?? 1;
           final total = row['units_received']! as int;
           final unit = row['base_unit_label'] as String? ?? 'units';
+          final direct = package.toLowerCase().startsWith('direct ');
+          final totalLabel = _quantity(total, unit);
           return Card(
             child: ListTile(
               leading: const Icon(Icons.local_shipping_outlined),
               title: Text(row['name']! as String),
               subtitle: Text(
-                '$count × $package = ${standardNumber(total)} $unit\n${_shortDate(row['received_at'])}',
+                '${direct ? 'Direct count: $totalLabel' : '$count × $package = $totalLabel'}\n${_shortDate(row['received_at'])}',
               ),
               isThreeLine: true,
               trailing: Text(
@@ -1492,7 +1651,9 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               child: ListTile(
                 leading: const Icon(Icons.assignment_return_outlined),
                 title: Text(x['name']! as String),
-                subtitle: Text('${x['remaining']} units available to return'),
+                subtitle: Text(
+                  '${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)} available to return',
+                ),
                 trailing: OutlinedButton(
                   onPressed: () => _details(x),
                   child: const Text('View / Return'),
@@ -1503,6 +1664,48 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           .toList(),
     );
   }
+
+  Widget _archivedProductsTab(
+    int consignorId,
+  ) => FutureBuilder<List<Map<String, Object?>>>(
+    future: widget.repository.archivedProductCardsForConsignor(consignorId),
+    builder: (_, snapshot) {
+      if (!snapshot.hasData) {
+        return const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
+      final rows = snapshot.data!;
+      if (rows.isEmpty) {
+        return const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: Text('No archived consignment products.')),
+        );
+      }
+      return Column(
+        children: rows
+            .map(
+              (x) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.archive_outlined),
+                  title: Text(x['name']! as String),
+                  subtitle: Text(
+                    'Archived product\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}',
+                  ),
+                  trailing: OutlinedButton(
+                    onPressed: () => _details(x),
+                    child: const Text('View / Return'),
+                  ),
+                  onTap: () => _details(x),
+                  isThreeLine: true,
+                ),
+              ),
+            )
+            .toList(),
+      );
+    },
+  );
 
   String _shortDate(Object? value) => value == null
       ? 'None'

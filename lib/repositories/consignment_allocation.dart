@@ -61,15 +61,20 @@ class ConsignmentAllocation {
         where: 'id=?',
         whereArgs: [batch['id']],
       );
-      await tx.insert('consignor_ledger_entries', {
-        'consignor_id': batch['consignor_id'],
-        'entry_type': 'SALE',
-        'amount_change_centavos': exactPayable,
-        'allocation_id': allocationId,
-        'description': '$take consigned unit(s) sold',
-        'occurred_at': occurredAt,
-        'created_at': occurredAt,
-      });
+      // A supplier may intentionally provide a zero-cost promotional batch.
+      // The ledger forbids zero-value entries, but the stock allocation is
+      // still valid and must not make the entire Cash/UTANG sale fail.
+      if (exactPayable > 0) {
+        await tx.insert('consignor_ledger_entries', {
+          'consignor_id': batch['consignor_id'],
+          'entry_type': 'SALE',
+          'amount_change_centavos': exactPayable,
+          'allocation_id': allocationId,
+          'description': '$take consigned unit(s) sold',
+          'occurred_at': occurredAt,
+          'created_at': occurredAt,
+        });
+      }
       remaining -= take;
       remainingRevenue -= revenue;
     }

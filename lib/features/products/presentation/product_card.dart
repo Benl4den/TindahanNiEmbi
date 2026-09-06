@@ -29,6 +29,21 @@ class ProductCard extends StatelessWidget {
     ProductStockStatus.inStock => AppStrings.inStock,
   };
 
+  String get _stockQuantity {
+    if (product.baseUnitCode == 'GRAM') {
+      return '${_trim(product.currentQuantity / 1000)} kg';
+    }
+    if (product.baseUnitCode == 'MILLILITER' &&
+        product.currentQuantity >= 1000) {
+      return '${_trim(product.currentQuantity / 1000)} L';
+    }
+    return '${standardNumber(product.currentQuantity)} ${product.baseUnitLabel}';
+  }
+
+  String _trim(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(3).replaceFirst(RegExp(r'0+$'), '');
+
   @override
   Widget build(BuildContext context) {
     final warning = product.stockStatus != ProductStockStatus.inStock;
@@ -53,7 +68,7 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}  •  Stock: ${standardNumber(product.currentQuantity)}',
+                    '₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}  •  Stock: $_stockQuantity',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   Text(
