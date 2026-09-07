@@ -19,12 +19,23 @@ String standardMoney(int centavos) {
 }
 
 String productQuantityText(Product product, int quantity) {
-  if (product.baseUnitCode == 'GRAM') {
+  return baseQuantityText(
+    quantity,
+    baseUnitCode: product.baseUnitCode,
+    baseUnitLabel: product.baseUnitLabel,
+  );
+}
+
+String baseQuantityText(
+  int quantity, {
+  required String baseUnitCode,
+  required String baseUnitLabel,
+}) {
+  if (baseUnitCode == 'GRAM') {
     return '${standardNumber(quantity / 1000)} kg';
   }
-  if (product.baseUnitCode == 'MILLILITER') {
+  if (baseUnitCode == 'MILLILITER') {
     return '${standardNumber(quantity / 1000)} L';
   }
-  final unit = product.baseUnitLabel;
-  return '${standardNumber(quantity)} $unit${quantity == 1 ? '' : 's'}';
+  return '${standardNumber(quantity)} $baseUnitLabel${quantity == 1 ? '' : 's'}';
 }

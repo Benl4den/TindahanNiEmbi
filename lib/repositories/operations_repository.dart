@@ -120,7 +120,15 @@ class OperationsRepository {
       '''SELECT SUM(CASE WHEN current_quantity>0 AND current_quantity<=minimum_stock_level THEN 1 ELSE 0 END) low,SUM(CASE WHEN current_quantity=0 THEN 1 ELSE 0 END) out FROM products WHERE is_archived=0''',
     )).single;
     final top = await db.rawQuery(
-      '''SELECT name,SUM(quantity) quantity FROM(SELECT i.product_name_snapshot name,COALESCE(i.total_base_quantity,i.quantity) quantity FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<? UNION ALL SELECT i.product_name_snapshot,COALESCE(i.total_base_quantity,i.quantity) FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id WHERE u.status='POSTED' AND u.occurred_at>=? AND u.occurred_at<?) GROUP BY name ORDER BY quantity DESC LIMIT 5''',
+      '''SELECT sold.name,SUM(sold.quantity) quantity,p.base_unit_code,p.base_unit_label
+      FROM(SELECT i.product_id,i.product_name_snapshot name,COALESCE(i.total_base_quantity,i.quantity) quantity
+      FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
+      WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?
+      UNION ALL SELECT i.product_id,i.product_name_snapshot,COALESCE(i.total_base_quantity,i.quantity)
+      FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id
+      WHERE u.status='POSTED' AND u.occurred_at>=? AND u.occurred_at<?) sold
+      JOIN products p ON p.id=sold.product_id GROUP BY sold.product_id,sold.name
+      ORDER BY quantity DESC LIMIT 5''',
       [start, end, start, end],
     );
     return DailyClosingSummary(

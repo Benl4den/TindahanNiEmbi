@@ -741,6 +741,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                           : () async {
                               final ok = await showDialog<bool>(
                                 context: context,
+                                barrierDismissible: false,
                                 builder: (_) => Dialog(
                                   insetPadding: const EdgeInsets.all(16),
                                   clipBehavior: Clip.antiAlias,

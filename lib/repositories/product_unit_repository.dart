@@ -29,6 +29,16 @@ class ProductUnitRepository {
         orderBy: 'is_default DESC,name COLLATE NOCASE',
       )).map(SellingOption.fromMap).toList(growable: false);
 
+  Future<int?> latestPackageCost(int productId, String packageName) async {
+    final rows = await db.rawQuery(
+      '''SELECT unit_cost_centavos FROM inventory_movements
+      WHERE product_id=? AND entered_unit_snapshot=? AND unit_cost_centavos IS NOT NULL
+      ORDER BY id DESC LIMIT 1''',
+      [productId, packageName],
+    );
+    return rows.isEmpty ? null : rows.single['unit_cost_centavos'] as int?;
+  }
+
   Future<void> configure({
     required int productId,
     required BaseUnit baseUnit,

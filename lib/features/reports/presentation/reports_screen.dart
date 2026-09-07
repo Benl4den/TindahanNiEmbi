@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
 import '../../../repositories/reports_repository.dart';
 import '../../../widgets/app_state_view.dart';
 
@@ -56,7 +57,7 @@ class ReportsScreen extends StatelessWidget {
                   child: ListTile(
                     title: Text(r['name']! as String),
                     subtitle: Text(
-                      'Stock: ${r['current_quantity']} • Cost: ₱${((r['purchase_price_centavos']! as int) / 100).toStringAsFixed(2)} • Selling: ₱${((r['selling_price_centavos']! as int) / 100).toStringAsFixed(2)}',
+                      'Stock: ${_quantity(r, 'current_quantity')} • Cost: ₱${((r['purchase_price_centavos']! as int) / 100).toStringAsFixed(2)} • Selling: ₱${((r['selling_price_centavos']! as int) / 100).toStringAsFixed(2)}',
                     ),
                     trailing: Text(
                       '₱${((r['stock_value']! as int) / 100).toStringAsFixed(2)}',
@@ -116,7 +117,7 @@ class ReportsScreen extends StatelessWidget {
             ...?(f.data?.map(
               (r) => ListTile(
                 title: Text(r['name']! as String),
-                trailing: Text('${r['quantity']} sold'),
+                trailing: Text('${_quantity(r, 'quantity')} sold'),
               ),
             )),
           ],
@@ -130,6 +131,11 @@ class ReportsScreen extends StatelessWidget {
       title: Text(x),
       trailing: Text('₱${(v / 100).toStringAsFixed(2)}'),
     ),
+  );
+  String _quantity(Map<String, Object?> row, String key) => baseQuantityText(
+    row[key]! as int,
+    baseUnitCode: row['base_unit_code'] as String? ?? 'PIECE',
+    baseUnitLabel: row['base_unit_label'] as String? ?? 'piece',
   );
   Widget _expenses(BuildContext c) => _ExpenseReports(repository: repository);
   Widget _open(
@@ -329,7 +335,13 @@ class _RowsScreen extends StatelessWidget {
                           .where(
                             (e) => !const {'name', 'full_name'}.contains(e.key),
                           )
-                          .map((e) => '${_rowLabel(e.key)}: ${e.value}')
+                          .where(
+                            (e) => !const {
+                              'base_unit_code',
+                              'base_unit_label',
+                            }.contains(e.key),
+                          )
+                          .map((e) => '${_rowLabel(e.key)}: ${_value(row, e)}')
                           .join('\n'),
                     ),
                   ),
@@ -350,4 +362,13 @@ class _RowsScreen extends StatelessWidget {
     'type' || 'entry_type' => 'Type',
     _ => key.replaceAll('_', ' '),
   };
+
+  Object? _value(Map<String, Object?> row, MapEntry<String, Object?> entry) {
+    if (entry.key == 'quantity' || entry.key == 'quantity_change') {
+      final value = entry.value! as int;
+      final sign = value < 0 ? '-' : '';
+      return '$sign${baseQuantityText(value.abs(), baseUnitCode: row['base_unit_code'] as String? ?? 'PIECE', baseUnitLabel: row['base_unit_label'] as String? ?? 'piece')}';
+    }
+    return entry.value;
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/product.dart';
 import '../../../models/category.dart';
 import '../../../repositories/category_repository.dart';
@@ -83,6 +84,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => Dialog(
         insetPadding: const EdgeInsets.all(16),
         clipBehavior: Clip.antiAlias,
@@ -109,7 +111,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       builder: (context) => AlertDialog(
         title: const Text(AppStrings.archiveProduct),
         content: Text(
-          '${product.name}\n\n${product.currentQuantity > 0 ? 'Warning: ${product.currentQuantity} units remain in stock.\n\n' : ''}${AppStrings.archiveProductMessage}',
+          '${product.name}\n\n${product.currentQuantity > 0 ? 'Warning: ${productQuantityText(product, product.currentQuantity)} remain in stock.\n\n' : ''}${AppStrings.archiveProductMessage}',
         ),
         actions: [
           TextButton(
@@ -308,8 +310,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
             Text(
               'Estimated Unit Margin: ₱${((product.sellingPriceCentavos - product.purchasePriceCentavos) / 100).toStringAsFixed(2)}',
             ),
-            Text('Current Stock: ${product.currentQuantity}'),
-            Text('Minimum Stock: ${product.minimumStockLevel}'),
+            Text(
+              'Current Stock: ${productQuantityText(product, product.currentQuantity)}',
+            ),
+            Text(
+              'Minimum Stock: ${productQuantityText(product, product.minimumStockLevel)}',
+            ),
             Text('Status: ${product.stockStatus.name}'),
             const SizedBox(height: 12),
             const Text(

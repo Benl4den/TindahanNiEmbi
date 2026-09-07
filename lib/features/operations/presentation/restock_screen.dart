@@ -218,7 +218,7 @@ class _State extends State<RestockScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         subtitle: Text(
-                          'Current: ${standardNumber(x.product.currentQuantity)}   Minimum: ${standardNumber(x.product.minimumStockLevel)}\nSuggested Restock: +${standardNumber(x.suggested)}${x.isConsignment ? ' • ${x.consignorName ?? 'Consignment'}' : ''}\n${out
+                          'Current: ${productQuantityText(x.product, x.product.currentQuantity)}   Minimum: ${productQuantityText(x.product, x.product.minimumStockLevel)}\nSuggested Restock: +${productQuantityText(x.product, x.suggested)}${x.isConsignment ? ' • ${x.consignorName ?? 'Consignment'}' : ''}\n${out
                               ? 'OUT OF STOCK'
                               : low
                               ? 'LOW STOCK'

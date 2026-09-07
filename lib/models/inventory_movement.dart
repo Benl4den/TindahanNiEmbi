@@ -2,6 +2,8 @@ class InventoryMovement {
   const InventoryMovement({
     required this.id,
     required this.productName,
+    required this.baseUnitCode,
+    required this.baseUnitLabel,
     required this.type,
     required this.quantityChange,
     required this.quantityBefore,
@@ -11,6 +13,8 @@ class InventoryMovement {
   });
   final int id;
   final String productName;
+  final String baseUnitCode;
+  final String baseUnitLabel;
   final String type;
   final int quantityChange;
   final int quantityBefore;
@@ -22,6 +26,8 @@ class InventoryMovement {
       InventoryMovement(
         id: map['id']! as int,
         productName: map['product_name']! as String,
+        baseUnitCode: map['base_unit_code'] as String? ?? 'PIECE',
+        baseUnitLabel: map['base_unit_label'] as String? ?? 'piece',
         type: map['type']! as String,
         quantityChange: map['quantity_change']! as int,
         quantityBefore: map['quantity_before']! as int,

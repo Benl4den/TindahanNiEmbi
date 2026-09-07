@@ -107,6 +107,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     Product? created;
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => Dialog(
         insetPadding: const EdgeInsets.all(16),
         clipBehavior: Clip.antiAlias,
@@ -134,6 +135,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     if (!mounted) return;
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => Dialog(
         insetPadding: const EdgeInsets.all(16),
         clipBehavior: Clip.antiAlias,

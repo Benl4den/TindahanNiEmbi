@@ -148,7 +148,11 @@ class InventoryRepository {
 
   Future<List<InventoryMovement>> history() async {
     final rows = await _database.rawQuery(
-      '''SELECT m.id, p.name product_name, t.type, m.quantity_change, m.quantity_before, m.quantity_after, t.notes, t.occurred_at FROM inventory_movements m JOIN products p ON p.id=m.product_id JOIN inventory_transactions t ON t.id=m.inventory_transaction_id ORDER BY t.occurred_at DESC, m.id DESC''',
+      '''SELECT m.id, p.name product_name,p.base_unit_code,p.base_unit_label,
+      t.type,m.quantity_change,m.quantity_before,m.quantity_after,t.notes,t.occurred_at
+      FROM inventory_movements m JOIN products p ON p.id=m.product_id
+      JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+      ORDER BY t.occurred_at DESC,m.id DESC''',
     );
     return rows.map(InventoryMovement.fromMap).toList(growable: false);
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
 import '../../../repositories/operations_repository.dart';
 
 class DailyClosingScreen extends StatefulWidget {
@@ -144,7 +145,7 @@ class _State extends State<DailyClosingScreen> {
                   leading: CircleAvatar(child: Text('${entry.$1 + 1}')),
                   title: Text(entry.$2['name']! as String),
                   trailing: Text(
-                    '${entry.$2['quantity']} sold',
+                    '${_soldQuantity(entry.$2)} sold',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -318,24 +319,60 @@ class _State extends State<DailyClosingScreen> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (c) => AlertDialog(
-        title: Text(MaterialLocalizations.of(c).formatFullDate(day)),
+        icon: CircleAvatar(
+          radius: 26,
+          backgroundColor: Theme.of(c).colorScheme.primaryContainer,
+          child: Icon(
+            Icons.calendar_month_outlined,
+            color: Theme.of(c).colorScheme.primary,
+          ),
+        ),
+        title: Text(
+          MaterialLocalizations.of(c).formatFullDate(day),
+          textAlign: TextAlign.center,
+        ),
         content: SizedBox(
-          width: 560,
+          width: 680,
           child: SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Cash Sales: ${m(summary.cashSales)}'),
-                Text('UTANG Created: ${m(summary.newUtang)}'),
-                Text('UTANG Payments: ${m(summary.payments)}'),
-                Text('Recorded Cash In: ${m(summary.recordedCashIn)}'),
-                Text('Operating Expenses: ${m(summary.operatingExpenses)}'),
-                Text('Net Recorded Cash: ${m(summary.netRecordedCash)}'),
-                Text('Consignment Sales: ${m(summary.consignmentSales)}'),
-                Text('Supplier Payable: ${m(summary.supplierPayable)}'),
-                Text('Store Margin: ${m(summary.consignmentMargin)}'),
-                Text('Transactions: ${summary.transactionCount}'),
+                _hero('NET RECORDED CASH', m(summary.netRecordedCash)),
+                const SizedBox(height: 12),
+                _section('CASH & UTANG', Icons.payments_outlined, [
+                  _metric('Cash Sales', m(summary.cashSales)),
+                  _metric('UTANG Created', m(summary.newUtang)),
+                  _metric('UTANG Payments', m(summary.payments)),
+                  _metric('Recorded Cash In', m(summary.recordedCashIn)),
+                ]),
+                _section('EXPENSES & CONSIGNMENT', Icons.receipt_long, [
+                  _metric('Operating Expenses', m(summary.operatingExpenses)),
+                  _metric('Consignment Sales', m(summary.consignmentSales)),
+                  _metric('Supplier Payable', m(summary.supplierPayable)),
+                  _metric('Store Margin', m(summary.consignmentMargin)),
+                ]),
+                _section('STORE STATUS', Icons.storefront_outlined, [
+                  _metric('Transactions', '${summary.transactionCount}'),
+                  _metric('Low Stock', '${summary.lowStock}'),
+                  _metric('Out of Stock', '${summary.outOfStock}'),
+                ]),
+                if (summary.topProducts.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Top-selling Products',
+                    style: Theme.of(c).textTheme.titleLarge,
+                  ),
+                  ...summary.topProducts.indexed.map(
+                    (entry) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(child: Text('${entry.$1 + 1}')),
+                      title: Text(entry.$2['name']! as String),
+                      trailing: Text('${_soldQuantity(entry.$2)} sold'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -349,4 +386,10 @@ class _State extends State<DailyClosingScreen> {
       ),
     );
   }
+
+  String _soldQuantity(Map<String, Object?> row) => baseQuantityText(
+    row['quantity']! as int,
+    baseUnitCode: row['base_unit_code'] as String? ?? 'PIECE',
+    baseUnitLabel: row['base_unit_label'] as String? ?? 'piece',
+  );
 }

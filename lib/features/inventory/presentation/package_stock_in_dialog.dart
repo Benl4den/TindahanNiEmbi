@@ -19,6 +19,14 @@ Future<bool> showPackageStockInDialog({
     );
     return false;
   }
+  final previousCosts = <int, int?>{};
+  for (final package in packages) {
+    previousCosts[package.id] = await repository.latestPackageCost(
+      product.id,
+      package.name,
+    );
+  }
+  if (!context.mounted) return false;
   var selected =
       packages.where((x) => x.isDefault).firstOrNull ?? packages.first;
   final suggested = suggestedBaseQuantity <= 0
@@ -87,10 +95,24 @@ Future<bool> showPackageStockInDialog({
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Purchase cost per package (optional)',
                       prefixText: '₱ ',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      helperText: previousCosts[selected.id] == null
+                          ? 'No previous purchase cost recorded for this package.'
+                          : 'Previous cost: ${standardMoney(previousCosts[selected.id]!)} per ${selected.name}',
+                      helperMaxLines: 2,
+                      suffixIcon: previousCosts[selected.id] == null
+                          ? null
+                          : IconButton(
+                              tooltip: 'Use previous cost',
+                              icon: const Icon(Icons.history),
+                              onPressed: () {
+                                cost.text = (previousCosts[selected.id]! / 100)
+                                    .toStringAsFixed(2);
+                              },
+                            ),
                     ),
                   ),
                   const SizedBox(height: 14),

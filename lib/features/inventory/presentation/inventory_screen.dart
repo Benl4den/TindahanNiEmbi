@@ -50,6 +50,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final notes = TextEditingController();
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(adjustment ? AppStrings.adjustment : AppStrings.stockIn),
@@ -207,10 +208,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         subtitle: Text(
-                          '${_type(m.type)} • ${m.quantityBefore} → ${m.quantityAfter}\n${m.notes ?? ''}',
+                          '${_type(m.type)} • ${_movementQuantity(m, m.quantityBefore)} → ${_movementQuantity(m, m.quantityAfter)}\n${m.notes ?? ''}',
                         ),
                         trailing: Text(
-                          '${m.quantityChange > 0 ? '+' : ''}${m.quantityChange}',
+                          '${m.quantityChange > 0 ? '+' : ''}${_movementQuantity(m, m.quantityChange.abs())}',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       );
@@ -241,6 +242,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
     ),
   );
+
+  String _movementQuantity(InventoryMovement movement, int quantity) =>
+      baseQuantityText(
+        quantity,
+        baseUnitCode: movement.baseUnitCode,
+        baseUnitLabel: movement.baseUnitLabel,
+      );
 
   Widget _productList(
     ProductStockStatus? status,

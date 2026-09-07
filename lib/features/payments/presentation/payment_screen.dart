@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/customer.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../repositories/payment_repository.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -28,6 +29,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Future<void> save() async {
     if (saving || cents <= 0 || cents > widget.customer.balanceCentavos) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => AlertDialog(
+        icon: const Icon(Icons.payments_outlined),
+        title: const Text('Confirm UTANG Payment'),
+        content: Text(
+          'Record ${standardMoney(cents)} from ${widget.customer.fullName}?\n\nRemaining balance: ${standardMoney(widget.customer.balanceCentavos - cents)}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Confirm Payment'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => saving = true);
     try {
       await widget.repository.record(

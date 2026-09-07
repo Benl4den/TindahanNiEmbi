@@ -88,6 +88,7 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('Add Consignor'),
     content: SizedBox(
       width: 480,
@@ -689,6 +690,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     if (!mounted) return;
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => _AddConsignorDialog(
         repository: widget.repository,
         categories: categories,
@@ -729,6 +731,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
         ? false
         : await showDialog<bool>(
             context: context,
+            barrierDismissible: false,
             builder: (c) => AlertDialog(
               title: const Text('Add Product to Company'),
               content: const Text(
@@ -756,6 +759,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       if (!mounted) return;
       final completed = await showDialog<bool>(
         context: context,
+        barrierDismissible: false,
         builder: (_) => Dialog(
           insetPadding: const EdgeInsets.all(16),
           clipBehavior: Clip.antiAlias,
@@ -814,6 +818,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     var saving = false;
     final ok = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (x) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
           title: const Text('Receive Consignment'),
@@ -1052,7 +1057,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     final payable = x['payable_centavos']! as int;
                     return ListTile(
                       title: Text(
-                        '${x['event_type']} • ${x['quantity']} units',
+                        '${x['event_type']} • ${_quantity((x['quantity']! as int).abs(), product['base_unit_label'] as String?)}',
                       ),
                       subtitle: Text(
                         '${DateTime.parse(x['occurred_at']! as String).toLocal()}\nCost ${money(x['unit_cost_centavos']! as int)} • Selling ${money(x['selling_price_centavos']! as int)}',

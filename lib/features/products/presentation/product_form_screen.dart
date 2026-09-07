@@ -254,31 +254,44 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ),
                     ),
                   const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: _processingPhoto ? null : _capture,
-                    icon: const Icon(Icons.camera_alt_outlined, size: 30),
-                    label: Text(
-                      _processingPhoto
-                          ? 'Processing photo…'
-                          : _photoPath == null
-                          ? AppStrings.takePhoto
-                          : AppStrings.retakePhoto,
-                    ),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(68),
-                    ),
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      final gallery =
+                          widget.photoService is ProductGalleryPhotoService;
+                      final width = gallery && constraints.maxWidth >= 480
+                          ? (constraints.maxWidth - 10) / 2
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          SizedBox(
+                            width: width,
+                            child: FilledButton.icon(
+                              onPressed: _processingPhoto ? null : _capture,
+                              icon: const Icon(Icons.camera_alt_outlined),
+                              label: Text(
+                                _processingPhoto
+                                    ? 'Processing photo…'
+                                    : _photoPath == null
+                                    ? AppStrings.takePhoto
+                                    : AppStrings.retakePhoto,
+                              ),
+                            ),
+                          ),
+                          if (gallery)
+                            SizedBox(
+                              width: width,
+                              child: OutlinedButton.icon(
+                                onPressed: _processingPhoto ? null : _gallery,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: const Text('Upload Image'),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
-                  if (widget.photoService is ProductGalleryPhotoService) ...[
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _processingPhoto ? null : _gallery,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Choose from Gallery'),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(60),
-                      ),
-                    ),
-                  ],
                   if (!creatingWithoutPhoto) ...[
                     const SizedBox(height: 24),
                     Form(

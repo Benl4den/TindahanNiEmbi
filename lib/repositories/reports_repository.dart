@@ -9,13 +9,13 @@ class ReportsRepository {
   const ReportsRepository(this.db);
   final Database db;
   Future<List<Map<String, Object?>>> inventory() => db.rawQuery(
-    'SELECT name,current_quantity,purchase_price_centavos,selling_price_centavos,current_quantity*purchase_price_centavos stock_value FROM products WHERE is_archived=0 ORDER BY name COLLATE NOCASE',
+    'SELECT name,current_quantity,base_unit_code,base_unit_label,purchase_price_centavos,selling_price_centavos,current_quantity*purchase_price_centavos stock_value FROM products WHERE is_archived=0 ORDER BY name COLLATE NOCASE',
   );
   Future<List<Map<String, Object?>>> outstanding() => db.rawQuery(
     '''SELECT c.full_name, SUM(l.amount_change_centavos) balance FROM customers c JOIN customer_ledger_entries l ON l.customer_id=c.id GROUP BY c.id HAVING balance>0 ORDER BY balance DESC''',
   );
   Future<List<Map<String, Object?>>> movements({bool? outgoing}) => db.rawQuery(
-    '''SELECT p.name,t.type,m.quantity_change,m.unit_cost_centavos,t.notes,t.occurred_at FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id JOIN products p ON p.id=m.product_id ${outgoing == null
+    '''SELECT p.name,p.base_unit_code,p.base_unit_label,t.type,m.quantity_change,m.unit_cost_centavos,t.notes,t.occurred_at FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id JOIN products p ON p.id=m.product_id ${outgoing == null
         ? ''
         : outgoing
         ? 'WHERE m.quantity_change<0'
@@ -43,7 +43,7 @@ class ReportsRepository {
   }
 
   Future<List<Map<String, Object?>>> frequentProducts() => db.rawQuery(
-    "SELECT product_name_snapshot name,SUM(COALESCE(total_base_quantity,quantity)) quantity FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id WHERE s.status='POSTED' GROUP BY product_name_snapshot ORDER BY quantity DESC",
+    "SELECT i.product_name_snapshot name,SUM(COALESCE(i.total_base_quantity,i.quantity)) quantity,p.base_unit_code,p.base_unit_label FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id JOIN products p ON p.id=i.product_id WHERE s.status='POSTED' GROUP BY i.product_id,i.product_name_snapshot ORDER BY quantity DESC",
   );
   Future<int> outstandingTotal() async =>
       (await db.rawQuery(
