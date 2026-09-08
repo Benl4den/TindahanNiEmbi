@@ -69,6 +69,14 @@ class GCashServiceRepository {
   final Database db;
   final String actorRole;
 
+  Future<int> availableGCashBalance() async =>
+      Sqflite.firstIntValue(
+        await db.rawQuery(
+          'SELECT COALESCE(SUM(amount_change_centavos),0) FROM gcash_ledger_entries',
+        ),
+      ) ??
+      0;
+
   Future<GCashServiceTransaction> record({
     required String type,
     required int principalCentavos,
@@ -90,7 +98,11 @@ class GCashServiceRepository {
         throw const GCashServiceException('The amount is too large.');
       }
       final now = DateTime.now().toUtc().toIso8601String();
-      final gcashChange = type == 'CASH_IN' ? -principalCentavos : total;
+      // Fees are paid in physical cash for both service types.  GCash always
+      // moves only the customer's requested principal.
+      final gcashChange = type == 'CASH_IN'
+          ? -principalCentavos
+          : principalCentavos;
       if (type == 'CASH_IN') {
         final balance =
             Sqflite.firstIntValue(
@@ -100,8 +112,10 @@ class GCashServiceRepository {
             ) ??
             0;
         if (balance < principalCentavos) {
-          throw const GCashServiceException(
-            'Not enough available GCash for this Cash-In.',
+          throw GCashServiceException(
+            'Insufficient GCash. Available: ₱${(balance / 100).toStringAsFixed(2)}. '
+            'Required: ₱${(principalCentavos / 100).toStringAsFixed(2)}. '
+            'Short: ₱${((principalCentavos - balance) / 100).toStringAsFixed(2)}.',
           );
         }
       } else if (!physicalCashAvailabilityAcknowledged) {
@@ -110,7 +124,9 @@ class GCashServiceRepository {
           'Confirm the available physical cash before Cash-Out.',
         );
       }
-      final physicalChange = type == 'CASH_IN' ? total : -principalCentavos;
+      final physicalChange = type == 'CASH_IN'
+          ? total
+          : -principalCentavos + feeCentavos;
       final id = await tx.insert('gcash_service_transactions', {
         'reference': 'GCS-${DateTime.now().microsecondsSinceEpoch}',
         'service_type': type,

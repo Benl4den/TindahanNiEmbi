@@ -38,7 +38,12 @@ class _GCashScreenState extends State<GCashScreen> {
   }
 
   void _changed() {
-    if (mounted) setState(_reload);
+    // Repository commits notify synchronously.  A service commit can happen
+    // while its review dialog is still being popped; rebuilding inherited
+    // widgets at that exact moment causes Flutter's _dependents assertion.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(_reload);
+    });
   }
 
   void _reload() {
@@ -421,124 +426,167 @@ class _GCashScreenState extends State<GCashScreen> {
     final reference = TextEditingController();
     final notes = TextEditingController();
     String? error;
+    var reviewing = false, saving = false, principalCents = 0, feeCents = 0;
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialog) => StatefulBuilder(
         builder: (_, setDialog) => AlertDialog(
-          title: Text(type == 'CASH_IN' ? 'GCash Cash-In' : 'GCash Cash-Out'),
+          title: Text(
+            reviewing
+                ? 'Review GCash Service'
+                : type == 'CASH_IN'
+                ? 'GCash Cash-In'
+                : 'GCash Cash-Out',
+          ),
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: principal,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+              child: reviewing
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Principal: ${standardMoney(principalCents)}'),
+                        Text('Service Fee (Cash): ${standardMoney(feeCents)}'),
+                        const SizedBox(height: 8),
+                        Text(
+                          type == 'CASH_IN'
+                              ? 'Customer Pays Cash: ${standardMoney(principalCents + feeCents)}\nGCash Sent: ${standardMoney(principalCents)}'
+                              : 'Customer Sends GCash: ${standardMoney(principalCents)}\nCash Given: ${standardMoney(principalCents)}\nCash Fee Received: ${standardMoney(feeCents)}',
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: principal,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Principal Amount',
+                            prefixText: '₱ ',
+                          ),
+                        ),
+                        TextField(
+                          controller: fee,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Service Fee',
+                            prefixText: '₱ ',
+                          ),
+                        ),
+                        TextField(
+                          controller: reference,
+                          decoration: const InputDecoration(
+                            labelText: 'GCash Reference (optional)',
+                          ),
+                        ),
+                        TextField(
+                          controller: notes,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes (optional)',
+                          ),
+                        ),
+                        if (type == 'CASH_OUT')
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Text(
+                              'Confirm that there is enough physical cash in the drawer before continuing.',
+                            ),
+                          ),
+                        if (error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Text(
+                              error!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                      ],
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Principal Amount',
-                      prefixText: '₱ ',
-                    ),
-                  ),
-                  TextField(
-                    controller: fee,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Service Fee',
-                      prefixText: '₱ ',
-                    ),
-                  ),
-                  TextField(
-                    controller: reference,
-                    decoration: const InputDecoration(
-                      labelText: 'GCash Reference (optional)',
-                    ),
-                  ),
-                  TextField(
-                    controller: notes,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (optional)',
-                    ),
-                  ),
-                  if (type == 'CASH_OUT')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12),
-                      child: Text(
-                        'Confirm that there is enough physical cash in the drawer before continuing.',
-                      ),
-                    ),
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                ],
-              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
+              onPressed: saving
+                  ? null
+                  : () => reviewing
+                        ? setDialog(() {
+                            reviewing = false;
+                            error = null;
+                          })
+                        : Navigator.of(dialog).pop(false),
+              child: Text(reviewing ? 'Back' : 'Cancel'),
             ),
             FilledButton(
               onPressed: () async {
-                int cents(String value) =>
-                    ((double.tryParse(value.trim()) ?? -1) * 100).round();
-                final p = cents(principal.text), f = cents(fee.text);
-                if (p <= 0 || f < 0) {
-                  setDialog(
-                    () => error = 'Enter a valid principal and service fee.',
-                  );
+                if (!reviewing) {
+                  int cents(String value) =>
+                      ((double.tryParse(value.trim()) ?? -1) * 100).round();
+                  final p = cents(principal.text), f = cents(fee.text);
+                  if (p <= 0 || f < 0) {
+                    setDialog(
+                      () => error = 'Enter a valid principal and service fee.',
+                    );
+                    return;
+                  }
+                  if (type == 'CASH_IN') {
+                    final available = await widget.services
+                        .availableGCashBalance();
+                    if (p > available) {
+                      if (dialog.mounted) {
+                        setDialog(
+                          () => error =
+                              'Insufficient GCash Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(p)}\nShort: ${standardMoney(p - available)}',
+                        );
+                      }
+                      return;
+                    }
+                  }
+                  if (dialog.mounted) {
+                    setDialog(() {
+                      principalCents = p;
+                      feeCents = f;
+                      error = null;
+                      reviewing = true;
+                    });
+                  }
                   return;
                 }
-                final total = p + f;
-                final review = await showDialog<bool>(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (reviewContext) => AlertDialog(
-                    title: const Text('Review GCash Service'),
-                    content: Text(
-                      type == 'CASH_IN'
-                          ? 'Principal: ${standardMoney(p)}\nService Fee: ${standardMoney(f)}\nCustomer Pays Cash: ${standardMoney(total)}\nGCash Sent: ${standardMoney(p)}'
-                          : 'Principal: ${standardMoney(p)}\nService Fee: ${standardMoney(f)}\nCustomer Sends GCash: ${standardMoney(total)}\nCash Given: ${standardMoney(p)}',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(reviewContext, false),
-                        child: const Text('Back'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(reviewContext, true),
-                        child: const Text('Confirm'),
-                      ),
-                    ],
-                  ),
-                );
-                if (review != true) return;
+                setDialog(() => saving = true);
                 try {
                   await widget.services.record(
                     type: type,
-                    principalCentavos: p,
-                    feeCentavos: f,
+                    principalCentavos: principalCents,
+                    feeCentavos: feeCents,
                     gcashReference: reference.text,
                     notes: notes.text,
                     physicalCashAvailabilityAcknowledged: type == 'CASH_OUT',
                   );
-                  if (context.mounted) Navigator.pop(dialog, true);
+                  if (dialog.mounted) {
+                    Navigator.of(dialog).pop(true);
+                  }
                 } catch (e) {
-                  setDialog(() => error = e.toString());
+                  if (dialog.mounted) {
+                    setDialog(() {
+                      saving = false;
+                      error = e.toString();
+                    });
+                  }
                 }
               },
-              child: const Text('Review'),
+              child: Text(
+                saving
+                    ? 'Saving…'
+                    : reviewing
+                    ? 'Confirm'
+                    : 'Review',
+              ),
             ),
           ],
         ),
