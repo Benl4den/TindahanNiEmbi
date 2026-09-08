@@ -70,10 +70,28 @@ class _State extends State<DailyClosingScreen> {
               'Transaction-based summary — not a physical cash-drawer reconciliation.',
             ),
             const SizedBox(height: 16),
-            _section('CASH FLOW', Icons.payments_outlined, [
+            _section('PHYSICAL CASH', Icons.payments_outlined, [
               _metric('Cash Sales (${x.cashSaleCount})', m(x.cashSales)),
-              _metric('UTANG Payments', m(x.payments)),
+              _metric('Cash UTANG Payments', m(x.cashPayments)),
+              _metric('Cash Expenses', '-${m(x.cashExpenses)}'),
+              _metric('Cash Consignor Remittances', '-${m(x.cashRemittances)}'),
               _metric('Recorded Cash In', m(x.recordedCashIn), strong: true),
+            ]),
+            const SizedBox(height: 14),
+            _section('GCASH WALLET', Icons.account_balance_wallet_outlined, [
+              _metric('Opening Balance', m(x.gcashOpeningBalance)),
+              _metric('GCash Sales (${x.gcashSaleCount})', m(x.gcashSales)),
+              _metric('GCash UTANG Payments', m(x.gcashPayments)),
+              _metric('GCash Expenses', '-${m(x.gcashExpenses)}'),
+              _metric(
+                'GCash Consignor Remittances',
+                '-${m(x.gcashRemittances)}',
+              ),
+              _metric(
+                'Expected GCash Balance',
+                m(x.gcashEndingBalance),
+                strong: true,
+              ),
             ]),
             const SizedBox(height: 14),
             LayoutBuilder(
@@ -344,8 +362,15 @@ class _State extends State<DailyClosingScreen> {
                 _section('CASH & UTANG', Icons.payments_outlined, [
                   _metric('Cash Sales', m(summary.cashSales)),
                   _metric('UTANG Created', m(summary.newUtang)),
-                  _metric('UTANG Payments', m(summary.payments)),
+                  _metric('Cash UTANG Payments', m(summary.cashPayments)),
                   _metric('Recorded Cash In', m(summary.recordedCashIn)),
+                ]),
+                _section('GCASH', Icons.account_balance_wallet_outlined, [
+                  _metric('Opening Balance', m(summary.gcashOpeningBalance)),
+                  _metric('GCash Sales', m(summary.gcashSales)),
+                  _metric('Money In', m(summary.gcashMoneyIn)),
+                  _metric('Money Out', m(summary.gcashMoneyOut)),
+                  _metric('Expected Balance', m(summary.gcashEndingBalance)),
                 ]),
                 _section('EXPENSES & CONSIGNMENT', Icons.receipt_long, [
                   _metric('Operating Expenses', m(summary.operatingExpenses)),

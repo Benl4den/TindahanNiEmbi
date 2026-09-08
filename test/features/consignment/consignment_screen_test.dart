@@ -6,6 +6,7 @@ import 'package:tindahan_ni_embi/models/category.dart';
 import 'package:tindahan_ni_embi/models/consignment.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/product_unit.dart';
+import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/consignment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
@@ -98,6 +99,8 @@ class _Repo extends ConsignmentRepository {
     required int consignorId,
     required int amountCentavos,
     String? notes,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
   }) async {
     payable -= amountCentavos;
     return 1;

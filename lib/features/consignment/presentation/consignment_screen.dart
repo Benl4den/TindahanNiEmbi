@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/formatters/number_format.dart';
 
 import '../../../models/consignment.dart';
+import '../../../models/payment_method.dart';
 import '../../../models/category.dart';
 import '../../../models/product.dart';
 import '../../../models/product_unit.dart';
@@ -161,7 +162,10 @@ class _RemittanceDialog extends StatefulWidget {
 
 class _RemittanceDialogState extends State<_RemittanceDialog> {
   late int party;
-  final amount = TextEditingController(), notes = TextEditingController();
+  final amount = TextEditingController(),
+      notes = TextEditingController(),
+      gcashReference = TextEditingController();
+  PaymentMethod paymentMethod = PaymentMethod.cash;
   String? error;
   bool saving = false;
   @override
@@ -176,6 +180,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
   void dispose() {
     amount.dispose();
     notes.dispose();
+    gcashReference.dispose();
     super.dispose();
   }
 
@@ -200,6 +205,8 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
         consignorId: party,
         amountCentavos: cents,
         notes: notes.text,
+        paymentMethod: paymentMethod,
+        gcashReference: gcashReference.text,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -249,6 +256,36 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
               'Outstanding Payable: ${money(balance)}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: 14),
+            SegmentedButton<PaymentMethod>(
+              segments: const [
+                ButtonSegment(
+                  value: PaymentMethod.cash,
+                  icon: Icon(Icons.payments_outlined),
+                  label: Text('Cash'),
+                ),
+                ButtonSegment(
+                  value: PaymentMethod.gcash,
+                  icon: Icon(Icons.phone_android),
+                  label: Text('GCash'),
+                ),
+              ],
+              selected: {paymentMethod},
+              onSelectionChanged: saving
+                  ? null
+                  : (value) => setState(() => paymentMethod = value.single),
+            ),
+            if (paymentMethod == PaymentMethod.gcash) ...[
+              const SizedBox(height: 14),
+              TextField(
+                controller: gcashReference,
+                decoration: const InputDecoration(
+                  labelText: 'GCash Reference (optional)',
+                  prefixIcon: Icon(Icons.tag),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: amount,

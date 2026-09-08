@@ -1,3 +1,5 @@
+import 'payment_method.dart';
+
 class ExpenseCategory {
   const ExpenseCategory({
     required this.id,
@@ -31,6 +33,8 @@ class Expense {
     this.correctionOfReference,
     this.reason,
     this.changedAt,
+    this.paymentMethod = PaymentMethod.cash,
+    this.gcashReference,
   });
   final int id, categoryId, amountCentavos;
   final String reference, categoryName, description, status;
@@ -39,6 +43,8 @@ class Expense {
       correctedByReference,
       correctionOfReference,
       reason;
+  final PaymentMethod paymentMethod;
+  final String? gcashReference;
   final DateTime expenseDateTime, createdAt;
   final DateTime? changedAt;
   factory Expense.fromMap(Map<String, Object?> m) => Expense(
@@ -59,6 +65,8 @@ class Expense {
     changedAt: m['changed_at'] == null
         ? null
         : DateTime.parse(m['changed_at']! as String),
+    paymentMethod: PaymentMethod.fromDatabase(m['payment_method']),
+    gcashReference: m['gcash_reference'] as String?,
   );
 }
 
@@ -70,9 +78,13 @@ class ExpenseDraft {
     required this.expenseDateTime,
     this.notes,
     this.referenceNo,
+    this.paymentMethod = PaymentMethod.cash,
+    this.gcashReference,
   });
   final int categoryId, amountCentavos;
   final String description;
   final DateTime expenseDateTime;
   final String? notes, referenceNo;
+  final PaymentMethod paymentMethod;
+  final String? gcashReference;
 }

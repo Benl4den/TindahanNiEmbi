@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../core/formatters/number_format.dart';
+import '../models/payment_method.dart';
+import 'payment_accounting_repository.dart';
 
 import '../services/app_refresh_controller.dart';
 
@@ -14,6 +16,8 @@ class PaymentRepository {
     required int amountCentavos,
     String? notes,
     DateTime? paidAt,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
   }) async {
     return AppRefreshController.instance.after(
       _database.transaction(
@@ -23,6 +27,8 @@ class PaymentRepository {
           amountCentavos: amountCentavos,
           notes: notes,
           paidAt: paidAt,
+          paymentMethod: paymentMethod,
+          gcashReference: gcashReference,
         ),
       ),
     );
@@ -34,6 +40,8 @@ class PaymentRepository {
     required int amountCentavos,
     String? notes,
     DateTime? paidAt,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
   }) async {
     if (amountCentavos <= 0) throw ArgumentError.value(amountCentavos);
     final now = (paidAt ?? DateTime.now()).toUtc().toIso8601String();
@@ -52,7 +60,20 @@ class PaymentRepository {
       'notes': notes,
       'paid_at': now,
       'created_at': now,
+      'payment_method': paymentMethod.dbValue,
+      'gcash_reference': paymentMethod == PaymentMethod.gcash
+          ? PaymentAccountingRepository.normalizeReference(gcashReference)
+          : null,
     });
+    await PaymentAccountingRepository.postUtangPayment(
+      txn,
+      paymentId: paymentId,
+      amountCentavos: amountCentavos,
+      method: paymentMethod,
+      gcashReference: gcashReference,
+      actorRole: actorRole,
+      occurredAt: now,
+    );
     await txn.insert('customer_ledger_entries', {
       'customer_id': customerId,
       'entry_type': 'PAYMENT',
@@ -65,7 +86,7 @@ class PaymentRepository {
     await txn.insert('activity_logs', {
       'event_type': 'UTANG_PAYMENT',
       'description':
-          'Payment received from ${customer.single['full_name']} — ${standardMoney(amountCentavos)}',
+          '${paymentMethod.label} payment received from ${customer.single['full_name']} — ${standardMoney(amountCentavos)}',
       'actor_role': actorRole,
       'related_entity_type': 'PAYMENT',
       'related_entity_id': paymentId,

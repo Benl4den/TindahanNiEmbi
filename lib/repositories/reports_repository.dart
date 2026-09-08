@@ -1,8 +1,15 @@
 import 'package:sqflite/sqflite.dart';
 
 class SalesPeriodSummary {
-  const SalesPeriodSummary(this.daily, this.weekly, this.monthly);
+  const SalesPeriodSummary(
+    this.daily,
+    this.weekly,
+    this.monthly, {
+    required this.dailyCash,
+    required this.dailyGCash,
+  });
   final int daily, weekly, monthly;
+  final int dailyCash, dailyGCash;
 }
 
 class ReportsRepository {
@@ -47,10 +54,25 @@ class ReportsRepository {
           ],
         )
         .then((r) => r.single['value']! as int);
+    final today = await db.rawQuery(
+      '''SELECT
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash,
+      COALESCE(SUM(CASE WHEN sp.payment_method='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash
+      FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
+      WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?''',
+      [
+        day.toUtc().toIso8601String(),
+        day.add(const Duration(days: 1)).toUtc().toIso8601String(),
+      ],
+    );
+    final dailyCash = today.single['cash']! as int;
+    final dailyGCash = today.single['gcash']! as int;
     return SalesPeriodSummary(
-      await total(day),
+      dailyCash + dailyGCash,
       await total(week),
       await total(month),
+      dailyCash: dailyCash,
+      dailyGCash: dailyGCash,
     );
   }
 
@@ -66,7 +88,7 @@ class ReportsRepository {
     'SELECT c.full_name,u.total_centavos,u.occurred_at,u.status FROM utang_transactions u JOIN customers c ON c.id=u.customer_id ORDER BY u.occurred_at DESC',
   );
   Future<List<Map<String, Object?>>> paymentHistory() => db.rawQuery(
-    'SELECT c.full_name,p.amount_centavos,p.paid_at,p.status FROM utang_payments p JOIN customers c ON c.id=p.customer_id ORDER BY p.paid_at DESC',
+    'SELECT c.full_name,p.amount_centavos,p.paid_at,p.status,p.payment_method,p.gcash_reference FROM utang_payments p JOIN customers c ON c.id=p.customer_id ORDER BY p.paid_at DESC',
   );
   Future<List<Map<String, Object?>>> customerLedger() => db.rawQuery(
     'SELECT c.full_name,l.entry_type,l.amount_change_centavos,l.occurred_at FROM customer_ledger_entries l JOIN customers c ON c.id=l.customer_id ORDER BY l.occurred_at DESC,l.id DESC',
@@ -122,7 +144,9 @@ class ReportsRepository {
 
   Future<List<Map<String, Object?>>> expenseHistory() => db.rawQuery(
     '''SELECT expense_ref name,category_name_snapshot category,description,
-      amount_centavos,expense_datetime,status FROM expenses ORDER BY expense_datetime DESC''',
+      amount_centavos,expense_datetime,status,COALESCE(ep.payment_method,'CASH') payment_method,
+      ep.gcash_reference FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
+      ORDER BY expense_datetime DESC''',
   );
 
   Future<List<Map<String, Object?>>> expenseCategories() => db.rawQuery(

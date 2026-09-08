@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/expense.dart';
+import 'payment_accounting_repository.dart';
 import '../services/app_refresh_controller.dart';
 
 class ExpenseException implements Exception {
@@ -94,6 +95,15 @@ class ExpenseRepository {
       'created_at': now,
       'created_by_role': actorRole,
     });
+    await PaymentAccountingRepository.postExpense(
+      tx,
+      expenseId: id,
+      amountCentavos: draft.amountCentavos,
+      method: draft.paymentMethod,
+      gcashReference: draft.gcashReference,
+      actorRole: actorRole,
+      occurredAt: draft.expenseDateTime.toUtc().toIso8601String(),
+    );
     await tx.insert('activity_logs', {
       'event_type': 'EXPENSE_ADDED',
       'description':
@@ -235,6 +245,14 @@ class ExpenseRepository {
       'occurred_at': now,
       'actor_role': actorRole,
     });
+    await PaymentAccountingRepository.reverseSource(
+      tx,
+      expenseId: original.id,
+      expenseReversalId: reversal,
+      actorRole: actorRole,
+      occurredAt: now,
+      reason: reason,
+    );
     final changed = await tx.update(
       'expenses',
       {'status': status},
@@ -268,7 +286,7 @@ class ExpenseRepository {
     String? where,
     List<Object?> args = const [],
   }) async => (await executor.rawQuery(
-    '''SELECT e.*,
+    '''SELECT e.*,ep.payment_method,ep.gcash_reference,
       replacement.expense_ref corrected_by_ref,original.expense_ref correction_of_ref,
       COALESCE(c1.reason,c2.reason,r.reason) change_reason,
       COALESCE(c1.occurred_at,c2.occurred_at,r.occurred_at) changed_at
@@ -278,6 +296,7 @@ class ExpenseRepository {
       LEFT JOIN expense_corrections c2 ON c2.replacement_expense_id=e.id
       LEFT JOIN expenses original ON original.id=c2.original_expense_id
       LEFT JOIN expense_reversals r ON r.expense_id=e.id
+      LEFT JOIN expense_payments ep ON ep.expense_id=e.id
       ${where == null ? '' : 'WHERE $where'} ORDER BY e.expense_datetime DESC,e.id DESC''',
     args,
   )).map(Expense.fromMap).toList();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/customer.dart';
 import '../../../core/formatters/number_format.dart';
+import '../../../models/payment_method.dart';
 import '../../../repositories/payment_repository.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -22,12 +23,15 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   final amount = TextEditingController();
+  final gcashReference = TextEditingController();
+  PaymentMethod paymentMethod = PaymentMethod.cash;
   int cents = 0;
   bool saving = false;
   String? error;
   @override
   void dispose() {
     amount.dispose();
+    gcashReference.dispose();
     super.dispose();
   }
 
@@ -60,6 +64,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
       await widget.repository.record(
         customerId: widget.customer.id,
         amountCentavos: cents,
+        paymentMethod: paymentMethod,
+        gcashReference: gcashReference.text,
       );
     } catch (exception, stackTrace) {
       // Keep the customer-facing error short, but retain the actual database
@@ -104,6 +110,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 24),
+          SegmentedButton<PaymentMethod>(
+            segments: const [
+              ButtonSegment(
+                value: PaymentMethod.cash,
+                icon: Icon(Icons.payments_outlined),
+                label: Text('Cash'),
+              ),
+              ButtonSegment(
+                value: PaymentMethod.gcash,
+                icon: Icon(Icons.phone_android),
+                label: Text('GCash'),
+              ),
+            ],
+            selected: {paymentMethod},
+            onSelectionChanged: saving
+                ? null
+                : (value) => setState(() => paymentMethod = value.single),
+          ),
+          if (paymentMethod == PaymentMethod.gcash) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: gcashReference,
+              decoration: const InputDecoration(
+                labelText: 'GCash Reference (optional)',
+                prefixIcon: Icon(Icons.tag),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
           TextField(
             controller: amount,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),

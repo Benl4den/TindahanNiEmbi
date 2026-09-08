@@ -11,6 +11,7 @@ import '../../../repositories/dashboard_repository.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../repositories/payment_repository.dart';
+import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/reports_repository.dart';
 import '../../../repositories/operations_repository.dart';
@@ -33,6 +34,7 @@ import '../../categories/presentation/categories_screen.dart';
 import '../../consignment/presentation/consignment_screen.dart';
 import '../../inventory/presentation/inventory_screen.dart';
 import '../../expenses/presentation/expenses_screen.dart';
+import '../../gcash/presentation/gcash_screen.dart';
 import '../../operations/presentation/daily_closing_screen.dart';
 import '../../operations/presentation/integrity_screen.dart';
 import '../../operations/presentation/restock_screen.dart';
@@ -169,8 +171,12 @@ class _State extends State<AppShell> {
         icon: Icon(Icons.history),
         label: 'Transaction History',
       ),
+      const NavigationDestination(
+        icon: Icon(Icons.account_balance_wallet_outlined),
+        label: 'GCash',
+      ),
     ];
-    const navTargets = [0, 6, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
+    const navTargets = [0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
     final destinations = [
       for (final target in navTargets) bodyDestinations[target],
     ];
@@ -192,9 +198,9 @@ class _State extends State<AppShell> {
               onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 6, 3][i]),
               destinations: [
                 destinations[0],
-                destinations[4],
                 destinations[1],
-                destinations[10],
+                destinations[4],
+                destinations[12],
               ],
             ),
     );
@@ -335,6 +341,16 @@ class _State extends State<AppShell> {
     11 => TransactionHistoryScreen(
       repository: TransactionHistoryRepository(widget.database),
     ),
+    12 =>
+      widget.role == UserRole.owner
+          ? GCashScreen(
+              repository: PaymentAccountingRepository(
+                widget.database,
+                actorRole: role,
+              ),
+              auth: AuthService(widget.database),
+            )
+          : _denied(),
     _ => _more(),
   };
 
@@ -541,7 +557,7 @@ class _State extends State<AppShell> {
   }
 
   String _navSection(int target) => switch (target) {
-    0 || 6 => 'Daily Selling',
+    0 || 6 || 12 => 'Daily Selling',
     5 || 3 || 4 => 'Stock & Products',
     1 || 2 => 'Supplier Products',
     11 || 7 || 8 || 9 => 'Store Records',

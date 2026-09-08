@@ -3,26 +3,48 @@ import 'package:sqflite/sqflite.dart';
 import '../core/formatters/number_format.dart';
 
 import '../models/utang_draft.dart';
+import '../models/payment_method.dart';
 import 'consignment_allocation.dart';
+import 'payment_accounting_repository.dart';
 import '../services/app_refresh_controller.dart';
 
 class CashSaleRepository {
   const CashSaleRepository(this.db, {this.actorRole});
   final Database db;
   final String? actorRole;
-  Future<int> save(List<UtangItemDraft> items) async =>
-      (await saveWithResult(items)).id;
+  Future<int> save(
+    List<UtangItemDraft> items, {
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
+  }) async => (await saveWithResult(
+    items,
+    paymentMethod: paymentMethod,
+    gcashReference: gcashReference,
+  )).id;
 
-  Future<CashSaleResult> saveWithResult(List<UtangItemDraft> items) async {
+  Future<CashSaleResult> saveWithResult(
+    List<UtangItemDraft> items, {
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
+  }) async {
     return AppRefreshController.instance.after(
-      db.transaction((tx) => saveWithExecutor(tx, items)),
+      db.transaction(
+        (tx) => saveWithExecutor(
+          tx,
+          items,
+          paymentMethod: paymentMethod,
+          gcashReference: gcashReference,
+        ),
+      ),
     );
   }
 
   Future<CashSaleResult> saveWithExecutor(
     DatabaseExecutor tx,
-    List<UtangItemDraft> items,
-  ) async {
+    List<UtangItemDraft> items, {
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
+  }) async {
     if (items.isEmpty || items.any((i) => i.effectiveQuantityValue <= 0)) {
       throw ArgumentError('Items required');
     }
@@ -97,6 +119,15 @@ class CashSaleRepository {
       where: 'id=?',
       whereArgs: [sale],
     );
+    await PaymentAccountingRepository.postSale(
+      tx,
+      saleId: sale,
+      amountCentavos: total,
+      method: paymentMethod,
+      gcashReference: gcashReference,
+      actorRole: actorRole,
+      occurredAt: now,
+    );
     final inv = await tx.insert('inventory_transactions', {
       'type': 'CASH_SALE',
       'reference_number': reference,
@@ -156,7 +187,8 @@ class CashSaleRepository {
     if (verified != total) throw StateError('Total mismatch');
     await tx.insert('activity_logs', {
       'event_type': 'SALES_CASH_SALE',
-      'description': 'Cash sale $reference completed — ${standardMoney(total)}',
+      'description':
+          '${paymentMethod.label} sale $reference completed — ${standardMoney(total)}',
       'actor_role': actorRole,
       'related_entity_type': 'CASH_SALE',
       'related_entity_id': sale,
@@ -169,12 +201,16 @@ class CashSaleRepository {
       occurredAt: DateTime.parse(now),
       itemCount: count,
       status: 'POSTED',
+      paymentMethod: paymentMethod,
+      gcashReference: PaymentAccountingRepository.normalizeReference(
+        gcashReference,
+      ),
     );
   }
 
   Future<CashSaleResult?> latest() async {
     final rows = await db.rawQuery(
-      "SELECT s.*,COALESCE(SUM(i.quantity),0) item_count FROM cash_sales s LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id WHERE s.status='POSTED' GROUP BY s.id ORDER BY s.occurred_at DESC,s.id DESC LIMIT 1",
+      "SELECT s.*,COALESCE(sp.payment_method,'CASH') payment_method,sp.gcash_reference,COALESCE(SUM(i.quantity),0) item_count FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id WHERE s.status='POSTED' GROUP BY s.id ORDER BY s.occurred_at DESC,s.id DESC LIMIT 1",
     );
     return rows.isEmpty ? null : CashSaleResult.fromMap(rows.single);
   }
@@ -205,11 +241,10 @@ class CashSaleRepository {
   }
 
   Future<CashSaleDetails> details(int id) async {
-    final rows = await db.query(
-      'cash_sales',
-      where: 'id=?',
-      whereArgs: [id],
-      limit: 1,
+    final rows = await db.rawQuery(
+      '''SELECT s.*,COALESCE(sp.payment_method,'CASH') payment_method,sp.gcash_reference FROM cash_sales s
+      LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id WHERE s.id=? LIMIT 1''',
+      [id],
     );
     if (rows.isEmpty) throw StateError('Sale not found.');
     final items = await db.query(
@@ -230,13 +265,15 @@ class CashSaleRepository {
       '''
       SELECT * FROM (SELECT s.id,s.reference,'CASH' sale_type,NULL customer_name,s.occurred_at,
         s.total_centavos,COALESCE(SUM(i.quantity),0) item_count,s.status,
+        sp.payment_method,sp.gcash_reference,
         (SELECT replacement_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.original_entity_id=s.id) corrected_by_id,
         (SELECT original_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.replacement_entity_id=s.id) correction_of_id
-      FROM cash_sales s LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id
+      FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id
       WHERE ? IN ('ALL','CASH') GROUP BY s.id
       UNION ALL
       SELECT u.id,u.reference,'UTANG',c.full_name,u.occurred_at,
         u.total_centavos,COALESCE(SUM(i.quantity),0),u.status,
+        NULL,NULL,
         (SELECT replacement_entity_id FROM transaction_corrections tc WHERE tc.entity_type='UTANG' AND tc.original_entity_id=u.id),
         (SELECT original_entity_id FROM transaction_corrections tc WHERE tc.entity_type='UTANG' AND tc.replacement_entity_id=u.id)
       FROM utang_transactions u JOIN customers c ON c.id=u.customer_id
@@ -269,11 +306,15 @@ class SalesHistoryEntry {
     this.customerName,
     this.correctedById,
     this.correctionOfId,
+    this.paymentMethod = PaymentMethod.cash,
+    this.gcashReference,
   });
   final int id, totalCentavos, itemCount;
   final String reference, type, status;
   final String? customerName;
   final int? correctedById, correctionOfId;
+  final PaymentMethod paymentMethod;
+  final String? gcashReference;
   final DateTime occurredAt;
   bool get isUtang => type == 'UTANG';
   factory SalesHistoryEntry.fromMap(Map<String, Object?> x) =>
@@ -288,6 +329,8 @@ class SalesHistoryEntry {
         status: x['status']! as String,
         correctedById: x['corrected_by_id'] as int?,
         correctionOfId: x['correction_of_id'] as int?,
+        paymentMethod: PaymentMethod.fromDatabase(x['payment_method']),
+        gcashReference: x['gcash_reference'] as String?,
       );
 }
 
@@ -299,11 +342,15 @@ class CashSaleResult {
     required this.occurredAt,
     required this.itemCount,
     required this.status,
+    this.paymentMethod = PaymentMethod.cash,
+    this.gcashReference,
   });
   final int id, totalCentavos, itemCount;
   final String reference;
   final String status;
   final DateTime occurredAt;
+  final PaymentMethod paymentMethod;
+  final String? gcashReference;
   factory CashSaleResult.fromMap(Map<String, Object?> x) => CashSaleResult(
     id: x['id']! as int,
     reference: x['reference']! as String,
@@ -311,6 +358,8 @@ class CashSaleResult {
     occurredAt: DateTime.parse(x['occurred_at']! as String),
     itemCount: x['item_count']! as int,
     status: x['status']! as String,
+    paymentMethod: PaymentMethod.fromDatabase(x['payment_method']),
+    gcashReference: x['gcash_reference'] as String?,
   );
 }
 

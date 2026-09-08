@@ -21,10 +21,21 @@ class RestockItem {
 class DailyClosingSummary {
   const DailyClosingSummary({
     required this.cashSales,
+    required this.gcashSales,
     required this.cashSaleCount,
+    required this.gcashSaleCount,
     required this.newUtang,
     required this.payments,
+    required this.cashPayments,
+    required this.gcashPayments,
     required this.operatingExpenses,
+    required this.cashExpenses,
+    required this.gcashExpenses,
+    required this.cashRemittances,
+    required this.gcashRemittances,
+    required this.gcashOpeningBalance,
+    required this.gcashMoneyIn,
+    required this.gcashMoneyOut,
     required this.consignmentSales,
     required this.supplierPayable,
     required this.consignmentMargin,
@@ -34,10 +45,21 @@ class DailyClosingSummary {
     required this.topProducts,
   });
   final int cashSales,
+      gcashSales,
       cashSaleCount,
+      gcashSaleCount,
       newUtang,
       payments,
+      cashPayments,
+      gcashPayments,
       operatingExpenses,
+      cashExpenses,
+      gcashExpenses,
+      cashRemittances,
+      gcashRemittances,
+      gcashOpeningBalance,
+      gcashMoneyIn,
+      gcashMoneyOut,
       consignmentSales,
       supplierPayable,
       consignmentMargin,
@@ -45,8 +67,11 @@ class DailyClosingSummary {
       lowStock,
       outOfStock;
   final List<Map<String, Object?>> topProducts;
-  int get recordedCashIn => cashSales + payments;
-  int get netRecordedCash => recordedCashIn - operatingExpenses;
+  int get totalSales => cashSales + gcashSales;
+  int get recordedCashIn => cashSales + cashPayments;
+  int get netRecordedCash => recordedCashIn - cashExpenses - cashRemittances;
+  int get gcashEndingBalance =>
+      gcashOpeningBalance + gcashMoneyIn - gcashMoneyOut;
 }
 
 class OperationsRepository {
@@ -101,18 +126,42 @@ class OperationsRepository {
         end = local.add(const Duration(days: 1)).toUtc().toIso8601String();
     Future<Map<String, Object?>> one(String sql) =>
         db.rawQuery(sql, [start, end]).then((x) => x.single);
-    final cash = await one(
-      "SELECT COALESCE(SUM(total_centavos),0) total,COUNT(*) count FROM cash_sales WHERE status='POSTED' AND occurred_at>=? AND occurred_at<?",
-    );
+    final cash = await one('''SELECT
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN sp.payment_method='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash_total,
+      SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN 1 ELSE 0 END) cash_count,
+      SUM(CASE WHEN sp.payment_method='GCASH' THEN 1 ELSE 0 END) gcash_count
+      FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
+      WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?''');
     final utang = await one(
       "SELECT COALESCE(SUM(total_centavos),0) total,COUNT(*) count FROM utang_transactions WHERE status='POSTED' AND occurred_at>=? AND occurred_at<?",
     );
     final pay = await one(
-      "SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count FROM utang_payments WHERE status='POSTED' AND paid_at>=? AND paid_at<?",
+      '''SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count,
+      COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN payment_method='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total
+      FROM utang_payments WHERE status='POSTED' AND paid_at>=? AND paid_at<?''',
     );
     final expenses = await one(
-      "SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count FROM expenses WHERE status='POSTED' AND expense_datetime>=? AND expense_datetime<?",
+      '''SELECT COALESCE(SUM(e.amount_centavos),0) total,COUNT(*) count,
+      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method,'CASH')='CASH' THEN e.amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN ep.payment_method='GCASH' THEN e.amount_centavos ELSE 0 END),0) gcash_total
+      FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
+      WHERE e.status='POSTED' AND e.expense_datetime>=? AND e.expense_datetime<?''',
     );
+    final remittances = await one('''SELECT
+      COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN payment_method='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
+      COUNT(*) count FROM consignor_remittances
+      WHERE remitted_at>=? AND remitted_at<?''');
+    final gcash = (await db.rawQuery(
+      '''SELECT
+      COALESCE(SUM(CASE WHEN occurred_at<? THEN amount_change_centavos ELSE 0 END),0) opening,
+      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) money_in,
+      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos<0 THEN -amount_change_centavos ELSE 0 END),0) money_out
+      FROM gcash_ledger_entries''',
+      [start, start, end, start, end],
+    )).single;
     final con = await one(
       '''SELECT COALESCE(SUM(COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity)),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
     );
@@ -132,19 +181,32 @@ class OperationsRepository {
       [start, end, start, end],
     );
     return DailyClosingSummary(
-      cashSales: cash['total']! as int,
-      cashSaleCount: cash['count']! as int,
+      cashSales: (cash['cash_total'] as int?) ?? 0,
+      gcashSales: (cash['gcash_total'] as int?) ?? 0,
+      cashSaleCount: (cash['cash_count'] as int?) ?? 0,
+      gcashSaleCount: (cash['gcash_count'] as int?) ?? 0,
       newUtang: utang['total']! as int,
       payments: pay['total']! as int,
+      cashPayments: pay['cash_total']! as int,
+      gcashPayments: pay['gcash_total']! as int,
       operatingExpenses: expenses['total']! as int,
+      cashExpenses: expenses['cash_total']! as int,
+      gcashExpenses: expenses['gcash_total']! as int,
+      cashRemittances: remittances['cash_total']! as int,
+      gcashRemittances: remittances['gcash_total']! as int,
+      gcashOpeningBalance: gcash['opening']! as int,
+      gcashMoneyIn: gcash['money_in']! as int,
+      gcashMoneyOut: gcash['money_out']! as int,
       consignmentSales: con['sales']! as int,
       supplierPayable: con['payable']! as int,
       consignmentMargin: con['margin']! as int,
       transactionCount:
-          (cash['count']! as int) +
+          ((cash['cash_count'] as int?) ?? 0) +
+          ((cash['gcash_count'] as int?) ?? 0) +
           (utang['count']! as int) +
           (pay['count']! as int) +
-          (expenses['count']! as int),
+          (expenses['count']! as int) +
+          (remittances['count']! as int),
       lowStock: (stock['low'] as int?) ?? 0,
       outOfStock: (stock['out'] as int?) ?? 0,
       topProducts: top,

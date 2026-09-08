@@ -4,6 +4,7 @@ import '../../../models/product.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/utang_draft.dart';
 import '../../../models/product_unit.dart';
+import '../../../models/payment_method.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/product_unit_repository.dart';
@@ -303,103 +304,132 @@ class _State extends State<CashSaleScreen> {
 
   Future<void> save() async {
     if (saving || c.totalCentavos == 0) return;
+    var paymentMethod = PaymentMethod.cash;
+    final gcashReference = TextEditingController();
     final yes = await showDialog<bool>(
       context: context,
-      builder: (x) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.receipt_long),
-            SizedBox(width: 10),
-            Text('Review Cash Sale'),
-          ],
-        ),
-        contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      barrierDismissible: false,
+      builder: (x) => StatefulBuilder(
+        builder: (_, setDialog) => AlertDialog(
+          title: const Row(
             children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'CASH',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: Colors.green,
-                  ),
+              Icon(Icons.receipt_long),
+              SizedBox(width: 10),
+              Text('Review Sale'),
+            ],
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+          content: SizedBox(
+            width: 560,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<PaymentMethod>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PaymentMethod.cash,
+                      icon: Icon(Icons.payments_outlined),
+                      label: Text('Cash'),
+                    ),
+                    ButtonSegment(
+                      value: PaymentMethod.gcash,
+                      icon: Icon(Icons.phone_android),
+                      label: Text('GCash'),
+                    ),
+                  ],
+                  selected: {paymentMethod},
+                  onSelectionChanged: (value) =>
+                      setDialog(() => paymentMethod = value.single),
                 ),
-              ),
-              const Divider(),
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 380),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: c.lines.length,
-                    separatorBuilder: (_, _) => const Divider(height: 12),
-                    itemBuilder: (_, i) {
-                      final line = c.lines[i], p = line.product;
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  p.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            money(line.lineTotalCentavos),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'TOTAL',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    money(c.totalCentavos),
-                    style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w900,
-                      color: Theme.of(context).colorScheme.primary,
+                if (paymentMethod == PaymentMethod.gcash) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: gcashReference,
+                    decoration: const InputDecoration(
+                      labelText: 'GCash Reference (optional)',
+                      prefixIcon: Icon(Icons.tag),
                     ),
                   ),
                 ],
-              ),
-            ],
+                const Divider(),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 380),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: c.lines.length,
+                      separatorBuilder: (_, _) => const Divider(height: 12),
+                      itemBuilder: (_, i) {
+                        final line = c.lines[i], p = line.product;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    p.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              money(line.lineTotalCentavos),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'TOTAL',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      money(c.totalCentavos),
+                      style: TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(x, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(x, true),
+              child: const Text('Complete Sale'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(x, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(x, true),
-            child: const Text('Complete Sale'),
-          ),
-        ],
       ),
     );
+    final reference = gcashReference.text;
+    gcashReference.dispose();
     if (yes != true) return;
     setState(() => saving = true);
     try {
@@ -408,7 +438,11 @@ class _State extends State<CashSaleScreen> {
       if (widget.saveSale != null) {
         await widget.saveSale!(items);
       } else {
-        result = await widget.repository!.saveWithResult(items);
+        result = await widget.repository!.saveWithResult(
+          items,
+          paymentMethod: paymentMethod,
+          gcashReference: reference,
+        );
       }
       final fresh =
           await (widget.loadProducts?.call() ?? Future.value(products));
@@ -425,7 +459,7 @@ class _State extends State<CashSaleScreen> {
           builder: (x) => AlertDialog(
             title: const Text('Sale Completed'),
             content: Text(
-              '${result!.reference}\n\nTotal\n${money(result.totalCentavos)}',
+              '${result!.reference}\n${result.paymentMethod.label}\n\nTotal\n${money(result.totalCentavos)}',
             ),
             actions: [
               FilledButton(

@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../services/app_refresh_controller.dart';
+import 'payment_accounting_repository.dart';
 
 class ReversalException implements Exception {
   const ReversalException(this.message);
@@ -98,6 +99,14 @@ class ReversalRepository {
     }
     final p = rows.single, now = DateTime.now().toUtc().toIso8601String();
     final reversal = await _header(tx, reason, payment: id, now: now);
+    await PaymentAccountingRepository.reverseSource(
+      tx,
+      utangPaymentId: id,
+      transactionReversalId: reversal,
+      actorRole: actorRole,
+      occurredAt: now,
+      reason: reason,
+    );
     await tx.insert('customer_ledger_entries', {
       'customer_id': p['customer_id'],
       'entry_type': 'PAYMENT_REVERSAL',
@@ -161,6 +170,16 @@ class ReversalRepository {
       utang: cash ? null : id,
       now: now,
     );
+    if (cash) {
+      await PaymentAccountingRepository.reverseSource(
+        tx,
+        cashSaleId: id,
+        transactionReversalId: reversal,
+        actorRole: actorRole,
+        occurredAt: now,
+        reason: reason,
+      );
+    }
     final inv = await tx.insert('inventory_transactions', {
       'type': 'REVERSAL',
       'reference_number': _ref(reversal),

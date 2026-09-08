@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../core/formatters/number_format.dart';
+import '../models/payment_method.dart';
+import 'payment_accounting_repository.dart';
 
 import '../models/consignment.dart';
 import '../models/product.dart';
@@ -487,6 +489,8 @@ class ConsignmentRepository {
     required int consignorId,
     required int amountCentavos,
     String? notes,
+    PaymentMethod paymentMethod = PaymentMethod.cash,
+    String? gcashReference,
   }) async {
     if (amountCentavos <= 0) {
       throw const InvalidConsignmentOperation('Amount must be positive.');
@@ -523,7 +527,20 @@ class ConsignmentRepository {
           'notes': notes?.trim(),
           'remitted_at': now,
           'created_at': now,
+          'payment_method': paymentMethod.dbValue,
+          'gcash_reference': paymentMethod == PaymentMethod.gcash
+              ? PaymentAccountingRepository.normalizeReference(gcashReference)
+              : null,
         });
+        await PaymentAccountingRepository.postConsignorRemittance(
+          tx,
+          remittanceId: id,
+          amountCentavos: amountCentavos,
+          method: paymentMethod,
+          gcashReference: gcashReference,
+          actorRole: actorRole,
+          occurredAt: now,
+        );
         await tx.insert('consignor_ledger_entries', {
           'consignor_id': consignorId,
           'entry_type': 'REMITTANCE',
@@ -536,7 +553,7 @@ class ConsignmentRepository {
         await tx.insert('activity_logs', {
           'event_type': 'CONSIGNMENT_REMITTANCE',
           'description':
-              '${standardMoney(amountCentavos)} remitted to ${party.single['name']}',
+              '${standardMoney(amountCentavos)} remitted to ${party.single['name']} via ${paymentMethod.label}',
           'actor_role': actorRole,
           'related_entity_type': 'CONSIGNOR_REMITTANCE',
           'related_entity_id': id,
@@ -654,7 +671,7 @@ class ConsignmentRepository {
 
   Future<List<Map<String, Object?>>> remittancesForConsignor(int consignorId) =>
       db.rawQuery(
-        '''SELECT amount_centavos,notes,remitted_at FROM consignor_remittances
+        '''SELECT amount_centavos,notes,remitted_at,payment_method,gcash_reference FROM consignor_remittances
           WHERE consignor_id=? ORDER BY remitted_at DESC,id DESC''',
         [consignorId],
       );

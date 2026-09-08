@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/formatters/number_format.dart';
 
 import '../../../models/expense.dart';
+import '../../../models/payment_method.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../services/auth_service.dart';
 import '../../../widgets/summary_card.dart';
@@ -286,6 +287,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 _detail('Status', expense.status),
                 _detail('Category', expense.categoryName),
                 _detail('Amount', money(expense.amountCentavos)),
+                _detail('Paid via', expense.paymentMethod.label),
+                if (expense.gcashReference != null)
+                  _detail('GCash Reference', expense.gcashReference!),
                 _detail(
                   'Expense date/time',
                   _when(expense.expenseDateTime.toLocal()),
@@ -447,8 +451,10 @@ class _ExpenseFormState extends State<_ExpenseForm> {
       description,
       notes,
       reference,
+      gcashReference,
       reason,
       pin;
+  late PaymentMethod paymentMethod;
   String error = '';
   bool busy = false;
   @override
@@ -457,19 +463,29 @@ class _ExpenseFormState extends State<_ExpenseForm> {
     final x = widget.original;
     categoryId = x?.categoryId ?? widget.categories.first.id;
     when = x?.expenseDateTime.toLocal() ?? DateTime.now();
+    paymentMethod = x?.paymentMethod ?? PaymentMethod.cash;
     amount = TextEditingController(
       text: x == null ? '' : (x.amountCentavos / 100).toStringAsFixed(2),
     );
     description = TextEditingController(text: x?.description);
     notes = TextEditingController(text: x?.notes);
     reference = TextEditingController(text: x?.referenceNo);
+    gcashReference = TextEditingController(text: x?.gcashReference);
     reason = TextEditingController();
     pin = TextEditingController();
   }
 
   @override
   void dispose() {
-    for (final x in [amount, description, notes, reference, reason, pin]) {
+    for (final x in [
+      amount,
+      description,
+      notes,
+      reference,
+      gcashReference,
+      reason,
+      pin,
+    ]) {
       x.dispose();
     }
     super.dispose();
@@ -514,6 +530,33 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               ),
               decoration: const InputDecoration(labelText: 'Amount (₱)'),
             ),
+            const SizedBox(height: 12),
+            SegmentedButton<PaymentMethod>(
+              segments: const [
+                ButtonSegment(
+                  value: PaymentMethod.cash,
+                  icon: Icon(Icons.payments_outlined),
+                  label: Text('Cash'),
+                ),
+                ButtonSegment(
+                  value: PaymentMethod.gcash,
+                  icon: Icon(Icons.phone_android),
+                  label: Text('GCash'),
+                ),
+              ],
+              selected: {paymentMethod},
+              onSelectionChanged: busy
+                  ? null
+                  : (value) => setState(() => paymentMethod = value.single),
+            ),
+            if (paymentMethod == PaymentMethod.gcash)
+              TextField(
+                controller: gcashReference,
+                decoration: const InputDecoration(
+                  labelText: 'GCash Reference (optional)',
+                  prefixIcon: Icon(Icons.tag),
+                ),
+              ),
             TextField(
               controller: description,
               decoration: const InputDecoration(
@@ -629,6 +672,10 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         expenseDateTime: when,
         notes: notes.text,
         referenceNo: reference.text,
+        paymentMethod: paymentMethod,
+        gcashReference: paymentMethod == PaymentMethod.gcash
+            ? gcashReference.text
+            : null,
       );
       if (widget.original == null) {
         await widget.repository.add(draft);

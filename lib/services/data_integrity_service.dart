@@ -24,6 +24,7 @@ class DataIntegrityService {
         consignmentIssues = <String>[],
         transactions = <String>[];
     final expenseIssues = <String>[];
+    final paymentIssues = <String>[];
     const requiredTables = [
       'products',
       'inventory_movements',
@@ -42,6 +43,9 @@ class DataIntegrityService {
       'expenses',
       'expense_reversals',
       'expense_corrections',
+      'sale_payments',
+      'expense_payments',
+      'gcash_ledger_entries',
     ];
     final tables = (await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table'",
@@ -143,6 +147,30 @@ class DataIntegrityService {
         );
       }
     }
+    if (tables.contains('sale_payments')) {
+      final missingSalePayments = await db.rawQuery('''SELECT s.id FROM cash_sales s LEFT JOIN sale_payments p ON p.cash_sale_id=s.id
+        WHERE p.id IS NULL''');
+      final missingExpensePayments = await db.rawQuery('''SELECT e.id FROM expenses e LEFT JOIN expense_payments p ON p.expense_id=e.id
+        WHERE p.id IS NULL''');
+      final wrongGCashPostings = await db.rawQuery(
+        '''SELECT p.id FROM sale_payments p WHERE p.payment_method='GCASH'
+        AND NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.cash_sale_id=p.cash_sale_id)
+        UNION ALL SELECT p.id FROM expense_payments p WHERE p.payment_method='GCASH'
+        AND NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.expense_id=p.expense_id)
+        UNION ALL SELECT p.id FROM utang_payments p WHERE p.payment_method='GCASH'
+        AND NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.utang_payment_id=p.id)''',
+      );
+      if (missingSalePayments.isNotEmpty || missingExpensePayments.isNotEmpty) {
+        paymentIssues.add(
+          '${missingSalePayments.length + missingExpensePayments.length} transaction payment-source link(s) missing.',
+        );
+      }
+      if (wrongGCashPostings.isNotEmpty) {
+        paymentIssues.add(
+          '${wrongGCashPostings.length} GCash ledger posting(s) missing.',
+        );
+      }
+    }
     return IntegrityResult([
       IntegritySection('Database', database),
       IntegritySection('Inventory', inventory),
@@ -150,6 +178,7 @@ class DataIntegrityService {
       IntegritySection('Consignment', consignmentIssues),
       IntegritySection('Transactions', transactions),
       IntegritySection('Expenses', expenseIssues),
+      IntegritySection('Payment Accounts', paymentIssues),
     ]);
   }
 }

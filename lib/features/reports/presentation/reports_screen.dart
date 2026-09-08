@@ -189,9 +189,9 @@ class ReportsScreen extends StatelessWidget {
           children: [
             _reportIntro(
               c,
-              "Today's Cash Sales",
+              "Today's Sales",
               standardMoney(x.daily),
-              'Posted cash transactions for today',
+              'Cash ${standardMoney(x.dailyCash)}  •  GCash ${standardMoney(x.dailyGCash)}',
               Icons.point_of_sale_outlined,
             ),
             const SizedBox(height: 12),

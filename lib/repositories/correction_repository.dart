@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/utang_draft.dart';
+import '../models/payment_method.dart';
 import '../services/app_refresh_controller.dart';
 import 'cash_sale_repository.dart';
 import 'payment_repository.dart';
@@ -45,14 +46,24 @@ class CorrectionRepository {
     _authorize(ownerPinAuthorized, reason);
     return AppRefreshController.instance.after(
       db.transaction((tx) async {
+        final payment = (await tx.rawQuery(
+          '''SELECT sp.payment_method,sp.gcash_reference FROM sale_payments sp
+          WHERE sp.cash_sale_id=? LIMIT 1''',
+          [originalId],
+        )).single;
         final reversal = await ReversalRepository(
           db,
           actorRole: actorRole,
         ).reverseCashSaleWith(tx, originalId, reason, ownerPinAuthorized: true);
-        final replacement = await CashSaleRepository(
-          db,
-          actorRole: actorRole,
-        ).saveWithExecutor(tx, correctedItems);
+        final replacement = await CashSaleRepository(db, actorRole: actorRole)
+            .saveWithExecutor(
+              tx,
+              correctedItems,
+              paymentMethod: PaymentMethod.fromDatabase(
+                payment['payment_method'],
+              ),
+              gcashReference: payment['gcash_reference'] as String?,
+            );
         final correction = await _link(
           tx,
           'CASH_SALE',
@@ -139,6 +150,10 @@ class CorrectionRepository {
               customerId: original.single['customer_id']! as int,
               amountCentavos: correctedAmountCentavos,
               notes: notes,
+              paymentMethod: PaymentMethod.fromDatabase(
+                original.single['payment_method'],
+              ),
+              gcashReference: original.single['gcash_reference'] as String?,
             );
         final reference = 'PAY-${replacementId.toString().padLeft(6, '0')}';
         final correction = await _link(
