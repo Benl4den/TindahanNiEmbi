@@ -36,6 +36,14 @@ class DailyClosingSummary {
     required this.gcashOpeningBalance,
     required this.gcashMoneyIn,
     required this.gcashMoneyOut,
+    required this.cashInServiceCount,
+    required this.cashOutServiceCount,
+    required this.cashInServicePrincipal,
+    required this.cashOutServicePrincipal,
+    required this.cashInServiceFees,
+    required this.cashOutServiceFees,
+    required this.gcashServicePhysicalCashChange,
+    required this.gcashServiceWalletChange,
     required this.consignmentSales,
     required this.supplierPayable,
     required this.consignmentMargin,
@@ -60,6 +68,14 @@ class DailyClosingSummary {
       gcashOpeningBalance,
       gcashMoneyIn,
       gcashMoneyOut,
+      cashInServiceCount,
+      cashOutServiceCount,
+      cashInServicePrincipal,
+      cashOutServicePrincipal,
+      cashInServiceFees,
+      cashOutServiceFees,
+      gcashServicePhysicalCashChange,
+      gcashServiceWalletChange,
       consignmentSales,
       supplierPayable,
       consignmentMargin,
@@ -68,7 +84,9 @@ class DailyClosingSummary {
       outOfStock;
   final List<Map<String, Object?>> topProducts;
   int get totalSales => cashSales + gcashSales;
-  int get recordedCashIn => cashSales + cashPayments;
+  int get serviceFeeIncome => cashInServiceFees + cashOutServiceFees;
+  int get recordedCashIn =>
+      cashSales + cashPayments + gcashServicePhysicalCashChange;
   int get netRecordedCash => recordedCashIn - cashExpenses - cashRemittances;
   int get gcashEndingBalance =>
       gcashOpeningBalance + gcashMoneyIn - gcashMoneyOut;
@@ -162,6 +180,16 @@ class OperationsRepository {
       FROM gcash_ledger_entries''',
       [start, start, end, start, end],
     )).single;
+    final services = await one('''SELECT
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) ci_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) co_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) ci_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) co_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) ci_fees,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) co_fees,
+      COALESCE(SUM(physical_cash_change_centavos),0) cash_change,
+      COALESCE(SUM(gcash_change_centavos),0) wallet_change
+      FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''');
     final con = await one(
       '''SELECT COALESCE(SUM(COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity)),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
     );
@@ -197,6 +225,14 @@ class OperationsRepository {
       gcashOpeningBalance: gcash['opening']! as int,
       gcashMoneyIn: gcash['money_in']! as int,
       gcashMoneyOut: gcash['money_out']! as int,
+      cashInServiceCount: services['ci_count']! as int,
+      cashOutServiceCount: services['co_count']! as int,
+      cashInServicePrincipal: services['ci_principal']! as int,
+      cashOutServicePrincipal: services['co_principal']! as int,
+      cashInServiceFees: services['ci_fees']! as int,
+      cashOutServiceFees: services['co_fees']! as int,
+      gcashServicePhysicalCashChange: services['cash_change']! as int,
+      gcashServiceWalletChange: services['wallet_change']! as int,
       consignmentSales: con['sales']! as int,
       supplierPayable: con['payable']! as int,
       consignmentMargin: con['margin']! as int,
@@ -206,7 +242,9 @@ class OperationsRepository {
           (utang['count']! as int) +
           (pay['count']! as int) +
           (expenses['count']! as int) +
-          (remittances['count']! as int),
+          (remittances['count']! as int) +
+          (services['ci_count']! as int) +
+          (services['co_count']! as int),
       lowStock: (stock['low'] as int?) ?? 0,
       outOfStock: (stock['out'] as int?) ?? 0,
       topProducts: top,

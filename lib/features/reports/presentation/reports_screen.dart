@@ -205,6 +205,44 @@ class ReportsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
+              'GCash Service Income',
+              style: Theme.of(c).textTheme.titleLarge,
+            ),
+            FutureBuilder<Map<String, Object?>>(
+              future: repository.gcashServiceSummary(),
+              builder: (_, services) {
+                if (!services.hasData) return const LinearProgressIndicator();
+                final g = services.data!;
+                final fees =
+                    (g['cash_in_fees']! as int) + (g['cash_out_fees']! as int);
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    SizedBox(
+                      width: 280,
+                      child: _total(
+                        'Cash-In (${g['cash_in_count']})',
+                        g['cash_in_principal']! as int,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _total(
+                        'Cash-Out (${g['cash_out_count']})',
+                        g['cash_out_principal']! as int,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _total('Service Fee Income', fees),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            Text(
               'Frequently Sold Products',
               style: Theme.of(c).textTheme.titleLarge,
             ),

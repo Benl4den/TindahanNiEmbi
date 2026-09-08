@@ -12,6 +12,7 @@ import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../repositories/payment_repository.dart';
 import '../../../repositories/payment_accounting_repository.dart';
+import '../../../repositories/gcash_service_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/reports_repository.dart';
 import '../../../repositories/operations_repository.dart';
@@ -345,6 +346,10 @@ class _State extends State<AppShell> {
       widget.role == UserRole.owner
           ? GCashScreen(
               repository: PaymentAccountingRepository(
+                widget.database,
+                actorRole: role,
+              ),
+              services: GCashServiceRepository(
                 widget.database,
                 actorRole: role,
               ),

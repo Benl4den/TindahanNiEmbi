@@ -159,6 +159,26 @@ class PaymentAccountingRepository {
     );
   }
 
+  static Future<int> postGCashService(
+    DatabaseExecutor tx, {
+    required int serviceId,
+    required String serviceType,
+    required int amountChangeCentavos,
+    String? gcashReference,
+    String? actorRole,
+    String? notes,
+    required String occurredAt,
+  }) => _postLedger(
+    tx,
+    type: serviceType == 'CASH_IN' ? 'CASH_IN_SERVICE' : 'CASH_OUT_SERVICE',
+    amountChangeCentavos: amountChangeCentavos,
+    gcashServiceTransactionId: serviceId,
+    gcashReference: normalizeReference(gcashReference),
+    actorRole: actorRole,
+    notes: notes,
+    occurredAt: occurredAt,
+  );
+
   static Future<void> reverseSource(
     DatabaseExecutor tx, {
     int? cashSaleId,
@@ -290,6 +310,7 @@ class PaymentAccountingRepository {
     int? consignorRemittanceId,
     int? transactionReversalId,
     int? expenseReversalId,
+    int? gcashServiceTransactionId,
     int? reversalOfEntryId,
     String? gcashReference,
     String? notes,
@@ -309,6 +330,7 @@ class PaymentAccountingRepository {
       'consignor_remittance_id': consignorRemittanceId,
       'transaction_reversal_id': transactionReversalId,
       'expense_reversal_id': expenseReversalId,
+      'gcash_service_transaction_id': gcashServiceTransactionId,
       'reversal_of_entry_id': reversalOfEntryId,
       'gcash_reference': gcashReference,
       'notes': notes,

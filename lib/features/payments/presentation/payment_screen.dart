@@ -96,88 +96,109 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Record Payment')),
-    body: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Total UTANG Balance: ${standardMoney(widget.customer.balanceCentavos)}',
-            style: Theme.of(context).textTheme.headlineSmall,
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            28,
+            28,
+            28,
+            28 + MediaQuery.viewInsetsOf(context).bottom,
           ),
-          Text(
-            widget.customer.fullName,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 24),
-          SegmentedButton<PaymentMethod>(
-            segments: const [
-              ButtonSegment(
-                value: PaymentMethod.cash,
-                icon: Icon(Icons.payments_outlined),
-                label: Text('Cash'),
-              ),
-              ButtonSegment(
-                value: PaymentMethod.gcash,
-                icon: Icon(Icons.phone_android),
-                label: Text('GCash'),
-              ),
-            ],
-            selected: {paymentMethod},
-            onSelectionChanged: saving
-                ? null
-                : (value) => setState(() => paymentMethod = value.single),
-          ),
-          if (paymentMethod == PaymentMethod.gcash) ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: gcashReference,
-              decoration: const InputDecoration(
-                labelText: 'GCash Reference (optional)',
-                prefixIcon: Icon(Icons.tag),
-              ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 56),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Total UTANG Balance: ${standardMoney(widget.customer.balanceCentavos)}',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                Text(
+                  widget.customer.fullName,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 24),
+                SegmentedButton<PaymentMethod>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PaymentMethod.cash,
+                      icon: Icon(Icons.payments_outlined),
+                      label: Text('Cash'),
+                    ),
+                    ButtonSegment(
+                      value: PaymentMethod.gcash,
+                      icon: Icon(Icons.phone_android),
+                      label: Text('GCash'),
+                    ),
+                  ],
+                  selected: {paymentMethod},
+                  onSelectionChanged: saving
+                      ? null
+                      : (value) => setState(() => paymentMethod = value.single),
+                ),
+                if (paymentMethod == PaymentMethod.gcash) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: gcashReference,
+                    decoration: const InputDecoration(
+                      labelText: 'GCash Reference (optional)',
+                      prefixIcon: Icon(Icons.tag),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: const TextStyle(fontSize: 24),
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Amount',
+                    prefixText: '₱ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => setState(
+                    () => cents = ((double.tryParse(v) ?? 0) * 100).round(),
+                  ),
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                Text(
+                  'Remaining: ${standardMoney((widget.customer.balanceCentavos - cents).clamp(0, widget.customer.balanceCentavos))}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed:
+                      cents > 0 &&
+                          cents <= widget.customer.balanceCentavos &&
+                          !saving
+                      ? save
+                      : null,
+                  child: const Text('Record Payment'),
+                ),
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: 20),
-          TextField(
-            controller: amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 24),
-            decoration: const InputDecoration(
-              labelText: 'Payment Amount',
-              prefixText: '₱ ',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (v) => setState(
-              () => cents = ((double.tryParse(v) ?? 0) * 100).round(),
-            ),
           ),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          const SizedBox(height: 20),
-          Text(
-            'Remaining: ${standardMoney((widget.customer.balanceCentavos - cents).clamp(0, widget.customer.balanceCentavos))}',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed:
-                cents > 0 && cents <= widget.customer.balanceCentavos && !saving
-                ? save
-                : null,
-            child: const Text('Record Payment'),
-          ),
-          TextButton(
-            onPressed: saving ? null : () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-        ],
+        ),
       ),
     ),
   );

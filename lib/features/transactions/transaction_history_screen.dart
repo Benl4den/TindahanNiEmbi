@@ -68,6 +68,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     ('PAYMENT', 'Payments'),
                     ('EXPENSE', 'Expenses'),
                     ('CONSIGNMENT', 'Consignment'),
+                    ('GCASH_SERVICE', 'GCash Services'),
                   ])
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
@@ -156,6 +157,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     'UTANG' => Icons.people_outline,
     'PAYMENT' => Icons.account_balance_wallet_outlined,
     'EXPENSE' => Icons.receipt_long_outlined,
+    'GCASH_SERVICE' => Icons.phone_android_outlined,
     _ => Icons.inventory_2_outlined,
   };
 
@@ -221,6 +223,27 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   ),
                   Text('From ${details['consignor_name']}'),
                   Text('${details['units_received']} units received'),
+                ],
+                if (entry.type == 'GCASH_SERVICE') ...[
+                  Text('Reference: ${details['reference']}'),
+                  Text(
+                    'Principal: ${standardMoney(details['principal_centavos']! as int)}',
+                  ),
+                  Text(
+                    'Service fee: ${standardMoney(details['fee_centavos']! as int)}',
+                  ),
+                  Text(
+                    'Customer total: ${standardMoney(details['customer_total_centavos']! as int)}',
+                  ),
+                  Text(
+                    'Physical cash: ${standardMoney(details['physical_cash_change_centavos']! as int)}',
+                  ),
+                  Text(
+                    'GCash: ${standardMoney(details['gcash_change_centavos']! as int)}',
+                  ),
+                  if (details['gcash_reference'] != null)
+                    Text('GCash reference: ${details['gcash_reference']}'),
+                  if (details['notes'] != null) Text('${details['notes']}'),
                 ],
                 if (items.isNotEmpty) ...[
                   const Divider(height: 26),

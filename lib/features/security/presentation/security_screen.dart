@@ -205,52 +205,67 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
     title: Text(widget.account == null ? 'Add Staff' : 'Reset Staff PIN'),
     content: SizedBox(
       width: 460,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.account == null)
-            TextField(
-              controller: name,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Staff name',
-                prefixIcon: Icon(Icons.person_outline),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight:
+              (MediaQuery.sizeOf(context).height -
+                  MediaQuery.viewInsetsOf(context).bottom) *
+              .55,
+        ),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.account == null)
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Staff name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pin,
+                obscureText: !visible,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  labelText: 'New 4-digit PIN',
+                  prefixIcon: const Icon(Icons.pin_outlined),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => visible = !visible),
+                    icon: Icon(
+                      visible ? Icons.visibility_off : Icons.visibility,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: pin,
-            obscureText: !visible,
-            keyboardType: TextInputType.number,
-            maxLength: 4,
-            decoration: InputDecoration(
-              labelText: 'New 4-digit PIN',
-              prefixIcon: const Icon(Icons.pin_outlined),
-              suffixIcon: IconButton(
-                onPressed: () => setState(() => visible = !visible),
-                icon: Icon(visible ? Icons.visibility_off : Icons.visibility),
+              TextField(
+                controller: confirm,
+                obscureText: !visible,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm PIN',
+                  prefixIcon: Icon(Icons.verified_user_outlined),
+                ),
               ),
-            ),
+              if (error != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          TextField(
-            controller: confirm,
-            obscureText: !visible,
-            keyboardType: TextInputType.number,
-            maxLength: 4,
-            decoration: const InputDecoration(
-              labelText: 'Confirm PIN',
-              prefixIcon: Icon(Icons.verified_user_outlined),
-            ),
-          ),
-          if (error != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-        ],
+        ),
       ),
     ),
     actions: [

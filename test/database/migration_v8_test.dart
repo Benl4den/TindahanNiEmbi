@@ -38,7 +38,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file),
         db = await app.database;
-    expect(await db.getVersion(), 18);
+    expect(await db.getVersion(), 19);
     expect(
       await db.query('schema_migrations', where: 'version=8'),
       hasLength(1),

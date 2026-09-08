@@ -46,6 +46,7 @@ class DataIntegrityService {
       'sale_payments',
       'expense_payments',
       'gcash_ledger_entries',
+      'gcash_service_transactions',
     ];
     final tables = (await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table'",
@@ -168,6 +169,19 @@ class DataIntegrityService {
       if (wrongGCashPostings.isNotEmpty) {
         paymentIssues.add(
           '${wrongGCashPostings.length} GCash ledger posting(s) missing.',
+        );
+      }
+    }
+    if (tables.contains('gcash_service_transactions')) {
+      final services = await db.rawQuery(
+        '''SELECT s.id FROM gcash_service_transactions s
+        WHERE (s.status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id)
+          AND NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.gcash_service_transaction_id=s.id))
+        OR s.customer_total_centavos<>s.principal_centavos+s.fee_centavos''',
+      );
+      if (services.isNotEmpty) {
+        paymentIssues.add(
+          '${services.length} GCash service accounting record(s) are incomplete.',
         );
       }
     }

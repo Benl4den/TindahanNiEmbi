@@ -97,7 +97,7 @@ void main() {
 
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 18);
+    expect(await db.getVersion(), 19);
     final legacy = (await db.query(
       'consignment_allocations',
       where: 'id=?',
@@ -130,7 +130,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 18);
+    expect(await db.getVersion(), 19);
     final columns = await db.rawQuery('PRAGMA table_info(cash_sale_items)');
     expect(
       columns.map((x) => x['name']),

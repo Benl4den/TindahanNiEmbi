@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../../core/formatters/number_format.dart';
 import '../../../repositories/payment_accounting_repository.dart';
+import '../../../repositories/gcash_service_repository.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/app_refresh_controller.dart';
 
 class GCashScreen extends StatefulWidget {
-  const GCashScreen({super.key, required this.repository, required this.auth});
+  const GCashScreen({
+    super.key,
+    required this.repository,
+    required this.services,
+    required this.auth,
+  });
   final PaymentAccountingRepository repository;
+  final GCashServiceRepository services;
   final AuthService auth;
 
   @override
@@ -123,6 +130,64 @@ class _GCashScreenState extends State<GCashScreen> {
                     summary.todayNet < 0 ? Colors.red : Colors.blue,
                   ),
                 ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'GCash Services',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => _service('CASH_IN'),
+                    icon: const Icon(Icons.call_made),
+                    label: const Text('Cash-In'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => _service('CASH_OUT'),
+                    icon: const Icon(Icons.call_received),
+                    label: const Text('Cash-Out'),
+                  ),
+                ],
+              ),
+              FutureBuilder<List<GCashServiceTransaction>>(
+                future: widget.services.recent(limit: 8),
+                builder: (_, services) =>
+                    services.hasData && services.data!.isNotEmpty
+                    ? Column(
+                        children: services.data!
+                            .map(
+                              (service) => Card(
+                                child: ListTile(
+                                  onTap: service.status == 'POSTED'
+                                      ? () => _reverseService(service)
+                                      : null,
+                                  leading: Icon(
+                                    service.type == 'CASH_IN'
+                                        ? Icons.call_made
+                                        : Icons.call_received,
+                                  ),
+                                  title: Text(
+                                    'GCash ${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} • ${service.reference}',
+                                  ),
+                                  subtitle: Text(
+                                    'Principal ${standardMoney(service.principalCentavos)} • Fee ${standardMoney(service.feeCentavos)}',
+                                  ),
+                                  trailing: Text(
+                                    '${service.gcashChangeCentavos >= 0 ? '+' : '-'}${standardMoney(service.gcashChangeCentavos.abs())}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      )
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
               Text(
@@ -348,5 +413,208 @@ class _GCashScreenState extends State<GCashScreen> {
     reference.dispose();
     pin.dispose();
     if (saved == true && mounted) setState(_reload);
+  }
+
+  Future<void> _service(String type) async {
+    final principal = TextEditingController();
+    final fee = TextEditingController(text: '0');
+    final reference = TextEditingController();
+    final notes = TextEditingController();
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, setDialog) => AlertDialog(
+          title: Text(type == 'CASH_IN' ? 'GCash Cash-In' : 'GCash Cash-Out'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: principal,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Principal Amount',
+                      prefixText: '₱ ',
+                    ),
+                  ),
+                  TextField(
+                    controller: fee,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Service Fee',
+                      prefixText: '₱ ',
+                    ),
+                  ),
+                  TextField(
+                    controller: reference,
+                    decoration: const InputDecoration(
+                      labelText: 'GCash Reference (optional)',
+                    ),
+                  ),
+                  TextField(
+                    controller: notes,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
+                    ),
+                  ),
+                  if (type == 'CASH_OUT')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                        'Confirm that there is enough physical cash in the drawer before continuing.',
+                      ),
+                    ),
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                int cents(String value) =>
+                    ((double.tryParse(value.trim()) ?? -1) * 100).round();
+                final p = cents(principal.text), f = cents(fee.text);
+                if (p <= 0 || f < 0) {
+                  setDialog(
+                    () => error = 'Enter a valid principal and service fee.',
+                  );
+                  return;
+                }
+                final total = p + f;
+                final review = await showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (reviewContext) => AlertDialog(
+                    title: const Text('Review GCash Service'),
+                    content: Text(
+                      type == 'CASH_IN'
+                          ? 'Principal: ${standardMoney(p)}\nService Fee: ${standardMoney(f)}\nCustomer Pays Cash: ${standardMoney(total)}\nGCash Sent: ${standardMoney(p)}'
+                          : 'Principal: ${standardMoney(p)}\nService Fee: ${standardMoney(f)}\nCustomer Sends GCash: ${standardMoney(total)}\nCash Given: ${standardMoney(p)}',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(reviewContext, false),
+                        child: const Text('Back'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(reviewContext, true),
+                        child: const Text('Confirm'),
+                      ),
+                    ],
+                  ),
+                );
+                if (review != true) return;
+                try {
+                  await widget.services.record(
+                    type: type,
+                    principalCentavos: p,
+                    feeCentavos: f,
+                    gcashReference: reference.text,
+                    notes: notes.text,
+                    physicalCashAvailabilityAcknowledged: type == 'CASH_OUT',
+                  );
+                  if (context.mounted) Navigator.pop(dialog, true);
+                } catch (e) {
+                  setDialog(() => error = e.toString());
+                }
+              },
+              child: const Text('Review'),
+            ),
+          ],
+        ),
+      ),
+    );
+    principal.dispose();
+    fee.dispose();
+    reference.dispose();
+    notes.dispose();
+    if (saved == true && mounted) setState(_reload);
+  }
+
+  Future<void> _reverseService(GCashServiceTransaction service) async {
+    final reason = TextEditingController();
+    final pin = TextEditingController();
+    String? error;
+    final reversed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, setDialog) => AlertDialog(
+          title: const Text('Reverse GCash Service'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${service.reference} • ${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'}',
+                ),
+                TextField(
+                  controller: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (required)',
+                  ),
+                ),
+                TextField(
+                  controller: pin,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Owner PIN'),
+                ),
+                if (error != null)
+                  Text(error!, style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  if (await widget.auth.verify(pin.text) != UserRole.owner) {
+                    throw const GCashServiceException('Incorrect Owner PIN.');
+                  }
+                  await widget.services.reverse(
+                    service.id,
+                    reason: reason.text,
+                    ownerPinAuthorized: true,
+                  );
+                  if (dialog.mounted) Navigator.pop(dialog, true);
+                } catch (e) {
+                  setDialog(() => error = e.toString());
+                }
+              },
+              child: const Text('Reverse'),
+            ),
+          ],
+        ),
+      ),
+    );
+    reason.dispose();
+    pin.dispose();
+    if (reversed == true && mounted) setState(_reload);
   }
 }

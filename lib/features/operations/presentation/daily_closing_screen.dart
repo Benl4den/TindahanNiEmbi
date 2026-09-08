@@ -75,6 +75,10 @@ class _State extends State<DailyClosingScreen> {
               _metric('Cash UTANG Payments', m(x.cashPayments)),
               _metric('Cash Expenses', '-${m(x.cashExpenses)}'),
               _metric('Cash Consignor Remittances', '-${m(x.cashRemittances)}'),
+              _metric(
+                'GCash Services Cash Movement',
+                m(x.gcashServicePhysicalCashChange),
+              ),
               _metric('Recorded Cash In', m(x.recordedCashIn), strong: true),
             ]),
             const SizedBox(height: 14),
@@ -92,6 +96,25 @@ class _State extends State<DailyClosingScreen> {
                 m(x.gcashEndingBalance),
                 strong: true,
               ),
+            ]),
+            const SizedBox(height: 14),
+            _section('GCASH SERVICES', Icons.phone_android_outlined, [
+              _metric(
+                'Cash-In (${x.cashInServiceCount})',
+                m(x.cashInServicePrincipal),
+              ),
+              _metric(
+                'Cash-Out (${x.cashOutServiceCount})',
+                m(x.cashOutServicePrincipal),
+              ),
+              _metric('Cash-In Fees', m(x.cashInServiceFees)),
+              _metric('Cash-Out Fees', m(x.cashOutServiceFees)),
+              _metric(
+                'Service Fee Income',
+                m(x.serviceFeeIncome),
+                strong: true,
+              ),
+              _metric('GCash Movement', m(x.gcashServiceWalletChange)),
             ]),
             const SizedBox(height: 14),
             LayoutBuilder(

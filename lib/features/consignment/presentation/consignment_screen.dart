@@ -228,86 +228,98 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
       title: const Text('Record Remittance'),
       content: SizedBox(
         width: 500,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DropdownButtonFormField<int>(
-              initialValue: party,
-              decoration: const InputDecoration(
-                labelText: 'Consignor',
-                border: OutlineInputBorder(),
-              ),
-              items: widget.parties
-                  .where((p) => (widget.balances[p.id] ?? 0) > 0)
-                  .map(
-                    (p) => DropdownMenuItem(value: p.id, child: Text(p.name)),
-                  )
-                  .toList(),
-              onChanged: saving
-                  ? null
-                  : (v) => setState(() {
-                      party = v!;
-                      error = null;
-                    }),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Outstanding Payable: ${money(balance)}',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 14),
-            SegmentedButton<PaymentMethod>(
-              segments: const [
-                ButtonSegment(
-                  value: PaymentMethod.cash,
-                  icon: Icon(Icons.payments_outlined),
-                  label: Text('Cash'),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight:
+                (MediaQuery.sizeOf(context).height -
+                    MediaQuery.viewInsetsOf(context).bottom) *
+                .55,
+          ),
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: party,
+                  decoration: const InputDecoration(
+                    labelText: 'Consignor',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: widget.parties
+                      .where((p) => (widget.balances[p.id] ?? 0) > 0)
+                      .map(
+                        (p) =>
+                            DropdownMenuItem(value: p.id, child: Text(p.name)),
+                      )
+                      .toList(),
+                  onChanged: saving
+                      ? null
+                      : (v) => setState(() {
+                          party = v!;
+                          error = null;
+                        }),
                 ),
-                ButtonSegment(
-                  value: PaymentMethod.gcash,
-                  icon: Icon(Icons.phone_android),
-                  label: Text('GCash'),
+                const SizedBox(height: 14),
+                Text(
+                  'Outstanding Payable: ${money(balance)}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 14),
+                SegmentedButton<PaymentMethod>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PaymentMethod.cash,
+                      icon: Icon(Icons.payments_outlined),
+                      label: Text('Cash'),
+                    ),
+                    ButtonSegment(
+                      value: PaymentMethod.gcash,
+                      icon: Icon(Icons.phone_android),
+                      label: Text('GCash'),
+                    ),
+                  ],
+                  selected: {paymentMethod},
+                  onSelectionChanged: saving
+                      ? null
+                      : (value) => setState(() => paymentMethod = value.single),
+                ),
+                if (paymentMethod == PaymentMethod.gcash) ...[
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: gcashReference,
+                    decoration: const InputDecoration(
+                      labelText: 'GCash Reference (optional)',
+                      prefixIcon: Icon(Icons.tag),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Remittance Amount',
+                    prefixText: '₱ ',
+                    border: const OutlineInputBorder(),
+                    errorText: error,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: notes,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
-              selected: {paymentMethod},
-              onSelectionChanged: saving
-                  ? null
-                  : (value) => setState(() => paymentMethod = value.single),
             ),
-            if (paymentMethod == PaymentMethod.gcash) ...[
-              const SizedBox(height: 14),
-              TextField(
-                controller: gcashReference,
-                decoration: const InputDecoration(
-                  labelText: 'GCash Reference (optional)',
-                  prefixIcon: Icon(Icons.tag),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            TextField(
-              controller: amount,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Remittance Amount',
-                prefixText: '₱ ',
-                border: const OutlineInputBorder(),
-                errorText: error,
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: notes,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
       actions: [

@@ -152,4 +152,33 @@ class ReportsRepository {
   Future<List<Map<String, Object?>>> expenseCategories() => db.rawQuery(
     'SELECT id,name,is_archived FROM expense_categories ORDER BY name COLLATE NOCASE',
   );
+
+  Future<Map<String, Object?>> gcashServiceSummary({
+    DateTime? from,
+    DateTime? to,
+  }) {
+    final clauses = <String>[
+      'status=\'POSTED\'',
+      'NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id)',
+    ];
+    final args = <Object?>[];
+    if (from != null) {
+      clauses.add('created_at>=?');
+      args.add(from.toUtc().toIso8601String());
+    }
+    if (to != null) {
+      clauses.add('created_at<?');
+      args.add(to.toUtc().toIso8601String());
+    }
+    return db
+        .rawQuery('''SELECT
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN 1 ELSE 0 END),0) cash_in_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN 1 ELSE 0 END),0) cash_out_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN principal_centavos ELSE 0 END),0) cash_in_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN principal_centavos ELSE 0 END),0) cash_out_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN fee_centavos ELSE 0 END),0) cash_in_fees,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN fee_centavos ELSE 0 END),0) cash_out_fees
+      FROM gcash_service_transactions WHERE ${clauses.join(' AND ')}''', args)
+        .then((rows) => rows.single);
+  }
 }

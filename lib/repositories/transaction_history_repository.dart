@@ -28,6 +28,7 @@ class TransactionHistoryRepository {
       UNION ALL SELECT u.id,'UTANG','UTANG • '||c.full_name,u.total_centavos,u.occurred_at,u.status FROM utang_transactions u JOIN customers c ON c.id=u.customer_id
       UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||p.payment_method||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status FROM utang_payments p JOIN customers c ON c.id=p.customer_id
       UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
+      UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Reversal' ELSE '' END,g.customer_total_centavos,g.created_at,g.status FROM gcash_service_transactions g
       UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED' FROM consignment_batches b JOIN products p ON p.id=b.product_id
     ) WHERE (?='ALL' OR type=?) ORDER BY occurred DESC LIMIT ?''',
       [type, type, limit],
@@ -89,6 +90,12 @@ class TransactionHistoryRepository {
           '''SELECT b.*,p.name product_name,c.name consignor_name
           FROM consignment_batches b JOIN products p ON p.id=b.product_id JOIN consignors c ON c.id=b.consignor_id WHERE b.id=?''',
           [entry.id],
+        )).single;
+      case 'GCASH_SERVICE':
+        return (await db.query(
+          'gcash_service_transactions',
+          where: 'id=?',
+          whereArgs: [entry.id],
         )).single;
       default:
         throw StateError('Transaction type is unavailable.');
