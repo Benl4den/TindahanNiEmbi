@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/correction_repository.dart';
@@ -39,17 +41,15 @@ class SaleDetailsScreen extends StatelessWidget {
               (x) => ListTile(
                 title: Text(x['product_name_snapshot']! as String),
                 subtitle: Text(
-                  '${_quantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ₱${(((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int) / 100).toStringAsFixed(2)}',
+                  '${_quantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ${standardMoney((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int)}',
                 ),
-                trailing: Text(
-                  '₱${((x['line_total_centavos']! as int) / 100).toStringAsFixed(2)}',
-                ),
+                trailing: Text(standardMoney(x['line_total_centavos']! as int)),
               ),
             ),
             const Divider(),
             Text('${d.sale.itemCount} items', textAlign: TextAlign.right),
             Text(
-              'Total: ₱${(d.sale.totalCentavos / 100).toStringAsFixed(2)}',
+              'Total: ${standardMoney(d.sale.totalCentavos)}',
               textAlign: TextAlign.right,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
@@ -159,7 +159,7 @@ class SaleDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'ORIGINAL — ${details.sale.reference}\n${details.sale.itemCount} items • ₱${(details.sale.totalCentavos / 100).toStringAsFixed(2)}',
+                      'ORIGINAL — ${details.sale.reference}\n${details.sale.itemCount} items • ${standardMoney(details.sale.totalCentavos)}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const Divider(),
@@ -233,7 +233,7 @@ class SaleDetailsScreen extends StatelessWidget {
                         ],
                       ),
                     Text(
-                      'Corrected total: ₱${(total / 100).toStringAsFixed(2)}\nDifference: ${total - details.sale.totalCentavos >= 0 ? '+' : '-'}₱${((total - details.sale.totalCentavos).abs() / 100).toStringAsFixed(2)}',
+                      'Corrected total: ${standardMoney(total)}\nDifference: ${total - details.sale.totalCentavos >= 0 ? '+' : '-'}${standardMoney((total - details.sale.totalCentavos).abs())}',
                     ),
                     const SizedBox(height: 12),
                     TextField(

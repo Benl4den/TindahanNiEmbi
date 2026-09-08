@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../repositories/activity_log_repository.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/category_repository.dart';
@@ -168,7 +170,7 @@ class _State extends State<AppShell> {
         label: 'Transaction History',
       ),
     ];
-    const navTargets = [0, 6, 3, 4, 1, 2, 11, 8, 9, 7, 5, 10];
+    const navTargets = [0, 6, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
     final destinations = [
       for (final target in navTargets) bodyDestinations[target],
     ];
@@ -184,10 +186,10 @@ class _State extends State<AppShell> {
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
-              selectedIndex: const [0, 3, 6].contains(selected)
-                  ? const [0, 3, 6].indexOf(selected)
+              selectedIndex: const [0, 6, 3].contains(selected)
+                  ? const [0, 6, 3].indexOf(selected)
                   : 3,
-              onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 3, 6][i]),
+              onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 6, 3][i]),
               destinations: [
                 destinations[0],
                 destinations[4],
@@ -478,8 +480,37 @@ class _State extends State<AppShell> {
                     ),
                   );
                   return railExpanded
-                      ? tile
-                      : Tooltip(message: destination.label, child: tile);
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (i == 0 ||
+                                _navSection(navTargets[i - 1]) !=
+                                    _navSection(target))
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  12,
+                                  i == 0 ? 2 : 13,
+                                  12,
+                                  7,
+                                ),
+                                child: Text(
+                                  _navSection(target).toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    letterSpacing: .9,
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            tile,
+                          ],
+                        )
+                      : Tooltip(
+                          message:
+                              '${_navSection(target)} • ${destination.label}',
+                          child: tile,
+                        );
                 },
               ),
             ),
@@ -508,6 +539,14 @@ class _State extends State<AppShell> {
       ),
     );
   }
+
+  String _navSection(int target) => switch (target) {
+    0 || 6 => 'Daily Selling',
+    5 || 3 || 4 => 'Stock & Products',
+    1 || 2 => 'Supplier Products',
+    11 || 7 || 8 || 9 => 'Store Records',
+    _ => 'Administration',
+  };
 
   Widget _denied() => const AppStateView(
     icon: Icons.lock_outline,
@@ -846,14 +885,14 @@ class _State extends State<AppShell> {
             const SizedBox(width: 8),
             ActionChip(
               label: Text(
-                'Outstanding UTANG ₱${(s.outstandingCentavos / 100).toStringAsFixed(2)}',
+                'Outstanding UTANG ${standardMoney(s.outstandingCentavos)}',
               ),
               onPressed: () => setState(() => selected = 6),
             ),
             const SizedBox(width: 8),
             ActionChip(
               label: Text(
-                'Supplier Payable ₱${(s.supplierPayableCentavos / 100).toStringAsFixed(2)}',
+                'Supplier Payable ${standardMoney(s.supplierPayableCentavos)}',
               ),
               onPressed: () => setState(() => selected = 2),
             ),

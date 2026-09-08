@@ -66,6 +66,21 @@ void main() {
     expect(parsed.value, 15);
     expect(parsed.scale, 10);
   });
+  test('one-kilogram option displays combined kilogram quantity', () {
+    final product = p(1, 50000, 8000);
+    final kilogram = SellingOption(
+      id: 1,
+      productId: 1,
+      name: '1 kg',
+      baseQuantity: 1000,
+      priceCentavos: 8000,
+      isDefault: true,
+    );
+    final cart = ProductSelectionController([product])
+      ..add(product, kilogram, quantityValue: 2);
+    expect(cart.lines.single.displayQuantity, '2 kg');
+    expect(cart.lines.single.displayUnit, 'kg');
+  });
   test('multiple products are retained and clear resets the cart', () {
     final a = p(1, 3, 1000), b = p(2, 4, 500);
     final cart = ProductSelectionController([a, b]);

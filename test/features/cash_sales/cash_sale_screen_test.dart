@@ -100,7 +100,7 @@ void main() {
       await tester.pump();
       expect(received!.single.productId, 7);
       expect(received!.single.quantity, 1);
-      expect(find.text('1 × ₱10.00'), findsOneWidget);
+      expect(find.text('1 Piece × ₱10.00/Piece'), findsOneWidget);
       succeeds = true;
       await tester.tap(find.text('UTANG'));
       await tester.pump();
@@ -152,7 +152,7 @@ void main() {
     expect(find.text('Clear current sale?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pump();
-    expect(find.text('1 × ₱5.00'), findsOneWidget);
+    expect(find.text('1 Piece × ₱5.00/Piece'), findsOneWidget);
     await tester.tap(find.text('Clear Sale'));
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Clear Sale'));

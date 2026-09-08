@@ -372,6 +372,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                     _selling,
                                     AppStrings.sellingPrice,
                                     money: true,
+                                    onChanged: (_) => setState(() {}),
                                   ),
                                 ),
                               ],
@@ -474,6 +475,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     String label, {
     bool money = false,
     String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
   }) => TextFormField(
     controller: controller,
     style: const TextStyle(fontSize: 20),
@@ -497,6 +499,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             }
           },
     validator: validator ?? (value) => _number(value, money: money),
+    onChanged: onChanged,
   );
 
   String get _startingStockLabel {

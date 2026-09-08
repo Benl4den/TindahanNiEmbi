@@ -32,6 +32,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Add Managed Brand'),
         content: TextField(
@@ -78,7 +79,16 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Managed Brands'),
+      title: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Managed Brands'),
+          Text(
+            'Organize supplier and branded product groups',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+          ),
+        ],
+      ),
       actions: [
         Padding(
           padding: const EdgeInsets.all(8),
@@ -90,8 +100,8 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         ),
       ],
     ),
-    body: FutureBuilder<List<InventoryGroup>>(
-      future: widget.special.managedBrands(),
+    body: FutureBuilder<List<ManagedBrandSummary>>(
+      future: widget.special.managedBrandSummaries(),
       builder: (_, snapshot) {
         if (snapshot.hasError) {
           return AppStateView.error(
@@ -104,7 +114,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         }
         if (snapshot.data!.isEmpty) {
           return AppStateView.empty(
-            title: 'No managed brands',
+            title: 'No managed brands yet',
             actionLabel: 'Add Brand',
             onAction: _add,
           );
@@ -112,39 +122,77 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         return GridView.builder(
           padding: const EdgeInsets.all(24),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 360,
-            mainAxisExtent: 130,
+            maxCrossAxisExtent: 410,
+            mainAxisExtent: 190,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
           ),
           itemCount: snapshot.data!.length,
           itemBuilder: (_, index) {
-            final group = snapshot.data![index];
+            final summary = snapshot.data![index], group = summary.group;
             return Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => _open(group),
                 child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      CircleAvatar(
-                        radius: 27,
-                        child: Icon(
-                          group.code == 'SELECTA'
-                              ? Icons.icecream_outlined
-                              : Icons.sell_outlined,
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 27,
+                            child: Icon(
+                              group.code == 'SELECTA'
+                                  ? Icons.icecream_outlined
+                                  : Icons.sell_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.name,
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                Text(
+                                  '${summary.productCount} ${summary.productCount == 1 ? 'product' : 'products'}',
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                      const Spacer(),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _status(
+                            '${summary.lowStockCount} low stock',
+                            Icons.warning_amber_rounded,
+                            Colors.orange,
+                          ),
+                          _status(
+                            '${summary.outOfStockCount} out',
+                            Icons.error_outline,
+                            Colors.red,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Open brand products',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          group.name,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right),
                     ],
                   ),
                 ),
@@ -153,6 +201,25 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
           },
         );
       },
+    ),
+  );
+
+  Widget _status(String label, IconData icon, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .1),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        ),
+      ],
     ),
   );
 }

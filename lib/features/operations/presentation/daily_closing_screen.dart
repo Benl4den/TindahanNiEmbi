@@ -25,7 +25,7 @@ class _State extends State<DailyClosingScreen> {
     history = widget.repository.closingDates();
   }
 
-  String m(int n) => '₱${(n / 100).toStringAsFixed(2)}';
+  String m(int n) => standardMoney(n);
   Future<void> pick() async {
     final d = await showDatePicker(
       context: context,

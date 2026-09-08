@@ -9,9 +9,13 @@ class PaymentScreen extends StatefulWidget {
     super.key,
     required this.customer,
     required this.repository,
+    this.onRecorded,
   });
   final Customer customer;
   final PaymentRepository repository;
+
+  /// Lets the screen behind a dialog replace its displayed balance immediately.
+  final void Function(int amountCentavos)? onRecorded;
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
@@ -57,15 +61,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
         customerId: widget.customer.id,
         amountCentavos: cents,
       );
-      if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+    } catch (exception, stackTrace) {
+      // Keep the customer-facing error short, but retain the actual database
+      // failure in the debug console for diagnosis.
+      debugPrint('Unable to record UTANG payment: $exception\n$stackTrace');
       if (mounted) {
         setState(() {
           saving = false;
           error = 'Could not record payment. Please try again.';
         });
       }
+      return;
     }
+
+    // A payment is committed at this point. Refresh is deliberately best
+    // effort: it must never turn a successful payment into a false failure.
+    try {
+      widget.onRecorded?.call(cents);
+    } catch (exception, stackTrace) {
+      debugPrint(
+        'UTANG payment saved; detail refresh will retry: '
+        '$exception\n$stackTrace',
+      );
+    }
+    if (mounted) Navigator.pop(context, true);
   }
 
   @override
@@ -77,7 +96,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Total UTANG Balance: ₱${(widget.customer.balanceCentavos / 100).toStringAsFixed(2)}',
+            'Total UTANG Balance: ${standardMoney(widget.customer.balanceCentavos)}',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text(
@@ -108,7 +127,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           const SizedBox(height: 20),
           Text(
-            'Remaining: ₱${((widget.customer.balanceCentavos - cents).clamp(0, widget.customer.balanceCentavos) / 100).toStringAsFixed(2)}',
+            'Remaining: ${standardMoney((widget.customer.balanceCentavos - cents).clamp(0, widget.customer.balanceCentavos))}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 24),

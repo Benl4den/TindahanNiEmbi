@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../models/customer.dart';
 
 class UtangCustomerCard extends StatelessWidget {
@@ -75,7 +77,7 @@ class UtangCustomerCard extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     Text(
-                      '₱${(customer.balanceCentavos / 100).toStringAsFixed(2)}',
+                      standardMoney(customer.balanceCentavos),
                       style: TextStyle(
                         fontSize: 25,
                         fontWeight: FontWeight.w900,

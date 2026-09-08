@@ -299,7 +299,7 @@ class _State extends State<CashSaleScreen> {
     }
   }
 
-  String money(int cents) => '₱${(cents / 100).toStringAsFixed(2)}';
+  String money(int cents) => standardMoney(cents);
 
   Future<void> save() async {
     if (saving || c.totalCentavos == 0) return;
@@ -802,7 +802,7 @@ class _State extends State<CashSaleScreen> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
+                                          '${line.displayQuantity} × ${money(line.option.priceCentavos)}/${line.displayUnit}',
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(context)
@@ -865,103 +865,112 @@ class _State extends State<CashSaleScreen> {
                   ),
           ),
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Flexible(
+            fit: FlexFit.loose,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'TOTAL',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      money(c.totalCentavos),
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: c.totalCentavos == 0 || saving ? null : save,
-                  icon: const Icon(Icons.check_circle),
-                  label: Text(saving ? 'Saving...' : 'Review & Complete Sale'),
-                ),
-                if (widget.onUtang != null) ...[
-                  const SizedBox(height: 6),
-                  OutlinedButton.icon(
-                    onPressed: c.totalCentavos == 0 || saving
-                        ? null
-                        : checkoutUtang,
-                    icon: const Icon(Icons.people_alt),
-                    label: const Text('UTANG'),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                _lastTransactionCard(),
-                if (widget.repository != null) ...[
-                  const SizedBox(height: 8),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => _showHistory(todayOnly: true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.today, size: 20),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text(
-                              "TODAY'S SALES",
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'TOTAL',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                        ),
+                        Text(
+                          money(c.totalCentavos),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: c.totalCentavos == 0 || saving ? null : save,
+                      icon: const Icon(Icons.check_circle),
+                      label: Text(
+                        saving ? 'Saving...' : 'Review & Complete Sale',
+                      ),
+                    ),
+                    if (widget.onUtang != null) ...[
+                      const SizedBox(height: 6),
+                      OutlinedButton.icon(
+                        onPressed: c.totalCentavos == 0 || saving
+                            ? null
+                            : checkoutUtang,
+                        icon: const Icon(Icons.people_alt),
+                        label: const Text('UTANG'),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    _lastTransactionCard(),
+                    if (widget.repository != null) ...[
+                      const SizedBox(height: 8),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _showHistory(todayOnly: true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                money(todaySalesTotal),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
+                              const Icon(Icons.today, size: 20),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  "TODAY'S SALES",
+                                  style: TextStyle(fontWeight: FontWeight.w800),
                                 ),
                               ),
-                              Text(
-                                '$todayTransactionCount transactions',
-                                style: Theme.of(context).textTheme.bodySmall,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    money(todaySalesTotal),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    '$todayTransactionCount transactions',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _showHistory,
-                      icon: const Icon(Icons.history, size: 19),
-                      label: const Text('Cash & UTANG History'),
-                    ),
-                  ),
-                ],
-              ],
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _showHistory,
+                          icon: const Icon(Icons.history, size: 19),
+                          label: const Text('Cash & UTANG History'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../widgets/dashboard_action_card.dart';
 import '../../../widgets/summary_card.dart';
@@ -99,8 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           SummaryCard(
                             label: AppStrings.totalUtang,
-                            value:
-                                '₱${((s?.outstandingCentavos ?? 0) / 100).toStringAsFixed(2)}',
+                            value: standardMoney(s?.outstandingCentavos ?? 0),
                           ),
                           SummaryCard(
                             label: 'Items Sold Today',
@@ -108,8 +109,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           SummaryCard(
                             label: AppStrings.inventoryValue,
-                            value:
-                                '₱${((s?.inventoryValueCentavos ?? 0) / 100).toStringAsFixed(2)}',
+                            value: standardMoney(
+                              s?.inventoryValueCentavos ?? 0,
+                            ),
                           ),
                         ],
                       );

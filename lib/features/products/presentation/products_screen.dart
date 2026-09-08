@@ -302,13 +302,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Selling Price: ₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}',
+              'Selling Price: ${standardMoney(product.sellingPriceCentavos)}',
             ),
             Text(
-              'Purchase Cost: ₱${(product.purchasePriceCentavos / 100).toStringAsFixed(2)}',
+              'Purchase Cost: ${standardMoney(product.purchasePriceCentavos)}',
             ),
             Text(
-              'Estimated Unit Margin: ₱${((product.sellingPriceCentavos - product.purchasePriceCentavos) / 100).toStringAsFixed(2)}',
+              'Estimated Unit Margin: ${standardMoney(product.sellingPriceCentavos - product.purchasePriceCentavos)}',
             ),
             Text(
               'Current Stock: ${productQuantityText(product, product.currentQuantity)}',

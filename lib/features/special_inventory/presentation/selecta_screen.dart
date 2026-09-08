@@ -332,9 +332,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
-                                Text(
-                                  '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)}',
-                                ),
+                                Text(standardMoney(p.sellingPriceCentavos)),
                                 Text(
                                   'Stock ${productQuantityText(p, p.currentQuantity)}  •  Minimum ${productQuantityText(p, p.minimumStockLevel)}',
                                 ),

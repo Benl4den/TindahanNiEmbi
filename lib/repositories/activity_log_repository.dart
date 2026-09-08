@@ -34,16 +34,45 @@ class ActivityLogRepository {
         .toUtc()
         .toIso8601String();
     final q = query.trim();
+    final conditions = ['created_at>=?', 'created_at<?'];
+    final args = <Object?>[start, end];
+    switch (category) {
+      case 'SECURITY':
+        conditions.add(
+          "(event_type LIKE 'SECURITY%' OR event_type LIKE 'AUTH%' OR event_type LIKE 'STAFF%')",
+        );
+        break;
+      case 'SALES':
+        conditions.add("event_type LIKE 'SALES%'");
+        break;
+      case 'UTANG':
+        conditions.add(
+          "(event_type LIKE 'UTANG%' OR event_type LIKE '%PAYMENT%')",
+        );
+        break;
+      case 'INVENTORY':
+        conditions.add(
+          "(event_type LIKE 'INVENTORY%' OR event_type LIKE 'PRODUCT%' OR event_type LIKE 'SPECIAL_INVENTORY%')",
+        );
+        break;
+      case 'BACKUP':
+        conditions.add("event_type LIKE 'BACKUP%'");
+        break;
+      case final value?:
+        conditions.add('event_type LIKE ?');
+        args.add('$value%');
+        break;
+    }
+    if (q.isNotEmpty) {
+      conditions.add(
+        '(description LIKE ? COLLATE NOCASE OR actor_role LIKE ? COLLATE NOCASE)',
+      );
+      args.addAll(['%$q%', '%$q%']);
+    }
     final rows = await db.query(
       'activity_logs',
-      where:
-          'created_at>=? AND created_at<?${category == null ? '' : ' AND event_type LIKE ?'}${q.isEmpty ? '' : ' AND description LIKE ? COLLATE NOCASE'}',
-      whereArgs: [
-        start,
-        end,
-        if (category != null) '$category%',
-        if (q.isNotEmpty) '%$q%',
-      ],
+      where: conditions.join(' AND '),
+      whereArgs: args,
       orderBy: 'created_at DESC, id DESC',
     );
     return rows.map(ActivityLog.fromMap).toList(growable: false);

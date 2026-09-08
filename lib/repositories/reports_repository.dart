@@ -9,7 +9,19 @@ class ReportsRepository {
   const ReportsRepository(this.db);
   final Database db;
   Future<List<Map<String, Object?>>> inventory() => db.rawQuery(
-    'SELECT name,current_quantity,base_unit_code,base_unit_label,purchase_price_centavos,selling_price_centavos,current_quantity*purchase_price_centavos stock_value FROM products WHERE is_archived=0 ORDER BY name COLLATE NOCASE',
+    '''SELECT p.name,p.current_quantity,p.base_unit_code,p.base_unit_label,
+      p.purchase_price_centavos,p.selling_price_centavos,
+      COALESCE(k.name,p.base_unit_label) purchase_package,
+      COALESCE(k.base_quantity,1) purchase_package_quantity,
+      ((p.current_quantity*p.purchase_price_centavos)+COALESCE(k.base_quantity,1)/2)
+        /COALESCE(k.base_quantity,1) stock_value
+      FROM products p LEFT JOIN product_purchase_packages k
+        ON k.product_id=p.id AND k.is_default=1 AND k.is_archived=0
+      WHERE p.is_archived=0 AND NOT EXISTS(
+        SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g
+          ON g.id=m.inventory_group_id
+        WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')
+      ORDER BY p.name COLLATE NOCASE''',
   );
   Future<List<Map<String, Object?>>> outstanding() => db.rawQuery(
     '''SELECT c.full_name, SUM(l.amount_change_centavos) balance FROM customers c JOIN customer_ledger_entries l ON l.customer_id=c.id GROUP BY c.id HAVING balance>0 ORDER BY balance DESC''',

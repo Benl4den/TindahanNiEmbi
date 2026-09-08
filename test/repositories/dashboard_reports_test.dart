@@ -2,11 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
+import 'package:tindahan_ni_embi/models/product_unit.dart';
 import 'package:tindahan_ni_embi/models/customer.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
 import 'package:tindahan_ni_embi/repositories/cash_sale_repository.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
+import 'package:tindahan_ni_embi/repositories/inventory_repository.dart';
 import 'package:tindahan_ni_embi/repositories/dashboard_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
@@ -94,5 +96,48 @@ void main() {
     expect(summary.daily, 100);
     expect(summary.weekly, 900);
     expect(summary.monthly, 400);
+  });
+
+  test('inventory report values measured stock by purchase package', () async {
+    final category = (await SqliteCategoryRepository(db).create('Rice')).id;
+    final product = await SqliteProductRepository(db).create(
+      ProductDraft(
+        categoryId: category,
+        name: 'Ganador',
+        photoPath: '/rice',
+        purchasePriceCentavos: 160000,
+        sellingPriceCentavos: 8000,
+        startingQuantity: 2,
+        minimumStockLevel: 1000,
+        unitConfiguration: const ProductUnitConfiguration(
+          baseUnit: BaseUnit.gram,
+          purchasePackages: [
+            PurchasePackageDraft(
+              name: '25 kg Sack',
+              baseQuantity: 25000,
+              isDefault: true,
+            ),
+          ],
+          sellingOptions: [
+            SellingOptionDraft(
+              name: '1 kg',
+              baseQuantity: 1000,
+              priceCentavos: 8000,
+              isDefault: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    await InventoryRepository(db).adjust(
+      productId: product.id,
+      quantityChange: -6000,
+      reason: 'Test 44 kg remaining',
+    );
+
+    final row = (await ReportsRepository(db).inventory()).single;
+    expect(row['current_quantity'], 44000);
+    expect(row['purchase_package_quantity'], 25000);
+    expect(row['stock_value'], 281600);
   });
 }

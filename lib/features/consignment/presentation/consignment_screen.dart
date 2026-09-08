@@ -179,7 +179,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
     super.dispose();
   }
 
-  String money(int n) => '₱${(n / 100).toStringAsFixed(2)}';
+  String money(int n) => standardMoney(n);
   Future<void> save() async {
     final cents = ((double.tryParse(amount.text.trim()) ?? 0) * 100).round(),
         balance = widget.balances[party] ?? 0;
@@ -585,7 +585,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  '$quantity pieces • Supplier total: ₱${(quantity * supplier).toStringAsFixed(2)} • Expected profit: ₱${(quantity * (selling - supplier)).toStringAsFixed(2)}',
+                  '$quantity pieces • Supplier total: ${standardMoney((quantity * supplier * 100).round())} • Expected profit: ${standardMoney((quantity * (selling - supplier) * 100).round())}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (error != null)
@@ -684,7 +684,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     );
   }
 
-  String money(int value) => '₱${(value / 100).toStringAsFixed(2)}';
+  String money(int value) => standardMoney(value);
   Future<void> _addConsignor() async {
     final categories = await widget.categories.getActive();
     if (!mounted) return;
@@ -896,7 +896,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            '${quantityLabel(total)} received\nSupplier cost: ₱${unitCost.toStringAsFixed(2)} per ${sellingOption().name}\nTotal Consigned Value: ₱${totalCost.toStringAsFixed(2)}',
+                            '${quantityLabel(total)} received\nSupplier cost: ${standardMoney((unitCost * 100).round())} per ${sellingOption().name}\nTotal Consigned Value: ${standardMoney((totalCost * 100).round())}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),

@@ -226,7 +226,7 @@ void main() {
       await t.tap(find.text('ABC'));
       await t.pumpAndSettle();
       expect(find.text('Outstanding Supplier Payable'), findsOneWidget);
-      expect(find.text('₱4200.00'), findsWidgets);
+      expect(find.text('₱4,200.00'), findsWidgets);
     },
   );
   testWidgets('receipt and remittance open, validate, persist and refresh', (

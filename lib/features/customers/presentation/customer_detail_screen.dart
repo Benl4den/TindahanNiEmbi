@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/formatters/number_format.dart';
 import '../../../models/customer.dart';
 import '../../../repositories/customer_repository.dart';
 import '../../../repositories/payment_repository.dart';
@@ -22,6 +23,7 @@ class CustomerDetailScreen extends StatefulWidget {
 
 class _State extends State<CustomerDetailScreen> {
   late Future<CustomerDetails> data;
+  int? visibleBalanceCentavos;
   @override
   void initState() {
     super.initState();
@@ -29,6 +31,26 @@ class _State extends State<CustomerDetailScreen> {
   }
 
   void reload() => data = widget.repository.details(widget.customerId);
+  Future<void> refreshDetailsNow() async {
+    final refreshed = await widget.repository.details(widget.customerId);
+    if (!mounted) return;
+    setState(() {
+      data = Future.value(refreshed);
+      visibleBalanceCentavos = null;
+    });
+  }
+
+  void applyCommittedPayment(int previousBalance, int amountCentavos) {
+    if (!mounted) return;
+    setState(() {
+      visibleBalanceCentavos = (previousBalance - amountCentavos).clamp(
+        0,
+        previousBalance,
+      );
+    });
+    refreshDetailsNow();
+  }
+
   String type(String x) => switch (x) {
     'UTANG' => 'UTANG Sale',
     'PAYMENT' => 'Payment',
@@ -44,6 +66,8 @@ class _State extends State<CustomerDetailScreen> {
       builder: (context, s) {
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final d = s.data!;
+        final currentBalance =
+            visibleBalanceCentavos ?? d.customer.balanceCentavos;
         return ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -58,11 +82,11 @@ class _State extends State<CustomerDetailScreen> {
                   children: [
                     const Text(AppStrings.totalUtang),
                     Text(
-                      '₱${(d.customer.balanceCentavos / 100).toStringAsFixed(2)}',
+                      standardMoney(currentBalance),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     FilledButton(
-                      onPressed: d.customer.balanceCentavos == 0
+                      onPressed: currentBalance == 0
                           ? null
                           : () async {
                               final ok = await Navigator.push<bool>(
@@ -71,10 +95,17 @@ class _State extends State<CustomerDetailScreen> {
                                   builder: (_) => PaymentScreen(
                                     customer: d.customer,
                                     repository: widget.payments,
+                                    onRecorded: (amount) =>
+                                        applyCommittedPayment(
+                                          currentBalance,
+                                          amount,
+                                        ),
                                   ),
                                 ),
                               );
-                              if (ok == true && mounted) setState(reload);
+                              if (ok == true && mounted) {
+                                await refreshDetailsNow();
+                              }
                             },
                       child: const Text('Payment'),
                     ),
@@ -87,7 +118,7 @@ class _State extends State<CustomerDetailScreen> {
                 title: Text(type(e.type)),
                 subtitle: Text(e.occurredAt.toLocal().toString()),
                 trailing: Text(
-                  '${e.amountCentavos < 0 ? '-' : '+'}₱${(e.amountCentavos.abs() / 100).toStringAsFixed(2)}',
+                  '${e.amountCentavos < 0 ? '-' : '+'}${standardMoney(e.amountCentavos.abs())}',
                 ),
               ),
             ),

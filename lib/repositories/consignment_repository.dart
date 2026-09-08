@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
+
 import '../models/consignment.dart';
 import '../models/product.dart';
 import '../models/product_unit.dart';
@@ -534,7 +536,7 @@ class ConsignmentRepository {
         await tx.insert('activity_logs', {
           'event_type': 'CONSIGNMENT_REMITTANCE',
           'description':
-              '₱${(amountCentavos / 100).toStringAsFixed(2)} remitted to ${party.single['name']}',
+              '${standardMoney(amountCentavos)} remitted to ${party.single['name']}',
           'actor_role': actorRole,
           'related_entity_type': 'CONSIGNOR_REMITTANCE',
           'related_entity_id': id,

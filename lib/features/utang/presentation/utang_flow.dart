@@ -149,7 +149,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                 children: [
                   _utangMetric(
                     'Total Outstanding UTANG',
-                    '₱${(total / 100).toStringAsFixed(2)}',
+                    standardMoney(total),
                     Colors.orange.shade800,
                   ),
                   _utangMetric(
@@ -159,7 +159,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                   ),
                   _utangMetric(
                     'Highest Current Balance',
-                    '₱${(highest / 100).toStringAsFixed(2)}',
+                    standardMoney(highest),
                     Colors.red.shade700,
                   ),
                 ],
@@ -296,88 +296,89 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
     var selected = usable.first;
     String? error;
     final quantity = TextEditingController(text: '1');
-    final result = await showDialog<({SellingOption option, int value, int scale})>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (_, setLocal) => AlertDialog(
-          title: Text(product.name),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<SellingOption>(
-                  initialValue: selected,
-                  decoration: const InputDecoration(
-                    labelText: 'Selling option',
-                  ),
-                  items: usable
-                      .map(
-                        (x) => DropdownMenuItem(
-                          value: x,
-                          child: Text(
-                            '${x.name} — ₱${(x.priceCentavos / 100).toStringAsFixed(2)}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (x) {
-                    if (x != null) setLocal(() => selected = x);
-                  },
+    final result =
+        await showDialog<({SellingOption option, int value, int scale})>(
+          context: context,
+          builder: (dialog) => StatefulBuilder(
+            builder: (_, setLocal) => AlertDialog(
+              title: Text(product.name),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<SellingOption>(
+                      initialValue: selected,
+                      decoration: const InputDecoration(
+                        labelText: 'Selling option',
+                      ),
+                      items: usable
+                          .map(
+                            (x) => DropdownMenuItem(
+                              value: x,
+                              child: Text(
+                                '${x.name} — ${standardMoney(x.priceCentavos)}',
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (x) {
+                        if (x != null) setLocal(() => selected = x);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: quantity,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText:
+                            product.baseUnitCode == 'GRAM' &&
+                                selected.baseQuantity >= 1000
+                            ? 'Quantity in kg'
+                            : 'Quantity',
+                        errorText: error,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: quantity,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText:
-                        product.baseUnitCode == 'GRAM' &&
-                            selected.baseQuantity >= 1000
-                        ? 'Quantity in kg'
-                        : 'Quantity',
-                    errorText: error,
-                  ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    try {
+                      final parsed = parseSaleQuantity(
+                        quantity.text,
+                        measured:
+                            product.baseUnitCode == 'GRAM' &&
+                            selected.baseQuantity >= 1000,
+                      );
+                      if (parsed.value * selected.baseQuantity % parsed.scale !=
+                          0) {
+                        throw const FormatException(
+                          'Quantity cannot be converted exactly.',
+                        );
+                      }
+                      Navigator.pop(dialog, (
+                        option: selected,
+                        value: parsed.value,
+                        scale: parsed.scale,
+                      ));
+                    } on FormatException catch (e) {
+                      setLocal(() => error = e.message);
+                    }
+                  },
+                  child: const Text('Add'),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                try {
-                  final parsed = parseSaleQuantity(
-                    quantity.text,
-                    measured:
-                        product.baseUnitCode == 'GRAM' &&
-                        selected.baseQuantity >= 1000,
-                  );
-                  if (parsed.value * selected.baseQuantity % parsed.scale !=
-                      0) {
-                    throw const FormatException(
-                      'Quantity cannot be converted exactly.',
-                    );
-                  }
-                  Navigator.pop(dialog, (
-                    option: selected,
-                    value: parsed.value,
-                    scale: parsed.scale,
-                  ));
-                } on FormatException catch (e) {
-                  setLocal(() => error = e.message);
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
+        );
     if (result != null && mounted) {
       try {
         setState(
@@ -446,7 +447,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       Text(
-                        '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)} • Stock: ${productQuantityText(p, p.currentQuantity)}',
+                        '${standardMoney(p.sellingPriceCentavos)} • Stock: ${productQuantityText(p, p.currentQuantity)}',
                       ),
                       if (p.currentQuantity == 0)
                         const Text(AppStrings.outOfStock)
@@ -484,7 +485,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Total: ₱${(c.totalCentavos / 100).toStringAsFixed(2)}',
+                      'Total: ${standardMoney(c.totalCentavos)}',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
@@ -588,17 +589,15 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
               (line) => ListTile(
                 title: Text(line.product.name),
                 subtitle: Text(
-                  '${line.quantityText} ${line.option.name} × ₱${(line.option.priceCentavos / 100).toStringAsFixed(2)}',
+                  '${line.displayQuantity} × ${standardMoney(line.option.priceCentavos)}/${line.displayUnit}',
                 ),
-                trailing: Text(
-                  '₱${(line.lineTotalCentavos / 100).toStringAsFixed(2)}',
-                ),
+                trailing: Text(standardMoney(line.lineTotalCentavos)),
               ),
             ),
-            Text('New UTANG: ₱${(newDebt / 100).toStringAsFixed(2)}'),
-            Text('Previous Balance: ₱${(old / 100).toStringAsFixed(2)}'),
+            Text('New UTANG: ${standardMoney(newDebt)}'),
+            Text('Previous Balance: ${standardMoney(old)}'),
             Text(
-              'Total UTANG Balance: ₱${((old + newDebt) / 100).toStringAsFixed(2)}',
+              'Total UTANG Balance: ${standardMoney(old + newDebt)}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 24),
@@ -639,6 +638,7 @@ class CustomerUtangScreen extends StatefulWidget {
 
 class _CustomerUtangState extends State<CustomerUtangScreen> {
   late Future<CustomerDetails> data;
+  int? visibleBalanceCentavos;
   String filter = 'All';
   @override
   void initState() {
@@ -648,7 +648,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
   }
 
   void _refreshDetails() {
-    if (mounted) setState(reload);
+    if (mounted) refreshDetailsNow();
   }
 
   @override
@@ -658,6 +658,27 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
   }
 
   void reload() => data = widget.customers.details(widget.customerId);
+
+  Future<void> refreshDetailsNow() async {
+    final refreshed = await widget.customers.details(widget.customerId);
+    if (!mounted) return;
+    setState(() {
+      data = Future.value(refreshed);
+      visibleBalanceCentavos = null;
+    });
+  }
+
+  void applyCommittedPayment(int previousBalance, int amountCentavos) {
+    if (!mounted) return;
+    setState(() {
+      visibleBalanceCentavos = (previousBalance - amountCentavos).clamp(
+        0,
+        previousBalance,
+      );
+    });
+    refreshDetailsNow();
+  }
+
   Future<void> newUtang(Customer customer) async {
     final products = await widget.products.searchActive();
     if (!mounted) return;
@@ -683,6 +704,8 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       builder: (_, s) {
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final d = s.data!,
+            currentBalance =
+                visibleBalanceCentavos ?? d.customer.balanceCentavos,
             entries = d.ledger
                 .where(
                   (e) =>
@@ -711,11 +734,11 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                         children: [
                           const Text('Current Balance'),
                           Text(
-                            _money(d.customer.balanceCentavos),
+                            _money(currentBalance),
                             style: TextStyle(
                               fontSize: 34,
                               fontWeight: FontWeight.w900,
-                              color: d.customer.balanceCentavos > 0
+                              color: currentBalance > 0
                                   ? Colors.orange.shade800
                                   : Theme.of(context)
                                         .colorScheme
@@ -736,7 +759,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     ),
                     const SizedBox(width: 12),
                     OutlinedButton.icon(
-                      onPressed: d.customer.balanceCentavos <= 0
+                      onPressed: currentBalance <= 0
                           ? null
                           : () async {
                               final ok = await showDialog<bool>(
@@ -753,11 +776,18 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                                     child: PaymentScreen(
                                       customer: d.customer,
                                       repository: widget.payments,
+                                      onRecorded: (amount) =>
+                                          applyCommittedPayment(
+                                            currentBalance,
+                                            amount,
+                                          ),
                                     ),
                                   ),
                                 ),
                               );
-                              if (ok == true && mounted) setState(reload);
+                              if (ok == true && mounted) {
+                                await refreshDetailsNow();
+                              }
                             },
                       icon: const Icon(Icons.payments),
                       label: const Text('Record Payment'),
@@ -888,7 +918,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       },
     ),
   );
-  String _money(int c) => '₱${(c / 100).toStringAsFixed(2)}';
+  String _money(int c) => standardMoney(c);
   Map<String, List<CustomerLedgerEntry>> _groupByDay(
     List<CustomerLedgerEntry> entries,
   ) {
@@ -1227,7 +1257,7 @@ class UtangDetailsDialog extends StatelessWidget {
           }
           final d = s.data!, items = d['items']! as List<Map<String, Object?>>;
           final at = DateTime.parse(d['occurred_at']! as String).toLocal();
-          String money(int c) => '₱${(c / 100).toStringAsFixed(2)}';
+          String money(int c) => standardMoney(c);
           return Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -1480,7 +1510,7 @@ class UtangDetailsDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ORIGINAL CREDIT SALE — ${details['reference']}\n${details['full_name']} • ₱${((details['total_centavos']! as int) / 100).toStringAsFixed(2)}',
+                    'ORIGINAL CREDIT SALE — ${details['reference']}\n${details['full_name']} • ${standardMoney(details['total_centavos']! as int)}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const Divider(),
@@ -1658,7 +1688,7 @@ class UtangDetailsDialog extends StatelessWidget {
     return '${_snapshotQuantity(x)} ${x['selling_option_name_snapshot'] ?? 'Piece'} × ${_money((x['selling_unit_price_centavos'] as int?) ?? x['unit_price_centavos']! as int)}';
   }
 
-  String _money(int centavos) => '₱${(centavos / 100).toStringAsFixed(2)}';
+  String _money(int centavos) => standardMoney(centavos);
 
   Widget _balance(String label, String value) => Padding(
     padding: const EdgeInsets.only(top: 6),

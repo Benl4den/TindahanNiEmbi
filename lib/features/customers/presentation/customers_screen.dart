@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../models/customer.dart';
 import '../../../repositories/customer_repository.dart';
@@ -142,7 +144,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           subtitle: Text(
-                            '${customer.nickname ?? ''}\n${AppStrings.totalUtang}: ₱${(customer.balanceCentavos / 100).toStringAsFixed(2)}',
+                            '${customer.nickname ?? ''}\n${AppStrings.totalUtang}: ${standardMoney(customer.balanceCentavos)}',
                           ),
                           isThreeLine: true,
                           onTap: () => Navigator.push(

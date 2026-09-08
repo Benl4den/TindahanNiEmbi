@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../models/expense.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../services/auth_service.dart';
@@ -52,7 +54,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   void _refresh() => setState(_reload);
-  String money(int value) => '₱${(value / 100).toStringAsFixed(2)}';
+  String money(int value) => standardMoney(value);
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -491,7 +493,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                 child: ListTile(
                   title: const Text('ORIGINAL'),
                   subtitle: Text(
-                    '${widget.original!.categoryName} • ₱${(widget.original!.amountCentavos / 100).toStringAsFixed(2)}\n${widget.original!.description}',
+                    '${widget.original!.categoryName} • ${standardMoney(widget.original!.amountCentavos)}\n${widget.original!.description}',
                   ),
                 ),
               ),
@@ -541,7 +543,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                 child: ListTile(
                   title: const Text('CORRECTED'),
                   subtitle: Text(
-                    'New amount: ₱${((cents ?? 0) / 100).toStringAsFixed(2)}\nDifference: ${_difference()}',
+                    'New amount: ${standardMoney(cents ?? 0)}\nDifference: ${_difference()}',
                   ),
                 ),
               ),
@@ -584,7 +586,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         ? '-'
         : diff > 0
         ? '+'
-        : ''}₱${(diff.abs() / 100).toStringAsFixed(2)}';
+        : ''}${standardMoney(diff.abs())}';
   }
 
   Future<void> _pickWhen() async {

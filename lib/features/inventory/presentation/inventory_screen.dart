@@ -250,96 +250,99 @@ class _InventoryScreenState extends State<InventoryScreen> {
         baseUnitLabel: movement.baseUnitLabel,
       );
 
-  Widget _productList(
-    ProductStockStatus? status,
-  ) => FutureBuilder<List<Product>>(
-    future: status == null
-        ? _products
-        : widget.repository.current(status: status),
-    builder: (_, s) => s.hasData
-        ? ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: s.data!.length,
-            itemBuilder: (_, i) {
-              final p = s.data![i];
-              final out = p.currentQuantity == 0;
-              final low = !out && p.currentQuantity <= p.minimumStockLevel;
-              final statusLabel = out
-                  ? 'Out of Stock'
-                  : low
-                  ? 'Low Stock'
-                  : 'In Stock';
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundColor: out
-                            ? Colors.red.shade50
-                            : low
-                            ? Colors.orange.shade50
-                            : Theme.of(context).colorScheme.primaryContainer,
-                        child: Icon(
-                          Icons.inventory_2_outlined,
-                          color: out
-                              ? Colors.red.shade700
-                              : low
-                              ? Colors.orange.shade800
-                              : Theme.of(context).colorScheme.primary,
-                        ),
+  Widget _productList(ProductStockStatus? status) =>
+      FutureBuilder<List<Product>>(
+        future: status == null
+            ? _products
+            : widget.repository.current(status: status),
+        builder: (_, s) => s.hasData
+            ? ListView.builder(
+                padding: const EdgeInsets.all(20),
+                itemCount: s.data!.length,
+                itemBuilder: (_, i) {
+                  final p = s.data![i];
+                  final out = p.currentQuantity == 0;
+                  final low = !out && p.currentQuantity <= p.minimumStockLevel;
+                  final statusLabel = out
+                      ? 'Out of Stock'
+                      : low
+                      ? 'Low Stock'
+                      : 'In Stock';
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: out
+                                ? Colors.red.shade50
+                                : low
+                                ? Colors.orange.shade50
+                                : Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer,
+                            child: Icon(
+                              Icons.inventory_2_outlined,
+                              color: out
+                                  ? Colors.red.shade700
+                                  : low
+                                  ? Colors.orange.shade800
+                                  : Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.name,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const Text('Selling Price'),
+                                Text(
+                                  standardMoney(p.sellingPriceCentavos),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('Stock'),
+                                Text(
+                                  productQuantityText(p, p.currentQuantity),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall,
+                                ),
+                                Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: out
+                                        ? Colors.red.shade700
+                                        : low
+                                        ? Colors.orange.shade800
+                                        : Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              p.name,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const Text('Selling Price'),
-                            Text(
-                              '₱${(p.sellingPriceCentavos / 100).toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text('Stock'),
-                            Text(
-                              productQuantityText(p, p.currentQuantity),
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            Text(
-                              statusLabel,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: out
-                                    ? Colors.red.shade700
-                                    : low
-                                    ? Colors.orange.shade800
-                                    : Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          )
-        : const Center(child: CircularProgressIndicator()),
-  );
+                    ),
+                  );
+                },
+              )
+            : const Center(child: CircularProgressIndicator()),
+      );
 }

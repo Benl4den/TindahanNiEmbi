@@ -1,6 +1,13 @@
 import '../../models/product.dart';
 
 String standardNumber(num value, {int maxDecimals = 3}) {
+  if (maxDecimals <= 0) {
+    final grouped = value.abs().round().toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+    return '${value < 0 ? '-' : ''}$grouped';
+  }
   final fixed = value.abs().toStringAsFixed(maxDecimals).split('.');
   final grouped = fixed.first.replaceAllMapped(
     RegExp(r'\B(?=(\d{3})+(?!\d))'),

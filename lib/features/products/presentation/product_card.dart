@@ -68,7 +68,7 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '₱${(product.sellingPriceCentavos / 100).toStringAsFixed(2)}  •  Stock: $_stockQuantity',
+                    '${standardMoney(product.sellingPriceCentavos)}  •  Stock: $_stockQuantity',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   Text(

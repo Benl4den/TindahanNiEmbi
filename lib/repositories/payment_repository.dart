@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
+
 import '../services/app_refresh_controller.dart';
 
 class PaymentRepository {
@@ -63,7 +65,7 @@ class PaymentRepository {
     await txn.insert('activity_logs', {
       'event_type': 'UTANG_PAYMENT',
       'description':
-          'Payment received from ${customer.single['full_name']} — ₱${(amountCentavos / 100).toStringAsFixed(2)}',
+          'Payment received from ${customer.single['full_name']} — ${standardMoney(amountCentavos)}',
       'actor_role': actorRole,
       'related_entity_type': 'PAYMENT',
       'related_entity_id': paymentId,

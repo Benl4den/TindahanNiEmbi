@@ -386,7 +386,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     return n == null || !n.isFinite || n < 0 ? null : (n * 100).round();
   }
 
-  String _money(int cents) => (cents / 100).toStringAsFixed(2);
+  String _money(int cents) => standardMoney(cents).replaceFirst('₱', '');
   String _clean(String text) => text.replaceFirst(RegExp(r'\.0+$'), '');
   String _kind(String name) {
     final n = name.trim().toLowerCase().replaceAll(RegExp(r'[- ]+'), ' ');

@@ -12,13 +12,22 @@ class ReportsScreen extends StatelessWidget {
     length: 4,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Reports'),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Store Reports'),
+            Text(
+              'Clear totals for everyday decisions',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
         bottom: const TabBar(
           tabs: [
-            Tab(text: 'Inventory'),
-            Tab(text: 'UTANG'),
-            Tab(text: 'Sales'),
-            Tab(text: 'Expenses'),
+            Tab(icon: Icon(Icons.inventory_2_outlined), text: 'Inventory'),
+            Tab(icon: Icon(Icons.people_alt_outlined), text: 'UTANG'),
+            Tab(icon: Icon(Icons.point_of_sale_outlined), text: 'Sales'),
+            Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Expenses'),
           ],
         ),
       ),
@@ -36,9 +45,31 @@ class ReportsScreen extends StatelessWidget {
     BuildContext c,
   ) => FutureBuilder<List<Map<String, Object?>>>(
     future: repository.inventory(),
-    builder: (_, s) => s.hasData
-        ? ListView(
-            padding: const EdgeInsets.all(20),
+    builder: (_, s) {
+      if (!s.hasData) {
+        return const AppLoadingView(label: 'Loading inventory report…');
+      }
+      final rows = s.data!;
+      final total = rows.fold<int>(
+        0,
+        (sum, row) => sum + (row['stock_value']! as int),
+      );
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _reportIntro(
+            c,
+            'Owned Inventory',
+            standardMoney(total),
+            '${rows.length} active products • Consignment stock excluded',
+            Icons.inventory_2_outlined,
+          ),
+          const SizedBox(height: 12),
+          Text('Movement Records', style: Theme.of(c).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
               _open(
                 c,
@@ -51,50 +82,100 @@ class ReportsScreen extends StatelessWidget {
                 repository.movements(outgoing: true),
               ),
               _open(c, 'All Stock Movements', repository.movements()),
-              ...s.data!.map(
-                (r) => Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    title: Text(r['name']! as String),
-                    subtitle: Text(
-                      'Stock: ${_quantity(r, 'current_quantity')} • Cost: ₱${((r['purchase_price_centavos']! as int) / 100).toStringAsFixed(2)} • Selling: ₱${((r['selling_price_centavos']! as int) / 100).toStringAsFixed(2)}',
-                    ),
-                    trailing: Text(
-                      '₱${((r['stock_value']! as int) / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-              ),
             ],
-          )
-        : const AppLoadingView(label: 'Loading report…'),
+          ),
+          const SizedBox(height: 20),
+          Text('Product Valuation', style: Theme.of(c).textTheme.titleLarge),
+          const Text(
+            'Estimated cost uses the saved purchase package and its package price.',
+          ),
+          const SizedBox(height: 8),
+          ...rows.map(
+            (r) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.inventory_2_outlined),
+                ),
+                title: Text(
+                  r['name']! as String,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  'Stock: ${_quantity(r, 'current_quantity')}\nPurchase: ${standardMoney(r['purchase_price_centavos']! as int)} per ${r['purchase_package']} • Selling: ${standardMoney(r['selling_price_centavos']! as int)}',
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Estimated cost'),
+                    Text(
+                      standardMoney(r['stock_value']! as int),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                isThreeLine: true,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
   );
   Widget _utang(BuildContext c) => FutureBuilder<List<Map<String, Object?>>>(
     future: repository.outstanding(),
-    builder: (_, s) => s.hasData
-        ? ListView(
-            padding: const EdgeInsets.all(20),
+    builder: (_, s) {
+      if (!s.hasData) {
+        return const AppLoadingView(label: 'Loading UTANG report…');
+      }
+      final rows = s.data!;
+      final total = rows.fold<int>(
+        0,
+        (sum, row) => sum + (row['balance']! as int),
+      );
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _reportIntro(
+            c,
+            'Outstanding UTANG',
+            standardMoney(total),
+            '${rows.length} ${rows.length == 1 ? 'UTANGAN' : 'UTANGAN accounts'} with balance',
+            Icons.people_alt_outlined,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
               _open(c, 'UTANGAN Ledger', repository.customerLedger()),
               _open(c, 'UTANG History', repository.utangHistory()),
               _open(c, 'Payment History', repository.paymentHistory()),
-              ...s.data!.map(
-                (r) => Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    title: Text(r['full_name']! as String),
-                    subtitle: const Text('Outstanding UTANG'),
-                    trailing: Text(
-                      '₱${((r['balance']! as int) / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text('Balances by UTANGAN', style: Theme.of(c).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          ...rows.map(
+            (r) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                title: Text(r['full_name']! as String),
+                subtitle: const Text('Outstanding UTANG'),
+                trailing: Text(
+                  standardMoney(r['balance']! as int),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-            ],
-          )
-        : const AppLoadingView(label: 'Loading report…'),
+            ),
+          ),
+        ],
+      );
+    },
   );
   Widget _sales(BuildContext c) => FutureBuilder<SalesPeriodSummary>(
     future: repository.salesPeriods(),
@@ -106,10 +187,23 @@ class ReportsScreen extends StatelessWidget {
         builder: (_, f) => ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            _total('Today', x.daily),
-            _total('This Week', x.weekly),
-            _total('This Month', x.monthly),
-            const Divider(),
+            _reportIntro(
+              c,
+              "Today's Cash Sales",
+              standardMoney(x.daily),
+              'Posted cash transactions for today',
+              Icons.point_of_sale_outlined,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(width: 280, child: _total('This Week', x.weekly)),
+                SizedBox(width: 280, child: _total('This Month', x.monthly)),
+              ],
+            ),
+            const SizedBox(height: 20),
             Text(
               'Frequently Sold Products',
               style: Theme.of(c).textTheme.titleLarge,
@@ -127,9 +221,42 @@ class ReportsScreen extends StatelessWidget {
   );
   Widget _total(String x, int v) => Card(
     margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(
-      title: Text(x),
-      trailing: Text('₱${(v / 100).toStringAsFixed(2)}'),
+    child: ListTile(title: Text(x), trailing: Text(standardMoney(v))),
+  );
+  Widget _reportIntro(
+    BuildContext context,
+    String title,
+    String value,
+    String detail,
+    IconData icon,
+  ) => Container(
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.primary,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: Colors.white, size: 42),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white70)),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(detail, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ],
     ),
   );
   String _quantity(Map<String, Object?> row, String key) => baseQuantityText(
@@ -143,15 +270,17 @@ class ReportsScreen extends StatelessWidget {
     String title,
     Future<List<Map<String, Object?>>> rows,
   ) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(
-      leading: const Icon(Icons.description_outlined),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => _RowsScreen(title: title, rows: rows),
+    child: SizedBox(
+      width: 250,
+      child: ListTile(
+        leading: const Icon(Icons.description_outlined),
+        title: Text(title),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => _RowsScreen(title: title, rows: rows),
+          ),
         ),
       ),
     ),
@@ -210,6 +339,14 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
       return ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          _expenseIntro(
+            context,
+            'Operating Expenses',
+            standardMoney(total),
+            '$count recorded ${count == 1 ? 'expense' : 'expenses'} for the selected period',
+            Icons.receipt_long_outlined,
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -265,7 +402,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
           ListTile(
             title: const Text('Average Expense'),
             trailing: Text(
-              '₱${(count == 0 ? 0 : total / count / 100).toStringAsFixed(2)}',
+              standardMoney(count == 0 ? 0 : (total / count).round()),
             ),
           ),
           const Divider(),
@@ -277,9 +414,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
             (x) => ListTile(
               title: Text(x['name']! as String),
               subtitle: Text('${x['count']} expenses'),
-              trailing: Text(
-                '₱${((x['total']! as int) / 100).toStringAsFixed(2)}',
-              ),
+              trailing: Text(standardMoney(x['total']! as int)),
             ),
           ),
         ],
@@ -289,9 +424,42 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
 
   Widget _total(String label, int value) => Card(
     margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(
-      title: Text(label),
-      trailing: Text('₱${(value / 100).toStringAsFixed(2)}'),
+    child: ListTile(title: Text(label), trailing: Text(standardMoney(value))),
+  );
+  Widget _expenseIntro(
+    BuildContext context,
+    String title,
+    String value,
+    String detail,
+    IconData icon,
+  ) => Container(
+    padding: const EdgeInsets.all(22),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.primary,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: Colors.white, size: 42),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white70)),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(detail, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ],
     ),
   );
   Future<void> _pickRange() async {

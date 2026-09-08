@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
+
 import '../../../widgets/app_alerts.dart';
 
 import '../../../models/customer.dart';
@@ -218,10 +220,10 @@ class _ReviewState extends State<UtangCheckoutReview> {
               return ListTile(
                 title: Text(p.name),
                 subtitle: Text(
-                  '${_quantity(x)} ${x.sellingOptionName ?? 'Piece'} × ₱${((x.unitPriceCentavos ?? p.sellingPriceCentavos) / 100).toStringAsFixed(2)}',
+                  '${_quantity(x)} ${x.sellingOptionName ?? 'Piece'} × ${standardMoney(x.unitPriceCentavos ?? p.sellingPriceCentavos)}',
                 ),
                 trailing: Text(
-                  '₱${(x.lineTotalCentavos(p.sellingPriceCentavos) / 100).toStringAsFixed(2)}',
+                  standardMoney(x.lineTotalCentavos(p.sellingPriceCentavos)),
                 ),
               );
             }),
@@ -259,7 +261,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
       children: [
         Text(label),
         Text(
-          '₱${(cents / 100).toStringAsFixed(2)}',
+          standardMoney(cents),
           style: TextStyle(
             fontSize: important ? 24 : 18,
             fontWeight: important ? FontWeight.w800 : FontWeight.w600,

@@ -20,6 +20,9 @@ class SaleCartLine {
   String get quantityText => quantityScale == 1
       ? '$quantityValue'
       : _decimal(quantityValue, quantityScale);
+  String get displayUnit =>
+      option.name.replaceFirst(RegExp(r'^1\s+', caseSensitive: false), '');
+  String get displayQuantity => '$quantityText $displayUnit';
   UtangItemDraft toDraft() => UtangItemDraft(
     productId: product.id,
     quantity: quantityScale == 1 ? quantityValue : 1,

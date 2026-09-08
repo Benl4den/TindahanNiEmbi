@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/formatters/number_format.dart';
+
 import '../../repositories/transaction_history_repository.dart';
 import '../../widgets/app_state_view.dart';
 
@@ -127,7 +129,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                             '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${entry.status}',
                                           ),
                                           trailing: Text(
-                                            '₱${(entry.amountCentavos / 100).toStringAsFixed(2)}',
+                                            standardMoney(entry.amountCentavos),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
                                             ),
@@ -287,5 +289,5 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     return '$quantity $option × ${_money(price)}';
   }
 
-  String _money(int centavos) => '₱${(centavos / 100).toStringAsFixed(2)}';
+  String _money(int centavos) => standardMoney(centavos);
 }

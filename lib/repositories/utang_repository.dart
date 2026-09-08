@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
+
 import '../models/utang_draft.dart';
 import 'consignment_allocation.dart';
 import '../services/app_refresh_controller.dart';
@@ -177,7 +179,7 @@ class UtangRepository {
     await txn.insert('activity_logs', {
       'event_type': 'UTANG_CREATED',
       'description':
-          'UTANG $reference created for ${customer.single['full_name']} — ₱${(total / 100).toStringAsFixed(2)}',
+          'UTANG $reference created for ${customer.single['full_name']} — ${standardMoney(total)}',
       'actor_role': actorRole,
       'related_entity_type': 'UTANG',
       'related_entity_id': utangId,

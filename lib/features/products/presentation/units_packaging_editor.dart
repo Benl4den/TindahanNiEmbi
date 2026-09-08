@@ -46,6 +46,24 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
         widget.defaultSellingPriceCentavos,
       );
       widget.onChanged(value);
+    } else if (oldWidget.defaultSellingPriceCentavos !=
+        widget.defaultSellingPriceCentavos) {
+      value = ProductUnitConfiguration(
+        baseUnit: value.baseUnit,
+        purchasePackages: value.purchasePackages,
+        sellingOptions: [
+          for (final option in value.sellingOptions)
+            option.isDefault
+                ? SellingOptionDraft(
+                    name: option.name,
+                    baseQuantity: option.baseQuantity,
+                    priceCentavos: widget.defaultSellingPriceCentavos,
+                    isDefault: true,
+                  )
+                : option,
+        ],
+      );
+      widget.onChanged(value);
     }
   }
 

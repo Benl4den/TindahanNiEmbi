@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
+
 import '../models/utang_draft.dart';
 import 'consignment_allocation.dart';
 import '../services/app_refresh_controller.dart';
@@ -154,8 +156,7 @@ class CashSaleRepository {
     if (verified != total) throw StateError('Total mismatch');
     await tx.insert('activity_logs', {
       'event_type': 'SALES_CASH_SALE',
-      'description':
-          'Cash sale $reference completed — ₱${(total / 100).toStringAsFixed(2)}',
+      'description': 'Cash sale $reference completed — ${standardMoney(total)}',
       'actor_role': actorRole,
       'related_entity_type': 'CASH_SALE',
       'related_entity_id': sale,
