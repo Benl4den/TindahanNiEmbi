@@ -12,6 +12,28 @@ class CashSaleRepository {
   const CashSaleRepository(this.db, {this.actorRole});
   final Database db;
   final String? actorRole;
+  Future<({int total, int count})> dailySummary([DateTime? day]) async {
+    final now = (day ?? DateTime.now()).toLocal();
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).toUtc().toIso8601String();
+    final end = DateTime(
+      now.year,
+      now.month,
+      now.day + 1,
+    ).toUtc().toIso8601String();
+    final row = (await db.rawQuery(
+      '''SELECT COALESCE(SUM(total_centavos),0) total, COUNT(*) count FROM (
+      SELECT total_centavos,occurred_at,status FROM cash_sales UNION ALL
+      SELECT total_centavos,occurred_at,status FROM utang_transactions
+    ) WHERE status='POSTED' AND occurred_at>=? AND occurred_at<?''',
+      [start, end],
+    )).single;
+    return (total: row['total']! as int, count: row['count']! as int);
+  }
+
   Future<int> save(
     List<UtangItemDraft> items, {
     PaymentMethod paymentMethod = PaymentMethod.cash,
@@ -28,14 +50,16 @@ class CashSaleRepository {
     String? gcashReference,
   }) async {
     return AppRefreshController.instance.after(
-      db.transaction(
-        (tx) => saveWithExecutor(
+      db.transaction((tx) async {
+        final result = await saveWithExecutor(
           tx,
           items,
           paymentMethod: paymentMethod,
           gcashReference: gcashReference,
-        ),
-      ),
+        );
+        await tx.delete('active_sale_draft', where: 'id=1');
+        return result;
+      }),
     );
   }
 

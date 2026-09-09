@@ -836,10 +836,18 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
         ? initialProductId
         : products.first.id;
     final configurations = <int, ProductUnitConfiguration>{};
+    final previousCosts = <int, int?>{};
     try {
       for (final item in products) {
         configurations[item.id] = await widget.repository.deliveryConfiguration(
           item.id,
+        );
+        previousCosts[item.id] = await widget.repository.previousSupplierCost(
+          item.id,
+          party,
+          configurations[item.id]!.sellingOptions
+              .singleWhere((o) => o.isDefault)
+              .baseQuantity,
         );
       }
     } catch (e) {
@@ -925,6 +933,23 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                             : TextInputType.number,
                         decoration: InputDecoration(
                           labelText: f.$2,
+                          helperText:
+                              f.$1 == cost && previousCosts[product] == null
+                              ? 'No previous cost recorded'
+                              : null,
+                          suffixIcon:
+                              f.$1 == cost && previousCosts[product] != null
+                              ? TextButton(
+                                  onPressed: () => set(
+                                    () => cost.text =
+                                        (previousCosts[product]! / 100)
+                                            .toStringAsFixed(2),
+                                  ),
+                                  child: Text(
+                                    'Previous: ${standardMoney(previousCosts[product]!)}',
+                                  ),
+                                )
+                              : null,
                           border: const OutlineInputBorder(),
                         ),
                       ),
@@ -1392,6 +1417,37 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
             key: const Key('consignor-company-list'),
             padding: const EdgeInsets.all(20),
             children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SummaryCard(
+                    label: 'Consignment companies',
+                    value: '${companies.length}',
+                    icon: Icons.business_outlined,
+                  ),
+                  SummaryCard(
+                    label: 'Active products',
+                    value:
+                        '${companies.fold<int>(0, (n, x) => n + (x['product_count']! as int))}',
+                    icon: Icons.inventory_2_outlined,
+                  ),
+                  SummaryCard(
+                    label: 'Outstanding payable',
+                    value: money(
+                      companies.fold<int>(
+                        0,
+                        (n, x) => n + (x['payable_centavos']! as int),
+                      ),
+                    ),
+                    icon: Icons.payments_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '${companies.fold<int>(0, (n, x) => n + ((x['restock_count'] as int?) ?? 0))} consigned products need replenishment',
+              ),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,

@@ -12,6 +12,7 @@ import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
+import 'package:tindahan_ni_embi/repositories/transaction_history_repository.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -38,6 +39,65 @@ void main() {
     );
   });
   tearDown(() => app.close());
+  test('completed sale clears draft in the same transaction', () async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.insert('active_sale_draft', {
+      'id': 1,
+      'created_at': now,
+      'updated_at': now,
+    });
+    await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+    expect(await db.query('active_sale_draft'), isEmpty);
+    expect(await db.query('cash_sales'), hasLength(1));
+  });
+  test('history supports older records and searches before limiting', () async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    for (var i = 0; i < 501; i++) {
+      await db.insert('cash_sales', {
+        'total_centavos': 100,
+        'status': 'POSTED',
+        'occurred_at': now,
+        'created_at': now,
+      });
+    }
+    final history = TransactionHistoryRepository(db);
+    expect(await history.recent(), hasLength(500));
+    expect(await history.recent(limit: 1000), hasLength(501));
+    expect(await history.recent(search: 'no match'), isEmpty);
+    expect(await history.recent(search: 'Sale', limit: 1000), hasLength(501));
+  });
+  test(
+    'daily summary includes more than 100 sales and excludes other days',
+    () async {
+      final now = DateTime.now().toUtc().toIso8601String();
+      for (var i = 0; i < 105; i++) {
+        await db.insert('cash_sales', {
+          'total_centavos': 100,
+          'status': 'POSTED',
+          'occurred_at': now,
+          'created_at': now,
+        });
+      }
+      final summary = await CashSaleRepository(db).dailySummary();
+      expect(summary.count, 105);
+      expect(summary.total, 10500);
+      expect(
+        (await CashSaleRepository(db)
+                .dailySummary(DateTime.now().subtract(const Duration(days: 1))))
+            .count,
+        0,
+      );
+    },
+  );
+  test(
+    'staff cannot edit or archive a product through the repository',
+    () async {
+      final staff = SqliteProductRepository(db, actorRole: 'STAFF');
+      await expectLater(staff.update(p), throwsStateError);
+      await expectLater(staff.archive(p.id), throwsStateError);
+    },
+  );
   test('V2 installed and cash sale atomically snapshots and deducts', () async {
     expect(AppDatabase.schemaVersion, 19);
     expect(

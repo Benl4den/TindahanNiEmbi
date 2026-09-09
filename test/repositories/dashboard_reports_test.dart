@@ -87,6 +87,13 @@ void main() {
     );
     expect(await reports.frequentProductIds(), [a.id]);
     expect((await reports.inventory()).length, 2);
+    final old = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 31))
+        .toIso8601String();
+    await db.update('cash_sales', {'occurred_at': old});
+    await db.update('utang_transactions', {'occurred_at': old});
+    expect(await reports.frequentProductIds(), isEmpty);
   });
 
   test('sales report honors day, calendar week and month boundaries', () async {

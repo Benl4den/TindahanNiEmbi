@@ -23,6 +23,12 @@ class _Repo extends ConsignmentRepository {
   int? lastDefaultCategoryId;
   ConsignmentReceiptDraft? lastReceipt;
   @override
+  Future<int?> previousSupplierCost(
+    int productId,
+    int consignorId,
+    int basis,
+  ) async => null;
+  @override
   Future<ProductUnitConfiguration> deliveryConfiguration(int productId) async =>
       const ProductUnitConfiguration(
         baseUnit: BaseUnit.piece,

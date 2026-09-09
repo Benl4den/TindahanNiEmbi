@@ -62,6 +62,31 @@ void main() {
     ),
   );
 
+  test(
+    'previous supplier cost uses latest matching company and converts basis',
+    () async {
+      expect(
+        await consignment.previousSupplierCost(product.id, consignor, 1),
+        isNull,
+      );
+      await receive(units: 5, cost: 4200, sell: 5000);
+      await receive(units: 5, cost: 4500, sell: 5000);
+      expect(
+        await consignment.previousSupplierCost(product.id, consignor, 1),
+        4500,
+      );
+      expect(
+        await consignment.previousSupplierCost(product.id, consignor, 6),
+        27000,
+      );
+      final other = await consignment.createConsignor('Other Company');
+      expect(
+        await consignment.previousSupplierCost(product.id, other, 1),
+        isNull,
+      );
+    },
+  );
+
   test('delivery reads all saved packages and authoritative price, not category defaults', () async {
     await ProductUnitRepository(db).configure(
       productId: product.id,

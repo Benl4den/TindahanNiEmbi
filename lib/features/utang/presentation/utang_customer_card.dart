@@ -28,6 +28,14 @@ class UtangCustomerCard extends StatelessWidget {
       label: outstanding ? 'Outstanding UTANG' : 'Zero UTANG Balance',
       button: true,
       child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: outstanding
+                ? const Color(0xFFEAD8BB)
+                : const Color(0xFFE3E6E1),
+          ),
+        ),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
@@ -35,7 +43,12 @@ class UtangCustomerCard extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             child: Row(
               children: [
-                CircleAvatar(radius: 28, child: Text(initials)),
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: const Color(0xFFFFF0D8),
+                  foregroundColor: const Color(0xFF79552F),
+                  child: Text(initials),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -72,9 +85,21 @@ class UtangCustomerCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'Current Balance',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: outstanding
+                            ? const Color(0xFFFFF0D8)
+                            : const Color(0xFFF0F3EF),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        outstanding ? 'With balance' : 'Settled',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                     Text(
                       standardMoney(customer.balanceCentavos),

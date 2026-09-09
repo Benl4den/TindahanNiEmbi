@@ -12,11 +12,12 @@ class StubDb extends Fake implements Database {}
 
 class Wallet extends PaymentAccountingRepository {
   Wallet() : super(StubDb());
+  List<GCashLedgerEntry> rows = [];
   @override
   Future<GCashSummary> summary([DateTime? selectedDay]) async =>
       const GCashSummary(balance: 200000, todayIn: 0, todayOut: 0);
   @override
-  Future<List<GCashLedgerEntry>> history({int limit = 100}) async => [];
+  Future<List<GCashLedgerEntry>> history({int limit = 100}) async => rows;
   @override
   Future<bool> hasOpeningBalance() async => true;
   @override
@@ -113,21 +114,47 @@ void main() {
     'service reversal modal scrolls above keyboard and saves safely',
     (tester) async {
       final services = Services()..rows = [receipt];
+      final wallet = Wallet()
+        ..rows = [
+          GCashLedgerEntry(
+            id: 1,
+            reference: 'internal',
+            type: 'CASH_IN_SERVICE',
+            amountChangeCentavos: receipt.gcashChangeCentavos,
+            occurredAt: receipt.createdAt,
+            gcashServiceTransactionId: receipt.id,
+          ),
+        ];
       await tester.pumpWidget(
         MaterialApp(
           home: GCashScreen(
-            repository: Wallet(),
+            repository: wallet,
             services: services,
             auth: Auth(),
           ),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byType(ExpansionTile).first);
-      await tester.tap(find.byType(ExpansionTile).first);
+      final date = receipt.createdAt.toLocal();
+      final dayTile = find.byKey(
+        PageStorageKey(
+          'gcash-wallet-${DateTime(date.year, date.month, date.day)}',
+        ),
+      );
+      await tester.scrollUntilVisible(
+        dayTile,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(dayTile);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Cash-In • POSTED'));
-      await tester.tap(find.text('Cash-In • POSTED'));
+      expect(
+        find.text('1 transaction • Tap to expand or collapse'),
+        findsOneWidget,
+      );
+      final serviceTile = find.widgetWithText(ExpansionTile, 'Cash-In').last;
+      await tester.ensureVisible(serviceTile);
+      await tester.tap(serviceTile);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Reverse service'));
       await tester.tap(find.text('Reverse service'));

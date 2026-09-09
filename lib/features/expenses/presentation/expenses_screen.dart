@@ -207,7 +207,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
-                            '${x.categoryName} • ${x.reference}\n${_when(x.expenseDateTime.toLocal())} • ${x.status}',
+                            '${x.categoryName}\n${_when(x.expenseDateTime.toLocal())} • ${x.status}',
                           ),
                           trailing: Text(
                             money(x.amountCentavos),

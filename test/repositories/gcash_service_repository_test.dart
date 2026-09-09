@@ -40,6 +40,12 @@ void main() {
       expect(cashOut.gcashChangeCentavos, 50000);
       expect(cashOut.physicalCashChangeCentavos, -49000);
       expect((await wallet.summary()).balance, 150000);
+      expect((await wallet.summary()).todayTransactions, 3);
+      expect(
+        (await wallet.summary(DateTime.now().subtract(const Duration(days: 1))))
+            .todayTransactions,
+        0,
+      );
       final daily = await services.summary(DateTime.now());
       expect(daily.totalFeeIncome, 2500);
       expect(await services.totalFeeIncome(), 2500);

@@ -6,6 +6,54 @@ import 'package:tindahan_ni_embi/models/utang_draft.dart';
 
 void main() {
   testWidgets(
+    'committed sale is not offered again when catalog refresh fails',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      final now = DateTime.now();
+      final product = Product(
+        id: 1,
+        categoryId: 1,
+        name: 'Coffee',
+        photoPath: '/missing',
+        purchasePriceCentavos: 100,
+        sellingPriceCentavos: 500,
+        currentQuantity: 10,
+        minimumStockLevel: 1,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      var saves = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CashSaleScreen(
+            products: [product],
+            frequentProductIds: const [1],
+            saveSale: (_) async => ++saves,
+            loadProducts: () async => throw StateError('refresh failed'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Review & Complete Sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Complete Sale'));
+      await tester.pumpAndSettle();
+      expect(saves, 1);
+      expect(find.text('Sale Saved'), findsOneWidget);
+      expect(find.text('Could Not Complete Sale'), findsNothing);
+      expect(
+        find.text('Your cart is empty.\nSelect products to begin a sale.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Sales workspace is usable in landscape and portrait tablet sizes',
     (tester) async {
       final now = DateTime.utc(2026);
@@ -42,11 +90,23 @@ void main() {
         tester.view.devicePixelRatio = 1;
         await tester.pumpWidget(
           MaterialApp(
-            home: CashSaleScreen(products: products, saveSale: (_) async => 1),
+            home: CashSaleScreen(
+              products: products,
+              frequentProductIds: const [1, 2],
+              saveSale: (_) async => 1,
+            ),
           ),
         );
         await tester.pump();
         expect(find.text('Sales'), findsOneWidget);
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.widgetWithText(ChoiceChip, 'Frequently Sold'),
+              )
+              .selected,
+          isTrue,
+        );
         expect(find.text('Coffee'), findsOneWidget);
         expect(find.text('Out of Stock'), findsWidgets);
         if (size.width >= 900) {
@@ -63,6 +123,25 @@ void main() {
           );
           await tester.pump(const Duration(seconds: 3));
           expect(find.text('Coffee added → 1 Piece'), findsNothing);
+          await tester.tap(find.text('Review & Complete Sale'));
+          await tester.pumpAndSettle();
+          final amount = find.widgetWithText(TextFormField, 'Amount received');
+          await tester.enterText(amount, '5');
+          await tester.pump();
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Complete Sale'),
+                )
+                .onPressed,
+            isNull,
+          );
+          await tester.enterText(amount, '20');
+          await tester.pump();
+          expect(find.text('Change: ₱10.00'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
         }
         expect(tester.takeException(), isNull);
       }
@@ -97,6 +176,7 @@ void main() {
         MaterialApp(
           home: CashSaleScreen(
             products: [product],
+            frequentProductIds: const [7],
             saveSale: (_) async => 1,
             onUtang: (items) async {
               received = items;
@@ -148,6 +228,8 @@ void main() {
         home: CashSaleScreen(products: [product], saveSale: (_) async => 1),
       ),
     );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
     await tester.pump();
     expect(
       tester

@@ -12,8 +12,10 @@ class GCashLedgerEntry {
     required this.occurredAt,
     this.gcashReference,
     this.notes,
+    this.gcashServiceTransactionId,
   });
   final int id, amountChangeCentavos;
+  final int? gcashServiceTransactionId;
   final String reference, type;
   final String? gcashReference, notes;
   final DateTime occurredAt;
@@ -21,6 +23,7 @@ class GCashLedgerEntry {
   factory GCashLedgerEntry.fromMap(Map<String, Object?> map) =>
       GCashLedgerEntry(
         id: map['id']! as int,
+        gcashServiceTransactionId: map['gcash_service_transaction_id'] as int?,
         reference: map['reference']! as String,
         type: map['entry_type']! as String,
         amountChangeCentavos: map['amount_change_centavos']! as int,
@@ -35,8 +38,10 @@ class GCashSummary {
     required this.balance,
     required this.todayIn,
     required this.todayOut,
+    this.todayTransactions = 0,
   });
   final int balance, todayIn, todayOut;
+  final int todayTransactions;
   int get todayNet => todayIn - todayOut;
 }
 
@@ -299,9 +304,12 @@ class PaymentAccountingRepository {
     final row = (await db.rawQuery(
       '''SELECT COALESCE(SUM(amount_change_centavos),0) balance,
       COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) today_in,
-      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos<0 THEN -amount_change_centavos ELSE 0 END),0) today_out
+      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos<0 THEN -amount_change_centavos ELSE 0 END),0) today_out,
+      COUNT(CASE WHEN occurred_at>=? AND occurred_at<? THEN 1 END) today_transactions
       FROM gcash_ledger_entries''',
       [
+        start.toUtc().toIso8601String(),
+        end.toUtc().toIso8601String(),
         start.toUtc().toIso8601String(),
         end.toUtc().toIso8601String(),
         start.toUtc().toIso8601String(),
@@ -312,6 +320,7 @@ class PaymentAccountingRepository {
       balance: row['balance']! as int,
       todayIn: row['today_in']! as int,
       todayOut: row['today_out']! as int,
+      todayTransactions: row['today_transactions']! as int,
     );
   }
 

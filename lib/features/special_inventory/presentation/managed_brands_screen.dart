@@ -119,86 +119,147 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
             onAction: _add,
           );
         }
-        return GridView.builder(
-          padding: const EdgeInsets.all(24),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 410,
-            mainAxisExtent: 190,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-          ),
-          itemCount: snapshot.data!.length,
-          itemBuilder: (_, index) {
-            final summary = snapshot.data![index], group = summary.group;
-            return Card(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _open(group),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 27,
-                            child: Icon(
-                              group.code == 'SELECTA'
-                                  ? Icons.icecream_outlined
-                                  : Icons.sell_outlined,
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${snapshot.data!.length} managed brands',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${snapshot.data!.fold<int>(0, (n, x) => n + x.productCount)} products across brands • ${snapshot.data!.fold<int>(0, (n, x) => n + x.lowStockCount + x.outOfStockCount)} need restock',
+                        ),
+                        const Text(
+                          'Keep each brand’s products and stock needs together. Open a brand to manage its catalog or add a new brand as your store grows.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 410,
+                          mainAxisExtent: 190,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: snapshot.data!.length + 1,
+                    itemBuilder: (_, index) {
+                      if (index == snapshot.data!.length) {
+                        return Card(
+                          child: InkWell(
+                            onTap: _add,
+                            borderRadius: BorderRadius.circular(12),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_circle_outline, size: 36),
+                                SizedBox(height: 12),
+                                Text('Add Brand'),
+                                SizedBox(height: 6),
+                                Text('Build your next product collection'),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
+                        );
+                      }
+                      final summary = snapshot.data![index],
+                          group = summary.group;
+                      return Card(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _open(group),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Text(
-                                  group.name,
-                                  style: Theme.of(context).textTheme.titleLarge
-                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 27,
+                                      child: Icon(
+                                        group.code == 'SELECTA'
+                                            ? Icons.icecream_outlined
+                                            : Icons.sell_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            group.name,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleLarge
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                          ),
+                                          Text(
+                                            '${summary.productCount} ${summary.productCount == 1 ? 'product' : 'products'}',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right),
+                                  ],
                                 ),
+                                const Spacer(),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    _status(
+                                      '${summary.lowStockCount} low stock',
+                                      Icons.warning_amber_rounded,
+                                      Colors.orange,
+                                    ),
+                                    _status(
+                                      '${summary.outOfStockCount} out',
+                                      Icons.error_outline,
+                                      Colors.red,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 Text(
-                                  '${summary.productCount} ${summary.productCount == 1 ? 'product' : 'products'}',
+                                  'Open brand products',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right),
-                        ],
-                      ),
-                      const Spacer(),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          _status(
-                            '${summary.lowStockCount} low stock',
-                            Icons.warning_amber_rounded,
-                            Colors.orange,
-                          ),
-                          _status(
-                            '${summary.outOfStockCount} out',
-                            Icons.error_outline,
-                            Colors.red,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Open brand products',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w700,
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         );
       },
     ),

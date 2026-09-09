@@ -34,6 +34,36 @@ void main() {
     c.decrease(a);
     expect(c.totalCentavos, 0);
   });
+  test('decimal additions normalize scales and package stock is shared', () {
+    final product = p(1, 10000, 10000);
+    final kg = SellingOption(
+      id: 1,
+      productId: 1,
+      name: 'kg',
+      baseQuantity: 1000,
+      priceCentavos: 10000,
+      isDefault: true,
+    );
+    final cart = ProductSelectionController([product]);
+    cart.add(product, kg, quantityValue: 5, quantityScale: 10);
+    cart.add(product, kg);
+    expect(cart.lines.single.baseQuantity, 1500);
+    expect(cart.totalCentavos, 15000);
+    cart.add(product, kg, quantityValue: 50, quantityScale: 100);
+    expect(cart.lines.single.baseQuantity, 2000);
+    cart.clear();
+    cart.add(product, kg, quantityValue: 6);
+    final half = SellingOption(
+      id: 2,
+      productId: 1,
+      name: 'half',
+      baseQuantity: 500,
+      priceCentavos: 5000,
+      isDefault: false,
+    );
+    expect(() => cart.add(product, half, quantityValue: 10), throwsStateError);
+    expect(cart.lines.single.baseQuantity, 6000);
+  });
   test('same option merges and different options remain separate', () {
     final product = p(1, 100, 1500);
     final bottle = SellingOption(

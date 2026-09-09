@@ -100,11 +100,10 @@ class ProductCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: onArchive,
-                          child: const Text(AppStrings.archive),
-                        ),
+                      IconButton.outlined(
+                        tooltip: AppStrings.archive,
+                        onPressed: onArchive,
+                        icon: const Icon(Icons.archive_outlined),
                       ),
                     ],
                   ),

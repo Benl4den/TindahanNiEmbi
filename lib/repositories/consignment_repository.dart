@@ -20,6 +20,27 @@ class ConsignmentRepository {
   final Database db;
   final String? actorRole;
 
+  Future<int?> previousSupplierCost(
+    int productId,
+    int consignorId,
+    int basis,
+  ) async {
+    final rows = await db.rawQuery(
+      '''
+      SELECT COALESCE(supplier_cost_centavos, unit_cost_centavos) cost,
+        COALESCE(supplier_cost_basis_quantity, 1) basis
+      FROM consignment_batches WHERE product_id=? AND consignor_id=?
+      ORDER BY received_at DESC, id DESC LIMIT 1
+    ''',
+      [productId, consignorId],
+    );
+    if (rows.isEmpty) return null;
+    return ((rows.single['cost']! as int) *
+            basis /
+            (rows.single['basis']! as int))
+        .round();
+  }
+
   /// Read the product's saved configuration, never infer it from its category.
   Future<ProductUnitConfiguration> deliveryConfiguration(int productId) async {
     final rows = await db.query(
@@ -628,6 +649,7 @@ class ConsignmentRepository {
   }
 
   Future<List<Map<String, Object?>>> companyCards() => db.rawQuery('''SELECT c.id,c.name,c.contact_details,c.default_category_id,cat.name default_category_name,COUNT(DISTINCT CASE WHEN p.is_archived=0 THEN b.product_id END) product_count,MAX(b.received_at) last_receipt_at,
+      COUNT(DISTINCT CASE WHEN p.is_archived=0 AND p.current_quantity<=p.minimum_stock_level THEN p.id END) restock_count,
       (SELECT MAX(r.remitted_at) FROM consignor_remittances r WHERE r.consignor_id=c.id) last_remittance_at,
       COALESCE((SELECT SUM(l.amount_change_centavos) FROM consignor_ledger_entries l WHERE l.consignor_id=c.id),0)+
       COALESCE((SELECT SUM(r.payable_change_centavos) FROM consignment_allocation_reversals r WHERE r.consignor_id=c.id),0) payable_centavos

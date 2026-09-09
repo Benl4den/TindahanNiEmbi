@@ -109,7 +109,7 @@ class _GCashScreenState extends State<GCashScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -119,37 +119,123 @@ class _GCashScreenState extends State<GCashScreen> {
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    const Text(
-                      'CURRENT GCASH BALANCE',
-                      style: TextStyle(color: Colors.white70),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'CURRENT GCASH BALANCE',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          Text(
+                            standardMoney(summary.balance),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      standardMoney(summary.balance),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 38,
-                        fontWeight: FontWeight.w900,
+                    const SizedBox(width: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .16),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.receipt_long_outlined,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          Text(
+                            '${summary.todayTransactions}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            summary.todayTransactions == 1
+                                ? 'Transaction today'
+                                : 'Transactions today',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _metric('Today’s Money In', summary.todayIn, Colors.green),
-                  _metric('Today’s Money Out', summary.todayOut, Colors.red),
-                  _metric(
-                    'Today’s Net Change',
-                    summary.todayNet,
-                    summary.todayNet < 0 ? Colors.red : Colors.blue,
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (_, constraints) {
+                  final columns = constraints.maxWidth >= 640
+                      ? 4
+                      : constraints.maxWidth >= 300
+                      ? 2
+                      : 1;
+                  final width =
+                      (constraints.maxWidth - 12 * (columns - 1)) / columns;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: width,
+                        child: _metric(
+                          'Money in · Today',
+                          summary.todayIn,
+                          Colors.green,
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: _metric(
+                          'Money out · Today',
+                          summary.todayOut,
+                          Colors.red,
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: _metric(
+                          'Net change · Today',
+                          summary.todayNet,
+                          summary.todayNet < 0 ? Colors.red : Colors.blue,
+                        ),
+                      ),
+                      SizedBox(
+                        width: width,
+                        child: FutureBuilder<int>(
+                          future: feeTotal,
+                          builder: (_, fees) => fees.hasError
+                              ? _retryHistory()
+                              : !fees.hasData
+                              ? const LinearProgressIndicator()
+                              : _metric(
+                                  'Service fees • All time',
+                                  fees.data!,
+                                  Colors.green.shade800,
+                                ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
               Text(
@@ -173,73 +259,6 @@ class _GCashScreenState extends State<GCashScreen> {
                   ),
                 ],
               ),
-              FutureBuilder<int>(
-                future: feeTotal,
-                builder: (_, snapshot) => snapshot.hasError
-                    ? _retryHistory()
-                    : !snapshot.hasData
-                    ? const LinearProgressIndicator()
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: _metric(
-                          'Service fees earned • All time',
-                          snapshot.data ?? 0,
-                          Colors.green.shade800,
-                        ),
-                      ),
-              ),
-              FutureBuilder<List<GCashServiceTransaction>>(
-                future: serviceHistory,
-                builder: (_, snapshot) => snapshot.hasError
-                    ? _retryHistory()
-                    : !snapshot.hasData
-                    ? const LinearProgressIndicator()
-                    : DayHistory<GCashServiceTransaction>(
-                        storageKey: 'gcash-services',
-                        items: snapshot.data ?? [],
-                        date: (s) => s.createdAt,
-                        itemBuilder: (service) => ExpansionTile(
-                          key: PageStorageKey('gcash-service-${service.id}'),
-                          title: Text(
-                            '${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} • ${service.status}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            'Principal: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)}',
-                          ),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(service.reference),
-                                  Text(_when(service.createdAt.toLocal())),
-                                  Text(
-                                    'GCash movement: ${standardMoney(service.gcashChangeCentavos)}',
-                                  ),
-                                  Text(
-                                    'Cash movement: ${standardMoney(service.physicalCashChangeCentavos)}',
-                                  ),
-                                  if (service.gcashReference != null)
-                                    Text(
-                                      'GCash reference: ${service.gcashReference}',
-                                    ),
-                                  if (service.notes != null)
-                                    Text(service.notes!),
-                                  if (service.status == 'POSTED')
-                                    TextButton.icon(
-                                      onPressed: () => _reverseService(service),
-                                      icon: const Icon(Icons.undo),
-                                      label: const Text('Reverse service'),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-              ),
               const SizedBox(height: 24),
               Text(
                 'Transaction History',
@@ -254,55 +273,73 @@ class _GCashScreenState extends State<GCashScreen> {
                   ),
                 )
               else
-                DayHistory<GCashLedgerEntry>(
-                  storageKey: 'gcash-wallet',
-                  items: entries,
-                  date: (e) => e.occurredAt,
-                  itemBuilder: (entry) => Card(
-                    child: ExpansionTile(
-                      key: PageStorageKey('gcash-entry-${entry.id}'),
-                      leading: CircleAvatar(
-                        backgroundColor: entry.amountChangeCentavos > 0
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        child: Icon(
-                          entry.amountChangeCentavos > 0
-                              ? Icons.south_west
-                              : Icons.north_east,
-                          color: entry.amountChangeCentavos > 0
-                              ? Colors.green.shade800
-                              : Colors.red.shade800,
-                        ),
-                      ),
-                      title: Text(_label(entry.type)),
-                      subtitle: Text(
-                        '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: entry.amountChangeCentavos > 0
-                              ? Colors.green.shade800
-                              : Colors.red.shade800,
-                        ),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '${_when(entry.occurredAt.toLocal())}'
-                              '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
-                              '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                FutureBuilder<List<GCashServiceTransaction>>(
+                  future: serviceHistory,
+                  builder: (_, services) {
+                    if (services.hasError) return _retryHistory();
+                    if (!services.hasData) {
+                      return const LinearProgressIndicator();
+                    }
+                    final byId = {
+                      for (final service
+                          in services.data ?? <GCashServiceTransaction>[])
+                        service.id: service,
+                    };
+                    return DayHistory<GCashLedgerEntry>(
+                      storageKey: 'gcash-wallet',
+                      items: entries,
+                      date: (e) => e.occurredAt,
+                      itemBuilder: (entry) => Card(
+                        key: ValueKey('gcash-row-${entry.id}'),
+                        child: ExpansionTile(
+                          key: PageStorageKey('gcash-entry-${entry.id}'),
+                          leading: CircleAvatar(
+                            backgroundColor: entry.amountChangeCentavos > 0
+                                ? Colors.green.shade50
+                                : Colors.red.shade50,
+                            child: Icon(
+                              entry.amountChangeCentavos > 0
+                                  ? Icons.south_west
+                                  : Icons.north_east,
+                              color: entry.amountChangeCentavos > 0
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
                             ),
                           ),
+                          title: Text(_label(entry.type)),
+                          subtitle: Text(
+                            '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: entry.amountChangeCentavos > 0
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
+                            ),
+                          ),
+                          children: [
+                            if (byId[entry.gcashServiceTransactionId]
+                                case final service?)
+                              _serviceDetails(service),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '${_when(entry.occurredAt.toLocal())}'
+                                  '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
+                                  '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               Text(
-                'Showing up to $historyLimit latest entries in each history. Fees above include all dates.',
+                'Showing up to $historyLimit latest transactions. Service fees include all dates.',
               ),
               TextButton.icon(
                 onPressed: () => setState(() {
@@ -328,18 +365,30 @@ class _GCashScreenState extends State<GCashScreen> {
   Widget _metric(String label, int amount, Color color) => SizedBox(
     width: 230,
     child: Card(
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label),
             Text(
-              standardMoney(amount),
+              label,
               style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.w800,
-                color: color,
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 5),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                standardMoney(amount),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
               ),
             ),
           ],
@@ -348,7 +397,31 @@ class _GCashScreenState extends State<GCashScreen> {
     ),
   );
 
+  Widget _serviceDetails(GCashServiceTransaction service) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Status: ${service.status}'),
+        Text(
+          'Principal: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)}',
+        ),
+        Text(
+          'Cash movement: ${standardMoney(service.physicalCashChangeCentavos)}',
+        ),
+        if (service.status == 'POSTED')
+          TextButton.icon(
+            onPressed: () => _reverseService(service),
+            icon: const Icon(Icons.undo),
+            label: const Text('Reverse service'),
+          ),
+      ],
+    ),
+  );
+
   String _label(String type) => switch (type) {
+    'CASH_IN_SERVICE' => 'Cash-In',
+    'CASH_OUT_SERVICE' => 'Cash-Out',
     'SERVICE_REVERSAL' => 'Service Reversal',
     'SALE' => 'Sale',
     'UTANG_PAYMENT' => 'UTANG Payment',

@@ -80,6 +80,7 @@ class SqliteProductRepository implements ProductRepository {
 
   @override
   Future<Product> create(ProductDraft draft) async {
+    if (actorRole == 'STAFF') throw StateError('Owner permission required.');
     final name = _validate(draft);
     return AppRefreshController.instance.after(
       _database.transaction((txn) async {
@@ -159,6 +160,7 @@ class SqliteProductRepository implements ProductRepository {
 
   @override
   Future<Product> update(Product product) async {
+    if (actorRole == 'STAFF') throw StateError('Owner permission required.');
     final name = _normalizeName(product.name);
     _nonnegative([
       product.purchasePriceCentavos,
@@ -260,6 +262,7 @@ class SqliteProductRepository implements ProductRepository {
 
   @override
   Future<void> archive(int id) async {
+    if (actorRole == 'STAFF') throw StateError('Owner permission required.');
     await _database.transaction((txn) async {
       final rows = await txn.query(
         'products',

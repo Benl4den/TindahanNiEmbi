@@ -23,7 +23,7 @@ class ReportsRepository {
       SELECT DISTINCT i.product_id,'U'||s.id,s.occurred_at
       FROM utang_transaction_items i JOIN utang_transactions s ON s.id=i.utang_transaction_id WHERE s.status='POSTED'
     ) sold JOIN products p ON p.id=sold.product_id
-    WHERE p.is_archived=0
+    WHERE p.is_archived=0 AND julianday(occurred_at)>=julianday('now','-30 days')
     GROUP BY product_id ORDER BY COUNT(*) DESC,MAX(occurred_at) DESC,product_id ASC LIMIT 20
   ''')).map((r) => r['product_id']! as int).toList();
   Future<List<Map<String, Object?>>> inventory() => db.rawQuery(

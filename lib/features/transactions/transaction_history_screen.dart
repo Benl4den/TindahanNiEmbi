@@ -15,6 +15,19 @@ class TransactionHistoryScreen extends StatefulWidget {
 
 class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   String filter = 'ALL', search = '';
+  int limit = 500;
+  late Future<List<TransactionHistoryEntry>> data;
+  @override
+  void initState() {
+    super.initState();
+    reload();
+  }
+
+  void reload() => data = widget.repository.recent(
+    type: filter,
+    search: search,
+    limit: limit,
+  );
   final Set<String> expanded = {};
   String _key(DateTime value) {
     final d = value.toLocal();
@@ -25,12 +38,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Transaction History')),
     body: FutureBuilder<List<TransactionHistoryEntry>>(
-      future: widget.repository.recent(type: filter),
+      future: data,
       builder: (_, snapshot) {
         if (snapshot.hasError) {
           return AppStateView.error(
             title: 'Could not load transaction history',
-            onAction: () => setState(() {}),
+            onAction: () => setState(reload),
           );
         }
         if (!snapshot.hasData) {
@@ -48,7 +61,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: TextField(
-                onChanged: (v) => setState(() => search = v),
+                onChanged: (v) => setState(() {
+                  search = v;
+                  limit = 500;
+                  reload();
+                }),
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search),
                   hintText: 'Search transactions...',
@@ -75,7 +92,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       child: ChoiceChip(
                         label: Text(x.$2),
                         selected: filter == x.$1,
-                        onSelected: (_) => setState(() => filter = x.$1),
+                        onSelected: (_) => setState(() {
+                          filter = x.$1;
+                          limit = 500;
+                          reload();
+                        }),
                       ),
                     ),
                 ],
@@ -90,6 +111,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                         final open = expanded.contains(group.key),
                             day = group.value.first.occurredAt.toLocal();
                         return Card(
+                          key: ValueKey('history-day-${group.key}'),
                           margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
                           child: Column(
                             children: [
@@ -107,19 +129,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  '${group.value.length} transactions',
+                                  '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
                                 ),
                                 trailing: Icon(
                                   open ? Icons.expand_less : Icons.expand_more,
                                 ),
                               ),
-                              AnimatedCrossFade(
-                                duration: const Duration(milliseconds: 180),
-                                crossFadeState: open
-                                    ? CrossFadeState.showSecond
-                                    : CrossFadeState.showFirst,
-                                firstChild: const SizedBox.shrink(),
-                                secondChild: Column(
+                              if (open)
+                                Column(
                                   children: group.value
                                       .map(
                                         (entry) => ExpansionTile(
@@ -171,13 +188,21 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                       )
                                       .toList(),
                                 ),
-                              ),
                             ],
                           ),
                         );
                       }).toList(),
                     ),
             ),
+            if (snapshot.data!.length >= limit)
+              TextButton.icon(
+                onPressed: () => setState(() {
+                  limit += 500;
+                  reload();
+                }),
+                icon: const Icon(Icons.expand_more),
+                label: const Text('Load older transactions'),
+              ),
           ],
         );
       },

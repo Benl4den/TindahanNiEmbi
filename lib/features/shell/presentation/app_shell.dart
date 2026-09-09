@@ -75,6 +75,7 @@ class _State extends State<AppShell> {
   int selected = 0;
   int salesRevision = 0;
   int restockCount = 0;
+  int productCount = 0;
   int? pendingConsignorId;
   int? pendingConsignmentProductId;
   bool railExpanded = true;
@@ -99,8 +100,18 @@ class _State extends State<AppShell> {
       final count = (await OperationsRepository(
         widget.database,
       ).restock()).length;
-      if (mounted && count != restockCount) {
-        setState(() => restockCount = count);
+      final activeCount =
+          Sqflite.firstIntValue(
+            await widget.database.rawQuery(
+              'SELECT COUNT(*) FROM products WHERE is_archived=0',
+            ),
+          ) ??
+          0;
+      if (mounted) {
+        setState(() {
+          restockCount = count;
+          productCount = activeCount;
+        });
       }
     } catch (_) {
       // Keep navigation usable if the indicator query cannot be loaded.
@@ -150,8 +161,11 @@ class _State extends State<AppShell> {
         ),
         label: 'Restock',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.inventory),
+      NavigationDestination(
+        icon: Badge(
+          label: Text('$productCount'),
+          child: const Icon(Icons.inventory),
+        ),
         label: 'Products',
       ),
       const NavigationDestination(
@@ -275,21 +289,33 @@ class _State extends State<AppShell> {
         );
       },
     ),
-    1 => ManagedBrandsScreen(
-      special: SpecialInventoryRepository(widget.database, actorRole: role),
-      products: SqliteProductRepository(widget.database),
-      inventory: InventoryRepository(widget.database, actorRole: role),
-      categories: SqliteCategoryRepository(widget.database),
-      photoService: LocalProductPhotoService(),
-    ),
-    2 => ConsignmentScreen(
-      repository: ConsignmentRepository(widget.database, actorRole: role),
-      products: SqliteProductRepository(widget.database),
-      categories: SqliteCategoryRepository(widget.database),
-      photoService: LocalProductPhotoService(),
-      initialConsignorId: pendingConsignorId,
-      initialReceiveProductId: pendingConsignmentProductId,
-    ),
+    1 =>
+      widget.role == UserRole.owner
+          ? ManagedBrandsScreen(
+              special: SpecialInventoryRepository(
+                widget.database,
+                actorRole: role,
+              ),
+              products: SqliteProductRepository(widget.database),
+              inventory: InventoryRepository(widget.database, actorRole: role),
+              categories: SqliteCategoryRepository(widget.database),
+              photoService: LocalProductPhotoService(),
+            )
+          : _denied(),
+    2 =>
+      widget.role == UserRole.owner
+          ? ConsignmentScreen(
+              repository: ConsignmentRepository(
+                widget.database,
+                actorRole: role,
+              ),
+              products: SqliteProductRepository(widget.database),
+              categories: SqliteCategoryRepository(widget.database),
+              photoService: LocalProductPhotoService(),
+              initialConsignorId: pendingConsignorId,
+              initialReceiveProductId: pendingConsignmentProductId,
+            )
+          : _denied(),
     3 => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
       allowAdjustment: widget.role == UserRole.owner,
@@ -651,37 +677,42 @@ class _State extends State<AppShell> {
     final owner = widget.role == UserRole.owner;
     final items =
         <({String label, IconData icon, Widget? page, VoidCallback? action})>[
-          (
-            label: 'Managed Brands',
-            icon: Icons.sell_outlined,
-            page: ManagedBrandsScreen(
-              special: SpecialInventoryRepository(
-                widget.database,
-                actorRole: role,
+          if (owner)
+            (
+              label: 'Managed Brands',
+              icon: Icons.sell_outlined,
+              page: ManagedBrandsScreen(
+                special: SpecialInventoryRepository(
+                  widget.database,
+                  actorRole: role,
+                ),
+                products: SqliteProductRepository(widget.database),
+                inventory: InventoryRepository(
+                  widget.database,
+                  actorRole: role,
+                ),
+                categories: SqliteCategoryRepository(widget.database),
+                photoService: LocalProductPhotoService(),
               ),
-              products: SqliteProductRepository(widget.database),
-              inventory: InventoryRepository(widget.database, actorRole: role),
-              categories: SqliteCategoryRepository(widget.database),
-              photoService: LocalProductPhotoService(),
+              action: null,
             ),
-            action: null,
-          ),
-          (
-            label: 'Consignment',
-            icon: Icons.handshake_outlined,
-            page: ConsignmentScreen(
-              repository: ConsignmentRepository(
-                widget.database,
-                actorRole: role,
+          if (owner)
+            (
+              label: 'Consignment',
+              icon: Icons.handshake_outlined,
+              page: ConsignmentScreen(
+                repository: ConsignmentRepository(
+                  widget.database,
+                  actorRole: role,
+                ),
+                products: SqliteProductRepository(widget.database),
+                categories: SqliteCategoryRepository(widget.database),
+                photoService: LocalProductPhotoService(),
+                initialConsignorId: pendingConsignorId,
+                initialReceiveProductId: pendingConsignmentProductId,
               ),
-              products: SqliteProductRepository(widget.database),
-              categories: SqliteCategoryRepository(widget.database),
-              photoService: LocalProductPhotoService(),
-              initialConsignorId: pendingConsignorId,
-              initialReceiveProductId: pendingConsignmentProductId,
+              action: null,
             ),
-            action: null,
-          ),
           if (owner)
             (
               label: 'Restock',

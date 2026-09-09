@@ -22,6 +22,7 @@ import '../../customers/presentation/customer_form_screen.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'utang_customer_card.dart';
 import '../../../widgets/app_search_field.dart';
+import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_alerts.dart';
 
 class UtangCustomerScreen extends StatefulWidget {
@@ -123,9 +124,42 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Customer Accounts')),
+    appBar: AppBar(title: const Text('UTANG • Customer Accounts')),
     body: Column(
       children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF3DF),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.menu_book_rounded,
+                color: Color(0xFF8B5B29),
+                size: 36,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tiwala, with every transaction',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const Text(
+                      'Your store’s UTANG notebook. Track balances, record payments, and keep accounts clear.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
         FutureBuilder<List<Customer>>(
           future: allCustomers,
           builder: (_, snapshot) {
@@ -137,11 +171,15 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
               0,
               (sum, x) => sum + x.balanceCentavos,
             );
-            final highest = owing.fold<int>(
-              0,
-              (value, x) =>
-                  x.balanceCentavos > value ? x.balanceCentavos : value,
-            );
+            final recent = customers
+                .where(
+                  (x) =>
+                      x.lastPaymentAt != null &&
+                      x.lastPaymentAt!.isAfter(
+                        DateTime.now().subtract(const Duration(days: 7)),
+                      ),
+                )
+                .length;
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
@@ -158,9 +196,9 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                     Colors.orange.shade800,
                   ),
                   _utangMetric(
-                    'Highest Current Balance',
-                    standardMoney(highest),
-                    Colors.red.shade700,
+                    'Paid in the Last 7 Days',
+                    '$recent customers',
+                    Colors.teal.shade700,
                   ),
                 ],
               ),
@@ -178,7 +216,12 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
         Expanded(
           child: FutureBuilder<List<Customer>>(
             future: list,
-            builder: (_, s) => s.hasData
+            builder: (_, s) => s.hasError
+                ? AppStateView.error(
+                    title: 'Could not load customer accounts',
+                    onAction: () => setState(reload),
+                  )
+                : s.hasData
                 ? s.data!.isEmpty
                       ? const Center(
                           child: Text(

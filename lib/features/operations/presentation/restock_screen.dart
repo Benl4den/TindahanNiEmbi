@@ -185,9 +185,21 @@ class _State extends State<RestockScreen> {
                   .where((x) => x.product.name.toLowerCase().contains(search))
                   .toList();
               if (visible.isEmpty) {
-                return const AppStateView.empty(
-                  title: 'All stocked up',
-                  message: 'No products match this view or currently need replenishment.',
+                final stocked = search.isEmpty && filter == 'NEEDS';
+                return AppStateView(
+                  icon: stocked ? Icons.inventory_2_outlined : Icons.search_off,
+                  title: stocked
+                      ? 'All products are sufficiently stocked'
+                      : 'No products match this view',
+                  message: stocked
+                      ? 'You’re ready for the next sale. Low-stock products appear here automatically when they reach their minimum stock level. Review minimum levels in Products as demand changes.'
+                      : 'Try another filter or search to find a product.',
+                  actionLabel: 'View All Stock',
+                  onAction: () => setState(() {
+                    filter = 'ALL';
+                    search = '';
+                    reload();
+                  }),
                 );
               }
               return ListView.builder(

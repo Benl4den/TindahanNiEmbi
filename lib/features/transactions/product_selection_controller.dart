@@ -73,11 +73,30 @@ class ProductSelectionController {
       quantityValue: quantityValue,
       quantityScale: quantityScale,
     );
-    final next = (_lines[line.key]?.quantityValue ?? 0) + quantityValue;
-    if (next * option.baseQuantity ~/ quantityScale > product.currentQuantity) {
+    final previous = _lines[line.key];
+    final scale = previous == null
+        ? quantityScale
+        : previous.quantityScale *
+              quantityScale ~/
+              previous.quantityScale.gcd(quantityScale);
+    final next =
+        (previous == null
+            ? 0
+            : previous.quantityValue * (scale ~/ previous.quantityScale)) +
+        quantityValue * (scale ~/ quantityScale);
+    final reserved = lines
+        .where((x) => x.product.id == product.id && x.key != line.key)
+        .fold<int>(0, (sum, x) => sum + x.baseQuantity);
+    if (reserved + next * option.baseQuantity ~/ scale >
+        product.currentQuantity) {
       throw StateError('Not enough stock.');
     }
-    _lines[line.key] = line.copyWithQuantity(next);
+    _lines[line.key] = SaleCartLine(
+      product: product,
+      option: option,
+      quantityValue: next,
+      quantityScale: scale,
+    );
   }
 
   void increase(Product p) {
@@ -125,8 +144,15 @@ class ProductSelectionController {
   void restore(Iterable<SaleCartLine> lines) {
     _lines.clear();
     for (final line in lines) {
-      if (line.baseQuantity <= line.product.currentQuantity) {
-        _lines[line.key] = line;
+      try {
+        add(
+          line.product,
+          line.option,
+          quantityValue: line.quantityValue,
+          quantityScale: line.quantityScale,
+        );
+      } on StateError {
+        /* A restored cart cannot reserve unavailable stock. */
       }
     }
   }

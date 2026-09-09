@@ -21,6 +21,7 @@ class TransactionHistoryRepository {
   Future<List<TransactionHistoryEntry>> recent({
     String type = 'ALL',
     int limit = 500,
+    String search = '',
   }) async {
     final rows = await db.rawQuery(
       '''SELECT * FROM (
@@ -30,8 +31,8 @@ class TransactionHistoryRepository {
       UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
       UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Reversal' ELSE '' END,g.customer_total_centavos,g.created_at,g.status FROM gcash_service_transactions g
       UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED' FROM consignment_batches b JOIN products p ON p.id=b.product_id
-    ) WHERE (?='ALL' OR type=?) ORDER BY occurred DESC LIMIT ?''',
-      [type, type, limit],
+    ) WHERE (?='ALL' OR type=?) AND instr(lower(title),lower(?))>0 ORDER BY occurred DESC,type,id DESC LIMIT ?''',
+      [type, type, search, limit],
     );
     return rows
         .map(
