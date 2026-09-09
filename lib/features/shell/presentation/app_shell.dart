@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../widgets/gcash_icon.dart';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../../../core/formatters/number_format.dart';
@@ -128,7 +131,7 @@ class _State extends State<AppShell> {
         label: 'Sales',
       ),
       const NavigationDestination(
-        icon: Icon(Icons.icecream_outlined),
+        icon: Icon(Icons.sell_outlined),
         label: 'Managed Brands',
       ),
       const NavigationDestination(
@@ -167,15 +170,15 @@ class _State extends State<AppShell> {
         icon: Icon(Icons.assessment_outlined),
         label: 'Reports',
       ),
-      const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
+      const NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        label: 'Settings',
+      ),
       const NavigationDestination(
         icon: Icon(Icons.history),
         label: 'Transaction History',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.account_balance_wallet_outlined),
-        label: 'GCash',
-      ),
+      const NavigationDestination(icon: GCashIcon(), label: 'GCash'),
     ];
     const navTargets = [0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
     final destinations = [
@@ -185,7 +188,11 @@ class _State extends State<AppShell> {
     return Scaffold(
       body: Row(
         children: [
-          if (wide) _sidebar(destinations, navTargets),
+          if (wide)
+            StatefulBuilder(
+              builder: (_, updateSidebar) =>
+                  _sidebar(destinations, navTargets, updateSidebar),
+            ),
           if (wide) const VerticalDivider(width: 1),
           Expanded(child: body),
         ],
@@ -212,7 +219,7 @@ class _State extends State<AppShell> {
       future: Future.wait<Object>([
         SqliteProductRepository(widget.database).searchActive(),
         SqliteCategoryRepository(widget.database).getActive(),
-        ReportsRepository(widget.database).frequentProducts(),
+        ReportsRepository(widget.database).frequentProductIds(),
         SpecialInventoryRepository(widget.database).products('SELECTA'),
       ]),
       builder: (_, s) {
@@ -232,10 +239,7 @@ class _State extends State<AppShell> {
           categoryNames: {
             for (final c in s.data![1] as List<Category>) c.id: c.name,
           },
-          frequentProductNames: {
-            for (final x in s.data![2] as List<Map<String, Object?>>)
-              x['name']! as String,
-          },
+          frequentProductIds: s.data![2] as List<int>,
           selectaProductIds: {
             for (final p in s.data![3] as List<Product>) p.id,
           },
@@ -362,200 +366,268 @@ class _State extends State<AppShell> {
   Widget _sidebar(
     List<NavigationDestination> destinations,
     List<int> navTargets,
+    StateSetter updateSidebar,
   ) {
-    final colors = Theme.of(context).colorScheme;
+    const ink = Color(0xFF15292D);
+    const mint = Color(0xFFBFE8D1);
+    Widget toggle() => IconButton.filledTonal(
+      tooltip: railExpanded ? 'Collapse navigation' : 'Expand navigation',
+      style: IconButton.styleFrom(backgroundColor: const Color(0xFFD8EAE3)),
+      onPressed: () => updateSidebar(() => railExpanded = !railExpanded),
+      icon: AnimatedRotation(
+        turns: railExpanded ? 0 : .5,
+        duration: const Duration(milliseconds: 250),
+        child: const Icon(
+          Icons.keyboard_double_arrow_left,
+          color: Color(0xFF07563D),
+        ),
+      ),
+    );
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      width: railExpanded ? 236 : 76,
-      color: Colors.white,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOutCubic,
+      width: railExpanded ? 292 : 88,
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFCFB),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFD8E5DF)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x140B4935),
+            blurRadius: 18,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
       child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                railExpanded ? 16 : 10,
-                14,
-                railExpanded ? 10 : 10,
-                10,
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.storefront,
-                      color: Colors.white,
-                      size: 27,
-                    ),
-                  ),
-                  if (railExpanded) ...[
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'TindahanNiEmbi',
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Use the animated width, not the destination width, to prevent overflow.
+            final expanded = constraints.maxWidth >= 260;
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 18, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF126547), Color(0xFF034832)],
                           ),
-                          Text(
-                            'Store Management',
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.storefront_outlined,
+                          color: Colors.white,
+                          size: 30,
+                        ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Align(
-                alignment: railExpanded
-                    ? Alignment.centerRight
-                    : Alignment.center,
-                child: IconButton.filledTonal(
-                  tooltip: railExpanded
-                      ? 'Collapse navigation'
-                      : 'Expand navigation',
-                  onPressed: () => setState(() => railExpanded = !railExpanded),
-                  icon: Icon(
-                    railExpanded
-                        ? Icons.keyboard_double_arrow_left
-                        : Icons.keyboard_double_arrow_right,
-                  ),
-                ),
-              ),
-            ),
-            const Divider(height: 18),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemCount: destinations.length,
-                itemBuilder: (_, i) {
-                  final destination = destinations[i];
-                  final target = navTargets[i], active = selected == target;
-                  final tile = InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _select(target),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 140),
-                      height: 52,
-                      margin: const EdgeInsets.only(bottom: 3),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: railExpanded ? 13 : 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: active
-                            ? colors.primaryContainer
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          IconTheme(
-                            data: IconThemeData(
-                              size: 25,
-                              color: active
-                                  ? colors.primary
-                                  : colors.onSurfaceVariant,
-                            ),
-                            child: destination.icon,
-                          ),
-                          if (railExpanded) ...[
-                            const SizedBox(width: 13),
-                            Expanded(
-                              child: Text(
-                                destination.label,
+                      if (expanded) ...[
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'TindahanNiEmbi',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: active
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
-                                  color: active
-                                      ? colors.primary
-                                      : colors.onSurface,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: ink,
                                 ),
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                  return railExpanded
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (i == 0 ||
-                                _navSection(navTargets[i - 1]) !=
-                                    _navSection(target))
-                              Padding(
-                                padding: EdgeInsets.fromLTRB(
-                                  12,
-                                  i == 0 ? 2 : 13,
-                                  12,
-                                  7,
+                              Text(
+                                'Store Management',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF48606A),
                                 ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        toggle(),
+                      ],
+                    ],
+                  ),
+                ),
+                if (!expanded) toggle(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Divider(height: 20),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: destinations.length,
+                    itemBuilder: (_, i) {
+                      final destination = destinations[i];
+                      final target = navTargets[i];
+                      final active = selected == target;
+                      final sectionStart =
+                          i == 0 ||
+                          _navSection(navTargets[i - 1]) != _navSection(target);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (sectionStart) ...[
+                            if (i > 0) const Divider(height: 26),
+                            if (expanded)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 3, 0, 9),
                                 child: Text(
                                   _navSection(target).toUpperCase(),
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 10,
-                                    letterSpacing: .9,
+                                    letterSpacing: 1,
                                     fontWeight: FontWeight.w800,
-                                    color: colors.onSurfaceVariant,
+                                    color: Color(0xFF48606A),
                                   ),
                                 ),
                               ),
-                            tile,
                           ],
-                        )
-                      : Tooltip(
-                          message:
-                              '${_navSection(target)} • ${destination.label}',
-                          child: tile,
-                        );
-                },
-              ),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Center(
-                child: railExpanded
-                    ? SizedBox(
-                        width: 190,
-                        child: OutlinedButton.icon(
-                          onPressed: widget.lock,
-                          icon: const Icon(Icons.lock_outline),
-                          label: const Text('Lock App'),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Tooltip(
+                              message: expanded ? '' : destination.label,
+                              decoration: BoxDecoration(
+                                color: ink,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              textStyle: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                              child: Material(
+                                color: active ? mint : Colors.transparent,
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () => _select(target),
+                                  child: SizedBox(
+                                    height: 52,
+                                    child: Row(
+                                      mainAxisAlignment: expanded
+                                          ? MainAxisAlignment.start
+                                          : MainAxisAlignment.center,
+                                      children: [
+                                        if (expanded) const SizedBox(width: 14),
+                                        IconTheme(
+                                          data: IconThemeData(
+                                            size: 27,
+                                            color: active
+                                                ? const Color(0xFF07563D)
+                                                : ink,
+                                          ),
+                                          child: destination.icon,
+                                        ),
+                                        if (expanded) ...[
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Text(
+                                              destination.label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: active
+                                                    ? FontWeight.w800
+                                                    : FontWeight.w600,
+                                                color: ink,
+                                              ),
+                                            ),
+                                          ),
+                                          if (active)
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 21,
+                                              color: Color(0xFF07563D),
+                                            ),
+                                          const SizedBox(width: 12),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Material(
+                    color: const Color(0xFFDCEAE5),
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: widget.lock,
+                      child: Tooltip(
+                        message: expanded ? '' : 'Lock App',
+                        child: SizedBox(
+                          height: 66,
+                          child: Row(
+                            mainAxisAlignment: expanded
+                                ? MainAxisAlignment.start
+                                : MainAxisAlignment.center,
+                            children: [
+                              if (expanded) const SizedBox(width: 16),
+                              const Icon(
+                                Icons.lock_outline,
+                                size: 29,
+                                color: ink,
+                              ),
+                              if (expanded) ...[
+                                const SizedBox(width: 14),
+                                const Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Lock App',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          color: ink,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Keep your store secure',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF48606A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right, color: ink),
+                                const SizedBox(width: 12),
+                              ],
+                            ],
+                          ),
                         ),
-                      )
-                    : IconButton(
-                        tooltip: 'Lock App',
-                        onPressed: widget.lock,
-                        icon: const Icon(Icons.lock_outline),
                       ),
-              ),
-            ),
-          ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -581,7 +653,7 @@ class _State extends State<AppShell> {
         <({String label, IconData icon, Widget? page, VoidCallback? action})>[
           (
             label: 'Managed Brands',
-            icon: Icons.icecream_outlined,
+            icon: Icons.sell_outlined,
             page: ManagedBrandsScreen(
               special: SpecialInventoryRepository(
                 widget.database,
@@ -842,7 +914,7 @@ class _State extends State<AppShell> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('More — Control Center')),
+      appBar: AppBar(title: const Text('Settings')),
       body: Column(
         children: [
           if (owner) _ownerAlerts(),

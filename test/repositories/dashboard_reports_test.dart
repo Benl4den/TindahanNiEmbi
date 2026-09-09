@@ -78,6 +78,14 @@ void main() {
     expect(periods.weekly, 1000);
     expect(periods.monthly, 1000);
     expect((await reports.frequentProducts()).single['quantity'], 1);
+    expect(await reports.frequentProductIds(), [a.id]);
+    await db.update(
+      'products',
+      {'name': 'Renamed A'},
+      where: 'id = ?',
+      whereArgs: [a.id],
+    );
+    expect(await reports.frequentProductIds(), [a.id]);
     expect((await reports.inventory()).length, 2);
   });
 

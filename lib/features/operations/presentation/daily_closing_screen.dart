@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/overview_banner.dart';
+
 import '../../../core/formatters/number_format.dart';
 import '../../../repositories/operations_repository.dart';
 
@@ -62,12 +64,20 @@ class _State extends State<DailyClosingScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              'TODAY — ${MaterialLocalizations.of(context).formatMediumDate(DateTime.now())}',
+              MaterialLocalizations.of(context).formatFullDate(date),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             const Text(
               'Transaction-based summary — not a physical cash-drawer reconciliation.',
+            ),
+            const SizedBox(height: 16),
+            OverviewBanner(
+              title: 'Daily overview',
+              value: m(x.totalSales),
+              caption:
+                  'Product sales • Service fees ${m(x.serviceFeeIncome)} • ${x.transactionCount} transactions',
+              icon: Icons.insights_outlined,
             ),
             const SizedBox(height: 16),
             _section('PHYSICAL CASH', Icons.payments_outlined, [
@@ -234,28 +244,27 @@ class _State extends State<DailyClosingScreen> {
   );
 
   Widget _section(String title, IconData icon, List<Widget> metrics) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 24),
-          Wrap(spacing: 12, runSpacing: 12, children: metrics),
-        ],
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: ExpansionTile(
+      key: PageStorageKey('closing-$title'),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
       ),
+      subtitle: const Text('Tap to view breakdown'),
+      childrenPadding: const EdgeInsets.all(18),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(spacing: 16, runSpacing: 20, children: metrics),
+        ),
+      ],
     ),
   );
 

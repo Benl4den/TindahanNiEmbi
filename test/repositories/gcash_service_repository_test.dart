@@ -42,6 +42,7 @@ void main() {
       expect((await wallet.summary()).balance, 150000);
       final daily = await services.summary(DateTime.now());
       expect(daily.totalFeeIncome, 2500);
+      expect(await services.totalFeeIncome(), 2500);
       await services.reverse(
         cashIn.id,
         reason: 'Mistake',
@@ -49,6 +50,7 @@ void main() {
       );
       expect((await wallet.summary()).balance, 250000);
       expect((await services.summary(DateTime.now())).totalFeeIncome, 1000);
+      expect(await services.totalFeeIncome(), 1000);
     },
   );
 

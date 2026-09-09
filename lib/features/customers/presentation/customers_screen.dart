@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/overview_banner.dart';
+
 import '../../../core/formatters/number_format.dart';
 
 import '../../../core/constants/app_strings.dart';
@@ -94,6 +96,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
     body: Column(
       children: [
         Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: FutureBuilder<List<Customer>>(
+            future: _items,
+            builder: (_, snapshot) {
+              final customers = snapshot.data ?? <Customer>[];
+              return OverviewBanner(
+                title:
+                    'UTANG accounts${_search.text.isEmpty ? '' : ' • Search results'}',
+                value: standardMoney(
+                  customers.fold<int>(0, (sum, c) => sum + c.balanceCentavos),
+                ),
+                caption:
+                    '${customers.where((c) => c.balanceCentavos > 0).length} with balance • ${customers.length} UTANGAN',
+                icon: Icons.people_alt_outlined,
+              );
+            },
+          ),
+        ),
+        Padding(
           padding: const EdgeInsets.all(20),
           child: AppSearchField(
             controller: _search,
@@ -130,6 +151,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 itemBuilder: (_, index) {
                   final customer = snapshot.data![index];
                   return Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
                     child: LayoutBuilder(
                       builder: (_, box) {
                         final narrow = box.maxWidth < 650;

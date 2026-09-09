@@ -122,19 +122,51 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                 secondChild: Column(
                                   children: group.value
                                       .map(
-                                        (entry) => ListTile(
-                                          onTap: () => _showDetails(entry),
+                                        (entry) => ExpansionTile(
+                                          key: PageStorageKey(
+                                            'transaction-${entry.type}-${entry.id}',
+                                          ),
                                           leading: Icon(_icon(entry.type)),
                                           title: Text(entry.title),
                                           subtitle: Text(
-                                            '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${entry.status}',
-                                          ),
-                                          trailing: Text(
                                             standardMoney(entry.amountCentavos),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
                                             ),
                                           ),
+                                          children: [
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    20,
+                                                    0,
+                                                    20,
+                                                    12,
+                                                  ),
+                                              child: Wrap(
+                                                spacing: 16,
+                                                runSpacing: 8,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${entry.status}',
+                                                  ),
+                                                  TextButton.icon(
+                                                    onPressed: () =>
+                                                        _showDetails(entry),
+                                                    icon: const Icon(
+                                                      Icons
+                                                          .receipt_long_outlined,
+                                                    ),
+                                                    label: const Text(
+                                                      'Open full details',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       )
                                       .toList(),

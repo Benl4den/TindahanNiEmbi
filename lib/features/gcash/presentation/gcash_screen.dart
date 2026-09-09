@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/day_history.dart';
+
 import '../../../core/formatters/number_format.dart';
 import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/gcash_service_repository.dart';
@@ -158,41 +160,63 @@ class _GCashScreenState extends State<GCashScreen> {
                   ),
                 ],
               ),
+              FutureBuilder<int>(
+                future: widget.services.totalFeeIncome(),
+                builder: (_, snapshot) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: _metric(
+                    'Service fees earned • All time',
+                    snapshot.data ?? 0,
+                    Colors.green.shade800,
+                  ),
+                ),
+              ),
               FutureBuilder<List<GCashServiceTransaction>>(
-                future: widget.services.recent(limit: 8),
-                builder: (_, services) =>
-                    services.hasData && services.data!.isNotEmpty
-                    ? Column(
-                        children: services.data!
-                            .map(
-                              (service) => Card(
-                                child: ListTile(
-                                  onTap: service.status == 'POSTED'
-                                      ? () => _reverseService(service)
-                                      : null,
-                                  leading: Icon(
-                                    service.type == 'CASH_IN'
-                                        ? Icons.call_made
-                                        : Icons.call_received,
-                                  ),
-                                  title: Text(
-                                    'GCash ${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} • ${service.reference}',
-                                  ),
-                                  subtitle: Text(
-                                    'Principal ${standardMoney(service.principalCentavos)} • Fee ${standardMoney(service.feeCentavos)}',
-                                  ),
-                                  trailing: Text(
-                                    '${service.gcashChangeCentavos >= 0 ? '+' : '-'}${standardMoney(service.gcashChangeCentavos.abs())}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
+                future: widget.services.recent(limit: 100),
+                builder: (_, snapshot) => DayHistory<GCashServiceTransaction>(
+                  storageKey: 'gcash-services',
+                  items: snapshot.data ?? [],
+                  date: (s) => s.createdAt,
+                  itemBuilder: (service) => ExpansionTile(
+                    key: PageStorageKey('gcash-service-${service.id}'),
+                    title: Text(
+                      service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      'Principal: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)}',
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(service.reference),
+                            Text(_when(service.createdAt.toLocal())),
+                            Text(
+                              'GCash movement: ${standardMoney(service.gcashChangeCentavos)}',
+                            ),
+                            Text(
+                              'Cash movement: ${standardMoney(service.physicalCashChangeCentavos)}',
+                            ),
+                            if (service.gcashReference != null)
+                              Text(
+                                'GCash reference: ${service.gcashReference}',
                               ),
-                            )
-                            .toList(),
-                      )
-                    : const SizedBox.shrink(),
+                            if (service.notes != null) Text(service.notes!),
+                            if (service.status == 'POSTED')
+                              TextButton.icon(
+                                onPressed: () => _reverseService(service),
+                                icon: const Icon(Icons.undo),
+                                label: const Text('Reverse service'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               Text(
@@ -208,9 +232,13 @@ class _GCashScreenState extends State<GCashScreen> {
                   ),
                 )
               else
-                ...entries.map(
-                  (entry) => Card(
-                    child: ListTile(
+                DayHistory<GCashLedgerEntry>(
+                  storageKey: 'gcash-wallet',
+                  items: entries,
+                  date: (e) => e.occurredAt,
+                  itemBuilder: (entry) => Card(
+                    child: ExpansionTile(
+                      key: PageStorageKey('gcash-entry-${entry.id}'),
                       leading: CircleAvatar(
                         backgroundColor: entry.amountChangeCentavos > 0
                             ? Colors.green.shade50
@@ -226,11 +254,6 @@ class _GCashScreenState extends State<GCashScreen> {
                       ),
                       title: Text(_label(entry.type)),
                       subtitle: Text(
-                        '${_when(entry.occurredAt.toLocal())}'
-                        '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
-                        '${entry.notes == null ? '' : '\n${entry.notes}'}',
-                      ),
-                      trailing: Text(
                         '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
                         style: TextStyle(
                           fontSize: 17,
@@ -240,6 +263,19 @@ class _GCashScreenState extends State<GCashScreen> {
                               : Colors.red.shade800,
                         ),
                       ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${_when(entry.occurredAt.toLocal())}'
+                              '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
+                              '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

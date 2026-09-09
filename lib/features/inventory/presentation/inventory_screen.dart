@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/overview_banner.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/inventory_movement.dart';
@@ -226,16 +228,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           padding: const EdgeInsets.all(16),
           child: FutureBuilder<int>(
             future: _value,
-            builder: (_, s) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Owned Inventory Value'),
-                Text(
-                  standardMoney(s.data ?? 0),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
+            builder: (_, s) => OverviewBanner(
+              title: 'Owned Inventory Value',
+              value: standardMoney(s.data ?? 0),
+              caption: 'Stock at purchase cost • Consignment excluded',
+              icon: Icons.inventory_2_outlined,
             ),
           ),
         ),
@@ -269,6 +266,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ? 'Low Stock'
                       : 'In Stock';
                   return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Row(

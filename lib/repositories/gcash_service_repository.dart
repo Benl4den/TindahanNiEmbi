@@ -68,6 +68,13 @@ class GCashServiceRepository {
   const GCashServiceRepository(this.db, {this.actorRole = 'OWNER'});
   final Database db;
   final String actorRole;
+  Future<int> totalFeeIncome() async =>
+      Sqflite.firstIntValue(
+        await db.rawQuery(
+          "SELECT COALESCE(SUM(CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END),0) FROM gcash_service_transactions",
+        ),
+      ) ??
+      0;
 
   Future<int> availableGCashBalance() async =>
       Sqflite.firstIntValue(

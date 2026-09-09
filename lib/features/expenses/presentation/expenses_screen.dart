@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/overview_banner.dart';
+
 import '../../../core/formatters/number_format.dart';
 
 import '../../../models/expense.dart';
@@ -277,13 +279,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final action = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(expense.reference),
+        title: const Text('Expense details'),
         content: SizedBox(
           width: 600,
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                OverviewBanner(
+                  title: expense.categoryName,
+                  value: money(expense.amountCentavos),
+                  caption: '${expense.reference} • ${expense.status}',
+                  icon: Icons.receipt_long_outlined,
+                ),
+                const SizedBox(height: 20),
                 _detail('Status', expense.status),
                 _detail('Category', expense.categoryName),
                 _detail('Amount', money(expense.amountCentavos)),
@@ -334,8 +343,25 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Widget _detail(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text('$label\n$value', style: const TextStyle(fontSize: 16)),
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const Divider(height: 16),
+      ],
+    ),
   );
 
   Future<void> _reverse(Expense expense) async {

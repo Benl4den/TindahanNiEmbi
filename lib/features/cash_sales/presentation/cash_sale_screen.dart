@@ -26,6 +26,7 @@ class CashSaleScreen extends StatefulWidget {
     this.onUtang,
     this.categoryNames = const {},
     this.frequentProductNames = const {},
+    this.frequentProductIds = const [],
     this.selectaProductIds = const {},
     this.reversals,
     this.drafts,
@@ -38,6 +39,7 @@ class CashSaleScreen extends StatefulWidget {
   final Future<bool> Function(List<UtangItemDraft>)? onUtang;
   final Map<int, String> categoryNames;
   final Set<String> frequentProductNames;
+  final List<int> frequentProductIds;
   final Set<int> selectaProductIds;
   final ReversalRepository? reversals;
   final SaleDraftRepository? drafts;
@@ -565,13 +567,22 @@ class _State extends State<CashSaleScreen> {
         .where((p) => p.name.toLowerCase().contains(search.toLowerCase()))
         .where(
           (p) => switch (filter) {
-            'FREQUENT' => widget.frequentProductNames.contains(p.name),
+            'FREQUENT' =>
+              widget.frequentProductIds.contains(p.id) ||
+                  widget.frequentProductNames.contains(p.name),
             'SELECTA' => widget.selectaProductIds.contains(p.id),
             'ALL' => true,
             _ => p.categoryId.toString() == filter,
           },
         )
         .toList();
+    if (filter == 'FREQUENT' && widget.frequentProductIds.isNotEmpty) {
+      shown.sort(
+        (a, b) => widget.frequentProductIds
+            .indexOf(a.id)
+            .compareTo(widget.frequentProductIds.indexOf(b.id)),
+      );
+    }
     return Column(
       children: [
         Padding(
@@ -589,8 +600,7 @@ class _State extends State<CashSaleScreen> {
             children: [
               for (final item in <(String, String)>[
                 ('ALL', 'All'),
-                if (widget.frequentProductNames.isNotEmpty)
-                  ('FREQUENT', 'Frequently Sold'),
+                ('FREQUENT', 'Frequently Sold'),
                 if (widget.selectaProductIds.isNotEmpty) ('SELECTA', 'Selecta'),
                 ...widget.categoryNames.entries.map(
                   (entry) => (entry.key.toString(), entry.value),
@@ -610,10 +620,12 @@ class _State extends State<CashSaleScreen> {
         Expanded(
           child: LayoutBuilder(
             builder: (_, box) {
-              final cols = box.maxWidth >= 900
-                  ? 4
-                  : box.maxWidth >= 600
-                  ? 3
+              final screenWidth = MediaQuery.sizeOf(context).width;
+              // The landscape cart uses 360px; the remaining difference is
+              // the sidebar. React to its width without resetting the cart.
+              final sidebarExpanded = screenWidth - box.maxWidth - 360 > 200;
+              final cols = screenWidth >= 900
+                  ? (sidebarExpanded ? 3 : 4)
                   : 2;
               return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

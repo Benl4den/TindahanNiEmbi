@@ -15,6 +15,17 @@ class SalesPeriodSummary {
 class ReportsRepository {
   const ReportsRepository(this.db);
   final Database db;
+  Future<List<int>> frequentProductIds() async => (await db.rawQuery('''
+    SELECT product_id FROM (
+      SELECT DISTINCT i.product_id,'C'||s.id transaction_key,s.occurred_at
+      FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id WHERE s.status='POSTED'
+      UNION ALL
+      SELECT DISTINCT i.product_id,'U'||s.id,s.occurred_at
+      FROM utang_transaction_items i JOIN utang_transactions s ON s.id=i.utang_transaction_id WHERE s.status='POSTED'
+    ) sold JOIN products p ON p.id=sold.product_id
+    WHERE p.is_archived=0
+    GROUP BY product_id ORDER BY COUNT(*) DESC,MAX(occurred_at) DESC,product_id ASC LIMIT 20
+  ''')).map((r) => r['product_id']! as int).toList();
   Future<List<Map<String, Object?>>> inventory() => db.rawQuery(
     '''SELECT p.name,p.current_quantity,p.base_unit_code,p.base_unit_label,
       p.purchase_price_centavos,p.selling_price_centavos,
