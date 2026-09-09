@@ -180,13 +180,13 @@ class OperationsRepository {
       FROM gcash_ledger_entries''',
       [start, start, end, start, end],
     )).single;
-    final services = await one('''SELECT
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) ci_count,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) co_count,
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) ci_principal,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) co_principal,
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) ci_fees,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) co_fees,
+    final services = await one('''SELECT COUNT(*) service_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' THEN 1 ELSE 0 END),0) ci_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' THEN 1 ELSE 0 END),0) co_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -principal_centavos ELSE principal_centavos END ELSE 0 END),0) ci_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -principal_centavos ELSE principal_centavos END ELSE 0 END),0) co_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) ci_fees,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) co_fees,
       COALESCE(SUM(physical_cash_change_centavos),0) cash_change,
       COALESCE(SUM(gcash_change_centavos),0) wallet_change
       FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''');
@@ -243,8 +243,7 @@ class OperationsRepository {
           (pay['count']! as int) +
           (expenses['count']! as int) +
           (remittances['count']! as int) +
-          (services['ci_count']! as int) +
-          (services['co_count']! as int),
+          (services['service_count']! as int),
       lowStock: (stock['low'] as int?) ?? 0,
       outOfStock: (stock['out'] as int?) ?? 0,
       topProducts: top,

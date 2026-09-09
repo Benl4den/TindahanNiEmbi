@@ -171,13 +171,36 @@ class DataIntegrityService {
           '${wrongGCashPostings.length} GCash ledger posting(s) missing.',
         );
       }
+      final mismatches = await db.rawQuery(
+        '''SELECT 'sale' kind,p.cash_sale_id id FROM sale_payments p
+        LEFT JOIN gcash_ledger_entries g ON g.cash_sale_id=p.cash_sale_id
+        WHERE (p.payment_method='GCASH' AND (g.id IS NULL OR g.amount_change_centavos<>p.amount_centavos)) OR (p.payment_method='CASH' AND g.id IS NOT NULL)
+        UNION ALL SELECT 'expense',p.expense_id FROM expense_payments p
+        LEFT JOIN gcash_ledger_entries g ON g.expense_id=p.expense_id
+        WHERE (p.payment_method='GCASH' AND (g.id IS NULL OR g.amount_change_centavos<>-p.amount_centavos)) OR (p.payment_method='CASH' AND g.id IS NOT NULL)
+        UNION ALL SELECT 'payment',p.id FROM utang_payments p
+        LEFT JOIN gcash_ledger_entries g ON g.utang_payment_id=p.id
+        WHERE (p.payment_method='GCASH' AND (g.id IS NULL OR g.amount_change_centavos<>p.amount_centavos)) OR (p.payment_method='CASH' AND g.id IS NOT NULL)
+        UNION ALL SELECT 'remittance',p.id FROM consignor_remittances p
+        LEFT JOIN gcash_ledger_entries g ON g.consignor_remittance_id=p.id
+        WHERE (p.payment_method='GCASH' AND (g.id IS NULL OR g.amount_change_centavos<>-p.amount_centavos)) OR (p.payment_method='CASH' AND g.id IS NOT NULL)
+        UNION ALL SELECT 'reversal',g.id FROM gcash_ledger_entries g JOIN gcash_ledger_entries original ON original.id=g.reversal_of_entry_id
+        WHERE g.amount_change_centavos<>-original.amount_change_centavos''',
+      );
+      if (mismatches.isNotEmpty) {
+        paymentIssues.add(
+          '${mismatches.length} GCash source amount/sign mismatch(es).',
+        );
+      }
     }
     if (tables.contains('gcash_service_transactions')) {
       final services = await db.rawQuery(
         '''SELECT s.id FROM gcash_service_transactions s
-        WHERE (s.status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id)
-          AND NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.gcash_service_transaction_id=s.id))
-        OR s.customer_total_centavos<>s.principal_centavos+s.fee_centavos''',
+        WHERE NOT EXISTS(SELECT 1 FROM gcash_ledger_entries g WHERE g.gcash_service_transaction_id=s.id AND g.amount_change_centavos=s.gcash_change_centavos)
+        OR s.customer_total_centavos<>s.principal_centavos+s.fee_centavos
+        OR s.gcash_change_centavos<>(CASE WHEN s.status='REVERSAL' THEN -1 ELSE 1 END)*(CASE WHEN s.service_type='CASH_IN' THEN -s.principal_centavos ELSE s.principal_centavos END)
+        OR s.physical_cash_change_centavos<>(CASE WHEN s.status='REVERSAL' THEN -1 ELSE 1 END)*(CASE WHEN s.service_type='CASH_IN' THEN s.principal_centavos+s.fee_centavos ELSE -s.principal_centavos+s.fee_centavos END)
+        OR (s.status='REVERSAL' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions original WHERE original.id=s.reversal_of_service_id AND original.status='POSTED' AND original.service_type=s.service_type AND original.principal_centavos=s.principal_centavos AND original.fee_centavos=s.fee_centavos))''',
       );
       if (services.isNotEmpty) {
         paymentIssues.add(

@@ -253,31 +253,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   );
                 }
                 final width = MediaQuery.sizeOf(context).width;
-                    return GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: width >= 1000
-                            ? 4
-                            : width >= 650
-                            ? 3
-                            : 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        mainAxisExtent: 430,
-                      ),
-                      itemCount: products.length,
-                      itemBuilder: (_, index) => ProductCard(
-                        product: products[index],
-                        categoryName: categories
-                            .where((c) => c.id == products[index].categoryId)
-                            .map((c) => c.name)
-                            .firstOrNull,
-                        inventoryGroups: groups[products[index].id] ?? const [],
-                        onDetails: () => _details(products[index]),
-                        onEdit: () => _form(products[index]),
-                        onArchive: () => _archive(products[index]),
-                      ),
-                    );
+                return GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: width >= 1000
+                        ? 4
+                        : width >= 650
+                        ? 3
+                        : 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    mainAxisExtent: 430,
+                  ),
+                  itemCount: products.length,
+                  itemBuilder: (_, index) => ProductCard(
+                    product: products[index],
+                    categoryName: categories
+                        .where((c) => c.id == products[index].categoryId)
+                        .map((c) => c.name)
+                        .firstOrNull,
+                    inventoryGroups: groups[products[index].id] ?? const [],
+                    onDetails: () => _details(products[index]),
+                    onEdit: () => _form(products[index]),
+                    onArchive: () => _archive(products[index]),
+                  ),
+                );
               },
             ),
           ),

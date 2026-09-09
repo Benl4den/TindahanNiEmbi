@@ -30,6 +30,7 @@ class CustomersScreen extends StatefulWidget {
 class _CustomersScreenState extends State<CustomersScreen> {
   final _search = TextEditingController();
   late Future<List<Customer>> _items;
+  String _filter = 'All';
   @override
   void initState() {
     super.initState();
@@ -92,7 +93,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text(AppStrings.customers)),
+    appBar: AppBar(
+      title: const Text('UTANG'),
+      actions: [
+        IconButton(
+          tooltip: 'Refresh accounts',
+          onPressed: () => setState(_reload),
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    ),
     body: Column(
       children: [
         Padding(
@@ -100,15 +110,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
           child: FutureBuilder<List<Customer>>(
             future: _items,
             builder: (_, snapshot) {
+              if (snapshot.hasError) return const SizedBox.shrink();
+              if (!snapshot.hasData) return const LinearProgressIndicator();
               final customers = snapshot.data ?? <Customer>[];
               return OverviewBanner(
                 title:
-                    'UTANG accounts${_search.text.isEmpty ? '' : ' • Search results'}',
+                    'Total outstanding UTANG${_search.text.isEmpty ? '' : ' • Search results'}',
                 value: standardMoney(
                   customers.fold<int>(0, (sum, c) => sum + c.balanceCentavos),
                 ),
                 caption:
-                    '${customers.where((c) => c.balanceCentavos > 0).length} with balance • ${customers.length} UTANGAN',
+                    '${customers.where((c) => c.balanceCentavos > 0).length} with balance • ${customers.where((c) => c.balanceCentavos == 0).length} settled • ${customers.length} accounts',
                 icon: Icons.people_alt_outlined,
               );
             },
@@ -120,6 +132,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
             controller: _search,
             hintText: AppStrings.searchCustomers,
             onChanged: (_) => setState(_reload),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final label in ['All', 'With balance', 'Settled'])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: _filter == label,
+                    onSelected: (_) => setState(() => _filter = label),
+                  ),
+              ],
+            ),
           ),
         ),
         Expanded(
@@ -136,21 +166,34 @@ class _CustomersScreenState extends State<CustomersScreen> {
               if (!snapshot.hasData) {
                 return const AppLoadingView(label: 'Loading customers…');
               }
-              if (snapshot.data!.isEmpty) {
+              final accounts = snapshot.data!
+                  .where(
+                    (c) =>
+                        _filter == 'All' ||
+                        (_filter == 'With balance'
+                            ? c.balanceCentavos > 0
+                            : c.balanceCentavos == 0),
+                  )
+                  .toList();
+              if (accounts.isEmpty) {
                 return AppStateView.empty(
-                  title: AppStrings.noCustomers,
-                  message: 'Add a customer to begin managing accounts.',
+                  title: 'No matching accounts',
+                  message: 'Try another filter or search, or add an UTANGAN.',
                   actionLabel: AppStrings.newCustomer,
                   onAction: _form,
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.all(20),
-                itemCount: snapshot.data!.length,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                itemCount: accounts.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (_, index) {
-                  final customer = snapshot.data![index];
+                  final customer = accounts[index];
                   return Card(
+                    clipBehavior: Clip.antiAlias,
+                    color: customer.balanceCentavos > 0
+                        ? const Color(0xFFFFFCF7)
+                        : const Color(0xFFF0F8F2),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -163,28 +206,74 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         final narrow = box.maxWidth < 650;
                         return ListTile(
                           contentPadding: const EdgeInsets.all(18),
-                          leading: const CircleAvatar(
+                          leading: CircleAvatar(
                             radius: 28,
-                            child: Icon(Icons.person, size: 32),
-                          ),
-                          title: Text(
-                            customer.fullName,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          subtitle: Text(
-                            '${customer.nickname ?? ''}\n${AppStrings.totalUtang}: ${standardMoney(customer.balanceCentavos)}',
-                          ),
-                          isThreeLine: true,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CustomerDetailScreen(
-                                repository: widget.repository,
-                                payments: widget.payments,
-                                customerId: customer.id,
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer,
+                            child: Text(
+                              customer.fullName.trim().isEmpty
+                                  ? '?'
+                                  : customer.fullName
+                                        .trim()
+                                        .characters
+                                        .first
+                                        .toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 22,
                               ),
                             ),
                           ),
+                          title: Text(
+                            customer.fullName,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (customer.nickname?.trim().isNotEmpty ==
+                                    true)
+                                  Text(customer.nickname!),
+                                Text(
+                                  standardMoney(customer.balanceCentavos),
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    color: customer.balanceCentavos > 0
+                                        ? const Color(0xFFA65314)
+                                        : const Color(0xFF17683E),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  customer.balanceCentavos > 0
+                                      ? 'Outstanding balance • Tap to view account ›'
+                                      : 'Settled • Tap to view account ›',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CustomerDetailScreen(
+                                  repository: widget.repository,
+                                  payments: widget.payments,
+                                  customerId: customer.id,
+                                ),
+                              ),
+                            );
+                            if (mounted) setState(_reload);
+                          },
                           trailing: widget.canManage
                               ? narrow
                                     ? PopupMenuButton<String>(

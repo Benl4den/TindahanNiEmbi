@@ -51,6 +51,18 @@ void main() {
         expect(find.text('Out of Stock'), findsWidgets);
         if (size.width >= 900) {
           expect(find.text('No sales recorded yet.'), findsOneWidget);
+          await tester.tap(find.text('Add').first);
+          await tester.pumpAndSettle();
+          expect(find.text('Coffee added → 1 Piece'), findsOneWidget);
+          expect(find.text('1 products in cart'), findsOneWidget);
+          expect(
+            tester
+                .widget<Scrollbar>(find.byType(Scrollbar).first)
+                .thumbVisibility,
+            isTrue,
+          );
+          await tester.pump(const Duration(seconds: 3));
+          expect(find.text('Coffee added → 1 Piece'), findsNothing);
         }
         expect(tester.takeException(), isNull);
       }

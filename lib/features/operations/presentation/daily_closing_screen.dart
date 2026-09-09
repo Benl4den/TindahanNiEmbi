@@ -110,17 +110,17 @@ class _State extends State<DailyClosingScreen> {
             const SizedBox(height: 14),
             _section('GCASH SERVICES', Icons.phone_android_outlined, [
               _metric(
-                'Cash-In (${x.cashInServiceCount})',
+                'Net Cash-In (${x.cashInServiceCount} recorded)',
                 m(x.cashInServicePrincipal),
               ),
               _metric(
-                'Cash-Out (${x.cashOutServiceCount})',
+                'Net Cash-Out (${x.cashOutServiceCount} recorded)',
                 m(x.cashOutServicePrincipal),
               ),
-              _metric('Cash-In Fees', m(x.cashInServiceFees)),
-              _metric('Cash-Out Fees', m(x.cashOutServiceFees)),
+              _metric('Net Cash-In Fees', m(x.cashInServiceFees)),
+              _metric('Net Cash-Out Fees', m(x.cashOutServiceFees)),
               _metric(
-                'Service Fee Income',
+                'Service Fee Income (net of reversals today)',
                 m(x.serviceFeeIncome),
                 strong: true,
               ),

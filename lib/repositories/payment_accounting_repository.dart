@@ -51,6 +51,12 @@ class PaymentAccountingRepository {
   const PaymentAccountingRepository(this.db, {this.actorRole});
   final Database db;
   final String? actorRole;
+  Future<bool> hasOpeningBalance() async => (await db.query(
+    'gcash_ledger_entries',
+    columns: ['id'],
+    where: "entry_type='OPENING_BALANCE'",
+    limit: 1,
+  )).isNotEmpty;
 
   static String? normalizeReference(String? value) {
     final normalized = value?.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -163,6 +169,7 @@ class PaymentAccountingRepository {
     DatabaseExecutor tx, {
     required int serviceId,
     required String serviceType,
+    bool isReversal = false,
     required int amountChangeCentavos,
     String? gcashReference,
     String? actorRole,
@@ -170,7 +177,11 @@ class PaymentAccountingRepository {
     required String occurredAt,
   }) => _postLedger(
     tx,
-    type: serviceType == 'CASH_IN' ? 'CASH_IN_SERVICE' : 'CASH_OUT_SERVICE',
+    type: isReversal
+        ? 'SERVICE_REVERSAL'
+        : serviceType == 'CASH_IN'
+        ? 'CASH_IN_SERVICE'
+        : 'CASH_OUT_SERVICE',
     amountChangeCentavos: amountChangeCentavos,
     gcashServiceTransactionId: serviceId,
     gcashReference: normalizeReference(gcashReference),
@@ -248,6 +259,17 @@ class PaymentAccountingRepository {
     final change = type == 'ADJUSTMENT_OUT' ? -amountCentavos : amountCentavos;
     return AppRefreshController.instance.after(
       db.transaction((tx) async {
+        if (type == 'OPENING_BALANCE' &&
+            (await tx.query(
+              'gcash_ledger_entries',
+              columns: ['id'],
+              where: "entry_type='OPENING_BALANCE'",
+              limit: 1,
+            )).isNotEmpty) {
+          throw const PaymentAccountingException(
+            'Opening balance is already recorded. Use Adjustment In or Out instead.',
+          );
+        }
         final id = await _postLedger(
           tx,
           type: type,

@@ -1,4 +1,8 @@
+import 'dart:math';
+
 import 'package:sqflite/sqflite.dart';
+
+import '../core/formatters/number_format.dart';
 
 import '../services/app_refresh_controller.dart';
 import 'payment_accounting_repository.dart';
@@ -35,7 +39,7 @@ class GCashServiceTransaction {
         id: row['id']! as int,
         reference: row['reference']! as String,
         type: row['service_type']! as String,
-        status: row['status']! as String,
+        status: (row['effective_status'] ?? row['status'])! as String,
         principalCentavos: row['principal_centavos']! as int,
         feeCentavos: row['fee_centavos']! as int,
         customerTotalCentavos: row['customer_total_centavos']! as int,
@@ -68,6 +72,10 @@ class GCashServiceRepository {
   const GCashServiceRepository(this.db, {this.actorRole = 'OWNER'});
   final Database db;
   final String actorRole;
+  static String newRequestId() => List.generate(
+    16,
+    (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
   Future<int> totalFeeIncome() async =>
       Sqflite.firstIntValue(
         await db.rawQuery(
@@ -91,8 +99,32 @@ class GCashServiceRepository {
     String? gcashReference,
     String? notes,
     bool physicalCashAvailabilityAcknowledged = false,
+    String? requestId,
   }) => AppRefreshController.instance.after(
     db.transaction((tx) async {
+      final reference = 'GCS-${requestId ?? newRequestId()}';
+      final existing = await tx.query(
+        'gcash_service_transactions',
+        where: 'reference=?',
+        whereArgs: [reference],
+      );
+      if (existing.isNotEmpty) {
+        final row = existing.single;
+        if (row['service_type'] != type ||
+            row['principal_centavos'] != principalCentavos ||
+            row['fee_centavos'] != feeCentavos ||
+            row['gcash_reference'] !=
+                PaymentAccountingRepository.normalizeReference(
+                  gcashReference,
+                ) ||
+            row['notes'] !=
+                PaymentAccountingRepository.normalizeReference(notes)) {
+          throw const GCashServiceException(
+            'This request was already saved with different details. Close and start a new service.',
+          );
+        }
+        return GCashServiceTransaction.fromMap(row);
+      }
       if (!const {'CASH_IN', 'CASH_OUT'}.contains(type) ||
           principalCentavos <= 0 ||
           feeCentavos < 0) {
@@ -101,7 +133,9 @@ class GCashServiceRepository {
         );
       }
       final total = principalCentavos + feeCentavos;
-      if (total <= principalCentavos || total < 0) {
+      if (principalCentavos > 100000000000 ||
+          feeCentavos > 100000000000 ||
+          total < principalCentavos) {
         throw const GCashServiceException('The amount is too large.');
       }
       final now = DateTime.now().toUtc().toIso8601String();
@@ -120,9 +154,9 @@ class GCashServiceRepository {
             0;
         if (balance < principalCentavos) {
           throw GCashServiceException(
-            'Insufficient GCash. Available: ₱${(balance / 100).toStringAsFixed(2)}. '
-            'Required: ₱${(principalCentavos / 100).toStringAsFixed(2)}. '
-            'Short: ₱${((principalCentavos - balance) / 100).toStringAsFixed(2)}.',
+            'Insufficient GCash. Available: ${standardMoney(balance)}. '
+            'Required: ${standardMoney(principalCentavos)}. '
+            'Short: ${standardMoney(principalCentavos - balance)}.',
           );
         }
       } else if (!physicalCashAvailabilityAcknowledged) {
@@ -134,8 +168,13 @@ class GCashServiceRepository {
       final physicalChange = type == 'CASH_IN'
           ? total
           : -principalCentavos + feeCentavos;
+      if (type == 'CASH_OUT' && feeCentavos >= principalCentavos) {
+        throw const GCashServiceException(
+          'Cash-Out fee must be less than the principal.',
+        );
+      }
       final id = await tx.insert('gcash_service_transactions', {
-        'reference': 'GCS-${DateTime.now().microsecondsSinceEpoch}',
+        'reference': reference,
         'service_type': type,
         'status': 'POSTED',
         'principal_centavos': principalCentavos,
@@ -194,7 +233,7 @@ class GCashServiceRepository {
       }
       final original = await tx.query(
         'gcash_service_transactions',
-        where: "id=? AND status='POSTED'",
+        where: "id=? AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id)",
         whereArgs: [id],
       );
       if (original.isEmpty) {
@@ -223,6 +262,7 @@ class GCashServiceRepository {
       await PaymentAccountingRepository.postGCashService(
         tx,
         serviceId: reversalId,
+        isReversal: true,
         serviceType: row['service_type']! as String,
         amountChangeCentavos: -(row['gcash_change_centavos']! as int),
         gcashReference: row['gcash_reference'] as String?,
@@ -250,10 +290,9 @@ class GCashServiceRepository {
   );
 
   Future<List<GCashServiceTransaction>> recent({int limit = 50}) async =>
-      (await db.query(
-        'gcash_service_transactions',
-        orderBy: 'created_at DESC,id DESC',
-        limit: limit,
+      (await db.rawQuery(
+        "SELECT s.*, CASE WHEN EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id) THEN 'REVERSED' ELSE s.status END effective_status FROM gcash_service_transactions s ORDER BY s.created_at DESC,s.id DESC LIMIT ?",
+        [limit],
       )).map(GCashServiceTransaction.fromMap).toList(growable: false);
 
   Future<GCashServiceSummary> summary(DateTime day) async {
@@ -269,12 +308,12 @@ class GCashServiceRepository {
     ).toUtc().toIso8601String();
     final row = (await db.rawQuery(
       '''SELECT
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) ci_count,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN 1 ELSE 0 END),0) co_count,
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) ci_principal,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN principal_centavos ELSE 0 END),0) co_principal,
-      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) ci_fee,
-      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id) THEN fee_centavos ELSE 0 END),0) co_fee,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' THEN 1 ELSE 0 END),0) ci_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' THEN 1 ELSE 0 END),0) co_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -principal_centavos ELSE principal_centavos END ELSE 0 END),0) ci_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -principal_centavos ELSE principal_centavos END ELSE 0 END),0) co_principal,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) ci_fee,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) co_fee,
       COALESCE(SUM(physical_cash_change_centavos),0) cash_change,
       COALESCE(SUM(gcash_change_centavos),0) gcash_change
       FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''',

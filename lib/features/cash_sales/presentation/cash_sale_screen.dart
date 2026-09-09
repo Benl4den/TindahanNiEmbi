@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../models/product.dart';
@@ -58,6 +60,20 @@ class _State extends State<CashSaleScreen> {
   int todayTransactionCount = 0;
   Map<int, List<SellingOption>> options = const {};
   Future<void> _draftWrite = Future.value();
+  final _cartScroll = ScrollController();
+  final _cartViewport = GlobalKey();
+  final _cartKeys = <String, GlobalKey>{};
+  Timer? _feedbackTimer;
+  String? _highlightedLine;
+  String? _cartFeedback;
+
+  @override
+  void dispose() {
+    _feedbackTimer?.cancel();
+    _cartScroll.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,7 +93,48 @@ class _State extends State<CashSaleScreen> {
   }
 
   void _changeCart(VoidCallback change) {
+    final previous = {for (final line in c.lines) line.key: line.baseQuantity};
     setState(change);
+    _cartKeys.removeWhere((key, _) => !c.lines.any((line) => line.key == key));
+    for (final line in c.lines) {
+      if (line.baseQuantity > (previous[line.key] ?? 0)) {
+        _highlightedLine = line.key;
+        _cartFeedback =
+            '${line.product.name} ${previous.containsKey(line.key) ? 'updated' : 'added'} → ${line.displayQuantity}';
+        _feedbackTimer?.cancel();
+        _feedbackTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _highlightedLine = null;
+              _cartFeedback = null;
+            });
+          }
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_cartScroll.hasClients) return;
+          final itemContext = _cartKeys[line.key]?.currentContext;
+          final item = itemContext?.findRenderObject();
+          final viewport = _cartViewport.currentContext?.findRenderObject();
+          if (item is RenderBox && viewport is RenderBox) {
+            final top = item.localToGlobal(Offset.zero).dy;
+            final visibleTop = viewport.localToGlobal(Offset.zero).dy;
+            if (top < visibleTop ||
+                top + item.size.height > visibleTop + viewport.size.height) {
+              Scrollable.ensureVisible(
+                itemContext!,
+                duration: const Duration(milliseconds: 220),
+                alignment: top < visibleTop ? 0 : 1,
+              );
+            }
+          }
+        });
+        break;
+      }
+    }
+    if (c.lines.isEmpty) {
+      _highlightedLine = null;
+      _cartFeedback = null;
+    }
     final repository = widget.drafts;
     if (repository != null) {
       final snapshot = List<SaleCartLine>.of(c.lines);
@@ -624,9 +681,7 @@ class _State extends State<CashSaleScreen> {
               // The landscape cart uses 360px; the remaining difference is
               // the sidebar. React to its width without resetting the cart.
               final sidebarExpanded = screenWidth - box.maxWidth - 360 > 200;
-              final cols = screenWidth >= 900
-                  ? (sidebarExpanded ? 3 : 4)
-                  : 2;
+              final cols = screenWidth >= 900 ? (sidebarExpanded ? 3 : 4) : 2;
               return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -779,6 +834,31 @@ class _State extends State<CashSaleScreen> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Text(
+              '${c.selectedProducts.length} products in cart',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (_cartFeedback != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _cartFeedback!,
+                  style: const TextStyle(
+                    color: Color(0xFF126343),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
           const Divider(height: 1),
           Expanded(
             child: c.selectedProducts.isEmpty
@@ -788,126 +868,158 @@ class _State extends State<CashSaleScreen> {
                       textAlign: TextAlign.center,
                     ),
                   )
-                : ListView(
-                    children: c.lines.map((line) {
-                      final p = line.product;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 5,
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer
-                              .withValues(alpha: .16),
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.primary
-                                .withValues(alpha: .16),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: SizedBox(
-                                width: 48,
-                                height: 48,
-                                child: ProductImage(path: p.photoPath),
-                              ),
+                : Scrollbar(
+                    controller: _cartScroll,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    interactive: true,
+                    child: SingleChildScrollView(
+                      key: _cartViewport,
+                      controller: _cartScroll,
+                      padding: const EdgeInsets.only(
+                        right: 10,
+                        top: 8,
+                        bottom: 8,
+                      ),
+                      child: Column(
+                        children: c.lines.map((line) {
+                          final p = line.product;
+                          return AnimatedContainer(
+                            key: _cartKeys.putIfAbsent(
+                              line.key,
+                              () => GlobalKey(),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                            duration: const Duration(milliseconds: 180),
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: _highlightedLine == line.key
+                                  ? const Color(0xFFB7E6C9)
+                                  : const Color(0xFFEDF7EF),
+                              border: Border.all(
+                                color: _highlightedLine == line.key
+                                    ? const Color(0xFF228557)
+                                    : const Color(0xFFC4DFCD),
+                                width: _highlightedLine == line.key ? 2 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: ProductImage(path: p.photoPath),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Expanded(
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              p.name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Remove item',
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: () => _changeCart(
+                                              () => c.removeLine(line),
+                                            ),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              size: 19,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Text(
+                                        '${line.displayQuantity} × ${money(line.option.priceCentavos)}/${line.displayUnit}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          IconButton.filledTonal(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: () => _changeCart(
+                                              () => c.decreaseLine(line),
+                                            ),
+                                            icon: const Icon(
+                                              Icons.remove,
+                                              size: 18,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                            ),
+                                            child: Text(
+                                              line.quantityText,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                          IconButton.filled(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onPressed: line.quantityScale != 1
+                                                ? null
+                                                : () {
+                                                    try {
+                                                      _changeCart(
+                                                        () => c.increaseLine(
+                                                          line,
+                                                        ),
+                                                      );
+                                                    } catch (_) {}
+                                                  },
+                                            icon: const Icon(
+                                              Icons.add,
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerRight,
                                         child: Text(
-                                          p.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          money(line.lineTotalCentavos),
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w900,
                                           ),
                                         ),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Remove item',
-                                        visualDensity: VisualDensity.compact,
-                                        onPressed: () => _changeCart(
-                                          () => c.removeLine(line),
-                                        ),
-                                        icon: const Icon(Icons.close, size: 19),
-                                      ),
                                     ],
                                   ),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '${line.displayQuantity} × ${money(line.option.priceCentavos)}/${line.displayUnit}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                      ),
-                                      IconButton.filledTonal(
-                                        visualDensity: VisualDensity.compact,
-                                        onPressed: () => _changeCart(
-                                          () => c.decreaseLine(line),
-                                        ),
-                                        icon: const Icon(
-                                          Icons.remove,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        child: Text(
-                                          line.quantityText,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton.filled(
-                                        visualDensity: VisualDensity.compact,
-                                        onPressed: line.quantityScale != 1
-                                            ? null
-                                            : () {
-                                                try {
-                                                  _changeCart(
-                                                    () => c.increaseLine(line),
-                                                  );
-                                                } catch (_) {}
-                                              },
-                                        icon: const Icon(Icons.add, size: 18),
-                                      ),
-                                    ],
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      money(line.lineTotalCentavos),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   ),
           ),
           const Divider(height: 1),
