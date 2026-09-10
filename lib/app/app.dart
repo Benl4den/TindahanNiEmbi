@@ -1,3 +1,5 @@
+import '../widgets/brand_logo.dart';
+
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -52,7 +54,7 @@ class _State extends State<TindahanNiEmbiApp> {
         if (s.hasError) {
           return Scaffold(
             body: AppStateView.error(
-              title: 'Could not start TindahanNiEmbi',
+              title: 'Could not start TindaSari PH',
               message: 'Your store data is safe. Please try again. If this continues, contact support and mention “database startup”.',
               actionLabel: 'Try Again',
               onAction: retryStartup,
@@ -91,7 +93,7 @@ class _StartupView extends StatelessWidget {
             color: Theme.of(context).colorScheme.primary,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Icon(Icons.storefront, color: Colors.white, size: 40),
+          child: const BrandLogo(size: 72),
         ),
         const SizedBox(height: 20),
         Text(

@@ -61,6 +61,9 @@ dev_dependencies:
 flutter:
   assets:
     - assets/branding/gcash.png
+    - assets/branding/tindasari_logo.png
+    - assets/branding/tindasari_icon.png
+    - assets/branding/tindasari_icon_dark.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

@@ -1,5 +1,5 @@
 abstract final class AppStrings {
-  static const appName = 'TindahanNiEmbi';
+  static const appName = 'TindaSari PH';
   static const welcome = 'Welcome';
   static const overview = 'Store overview';
   static const products = 'Products';

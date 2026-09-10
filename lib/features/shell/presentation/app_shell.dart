@@ -1,3 +1,5 @@
+import '../../../widgets/brand_logo.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../../widgets/gcash_icon.dart';
@@ -438,51 +440,13 @@ class _State extends State<AppShell> {
                   padding: const EdgeInsets.fromLTRB(12, 18, 12, 12),
                   child: Row(
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF126547), Color(0xFF034832)],
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.storefront_outlined,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
                       if (expanded) ...[
-                        const SizedBox(width: 10),
                         const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'TindahanNiEmbi',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  color: ink,
-                                ),
-                              ),
-                              Text(
-                                'Store Management',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF48606A),
-                                ),
-                              ),
-                            ],
-                          ),
+                          child: BrandLogo(horizontal: true, size: 56),
                         ),
                         toggle(),
-                      ],
+                      ] else
+                        const BrandLogo(size: 48),
                     ],
                   ),
                 ),
@@ -677,6 +641,17 @@ class _State extends State<AppShell> {
     final owner = widget.role == UserRole.owner;
     final items =
         <({String label, IconData icon, Widget? page, VoidCallback? action})>[
+          (
+            label: 'About TindaSari PH',
+            icon: Icons.info_outline,
+            page: null,
+            action: () => showAboutDialog(
+              context: context,
+              applicationName: 'TindaSari PH',
+              applicationIcon: const BrandLogo(size: 64),
+              children: [const Text('Simple to run. Built for your store.')],
+            ),
+          ),
           if (owner)
             (
               label: 'Managed Brands',

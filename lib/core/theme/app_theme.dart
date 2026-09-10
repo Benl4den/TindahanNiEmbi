@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 /// Shared visual foundation for every store workspace.
 abstract final class AppTheme {
-  static const primary = Color(0xFF176B3A);
-  static const canvas = Color(0xFFF5F7F4);
+  static const primary = Color(0xFF0F6B46);
+  static const mint = Color(0xFFA7D7B4);
+  static const canvas = Color(0xFFF8FAF9);
   static const surface = Colors.white;
   static const outline = Color(0xFFDCE3DD);
-  static const text = Color(0xFF17211A);
+  static const text = Color(0xFF1F2D28);
   static const mutedText = Color(0xFF5F6B63);
 
   static ThemeData get light {

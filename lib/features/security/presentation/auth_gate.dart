@@ -1,3 +1,5 @@
+import '../../../widgets/brand_logo.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -399,7 +401,7 @@ class _State extends State<AuthGate> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(64),
               textStyle: const TextStyle(
-                fontSize: 19,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -594,17 +596,13 @@ class _LoginBrand extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.storefront_rounded,
-                    color: Colors.white,
-                    size: 70,
-                  ),
+                  child: const BrandLogo(size: 122, dark: true),
                 ),
                 const SizedBox(height: 30),
                 const FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    'TindahanNiEmbi',
+                    'TindaSari PH',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 40,
@@ -614,7 +612,7 @@ class _LoginBrand extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Store Management System',
+                  'Simple to run. Built for your store.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xff8ee19e),
@@ -632,10 +630,9 @@ class _LoginBrand extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-                Icon(
-                  Icons.storefront_outlined,
-                  size: 150,
-                  color: Colors.white.withValues(alpha: .14),
+                const Opacity(
+                  opacity: .14,
+                  child: BrandLogo(size: 150, dark: true),
                 ),
               ],
             ),
