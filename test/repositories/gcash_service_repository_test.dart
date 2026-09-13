@@ -37,9 +37,9 @@ void main() {
       );
       expect(cashIn.gcashChangeCentavos, -100000);
       expect(cashIn.physicalCashChangeCentavos, 101500);
-      expect(cashOut.gcashChangeCentavos, 50000);
-      expect(cashOut.physicalCashChangeCentavos, -49000);
-      expect((await wallet.summary()).balance, 150000);
+      expect(cashOut.gcashChangeCentavos, 51000);
+      expect(cashOut.physicalCashChangeCentavos, -50000);
+      expect((await wallet.summary()).balance, 151000);
       expect((await wallet.summary()).todayTransactions, 3);
       expect(
         (await wallet.summary(DateTime.now().subtract(const Duration(days: 1))))
@@ -54,9 +54,83 @@ void main() {
         reason: 'Mistake',
         ownerPinAuthorized: true,
       );
-      expect((await wallet.summary()).balance, 250000);
+      expect((await wallet.summary()).balance, 251000);
       expect((await services.summary(DateTime.now())).totalFeeIncome, 1000);
       expect(await services.totalFeeIncome(), 1000);
+    },
+  );
+
+  test(
+    'fee options post the exact customer-facing Cash-In and Cash-Out amounts',
+    () async {
+      final app = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: inMemoryDatabasePath,
+      );
+      final db = await app.database;
+      addTearDown(app.close);
+      final wallet = PaymentAccountingRepository(db, actorRole: 'OWNER');
+      await wallet.addManual(
+        type: 'OPENING_BALANCE',
+        amountCentavos: 100000,
+        reason: 'Start',
+        ownerPinAuthorized: true,
+      );
+      final services = GCashServiceRepository(db);
+      final cashOutAdded = await services.record(
+        type: 'CASH_OUT',
+        principalCentavos: 10000,
+        feeCentavos: 500,
+        physicalCashAvailabilityAcknowledged: true,
+      );
+      final cashOutDeducted = await services.record(
+        type: 'CASH_OUT',
+        principalCentavos: 10000,
+        feeCentavos: 500,
+        feeOption: 'DEDUCTED',
+        physicalCashAvailabilityAcknowledged: true,
+      );
+      final cashInAdded = await services.record(
+        type: 'CASH_IN',
+        principalCentavos: 10000,
+        feeCentavos: 500,
+      );
+      final cashInDeducted = await services.record(
+        type: 'CASH_IN',
+        principalCentavos: 10000,
+        feeCentavos: 500,
+        feeOption: 'DEDUCTED',
+      );
+      expect(
+        (
+          cashOutAdded.gcashChangeCentavos,
+          cashOutAdded.physicalCashChangeCentavos,
+        ),
+        (10500, -10000),
+      );
+      expect(
+        (
+          cashOutDeducted.gcashChangeCentavos,
+          cashOutDeducted.physicalCashChangeCentavos,
+        ),
+        (10000, -9500),
+      );
+      expect(
+        (
+          cashInAdded.physicalCashChangeCentavos,
+          cashInAdded.gcashChangeCentavos,
+        ),
+        (10500, -10000),
+      );
+      expect(
+        (
+          cashInDeducted.physicalCashChangeCentavos,
+          cashInDeducted.gcashChangeCentavos,
+        ),
+        (10000, -9500),
+      );
+      expect(cashInDeducted.feeOption, 'DEDUCTED');
+      expect(await services.totalFeeIncome(), 2000);
     },
   );
 

@@ -43,6 +43,7 @@ import '../../consignment/presentation/consignment_screen.dart';
 import '../../inventory/presentation/inventory_screen.dart';
 import '../../expenses/presentation/expenses_screen.dart';
 import '../../gcash/presentation/gcash_screen.dart';
+import '../../help/help_guide_screen.dart';
 import '../../operations/presentation/daily_closing_screen.dart';
 import '../../operations/presentation/integrity_screen.dart';
 import '../../operations/presentation/restock_screen.dart';
@@ -304,8 +305,13 @@ class _State extends State<AppShell> {
       const NavigationDestination(icon: GCashIcon(), label: 'GCash'),
     ];
     const navTargets = [0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
+    final allowedTargets = widget.role == UserRole.owner
+        ? navTargets
+        : navTargets
+              .where((target) => const {0, 3, 4, 6, 7, 11, 12}.contains(target))
+              .toList();
     final destinations = [
-      for (final target in navTargets) bodyDestinations[target],
+      for (final target in allowedTargets) bodyDestinations[target],
     ];
     final body = _body();
     return Scaffold(
@@ -314,7 +320,7 @@ class _State extends State<AppShell> {
           if (wide)
             StatefulBuilder(
               builder: (_, updateSidebar) =>
-                  _sidebar(destinations, navTargets, updateSidebar),
+                  _sidebar(destinations, allowedTargets, updateSidebar),
             ),
           if (wide) const VerticalDivider(width: 1),
           Expanded(child: body),
@@ -328,10 +334,10 @@ class _State extends State<AppShell> {
                   : 3,
               onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 6, 3][i]),
               destinations: [
-                destinations[0],
-                destinations[1],
-                destinations[4],
-                destinations[12],
+                bodyDestinations[0],
+                bodyDestinations[6],
+                bodyDestinations[3],
+                bodyDestinations[10],
               ],
             ),
     );
@@ -427,20 +433,16 @@ class _State extends State<AppShell> {
           : _denied(),
     3 => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
-      allowAdjustment: widget.role == UserRole.owner,
     ),
-    4 =>
-      widget.role == UserRole.owner
-          ? RestockScreen(
-              operations: OperationsRepository(widget.database),
-              inventory: InventoryRepository(widget.database, actorRole: role),
-              openConsignment: (consignorId, productId) => setState(() {
-                pendingConsignorId = consignorId;
-                pendingConsignmentProductId = productId;
-                selected = 2;
-              }),
-            )
-          : _denied(),
+    4 => RestockScreen(
+      operations: OperationsRepository(widget.database),
+      inventory: InventoryRepository(widget.database, actorRole: role),
+      openConsignment: (consignorId, productId) => setState(() {
+        pendingConsignorId = consignorId;
+        pendingConsignmentProductId = productId;
+        selected = 2;
+      }),
+    ),
     5 =>
       widget.role == UserRole.owner
           ? ProductsScreen(
@@ -461,13 +463,10 @@ class _State extends State<AppShell> {
           ? ReversalRepository(widget.database)
           : null,
     ),
-    7 =>
-      widget.role == UserRole.owner
-          ? ExpensesScreen(
-              repository: ExpenseRepository(widget.database, actorRole: role),
-              auth: AuthService(widget.database),
-            )
-          : _denied(),
+    7 => ExpensesScreen(
+      repository: ExpenseRepository(widget.database, actorRole: role),
+      auth: AuthService(widget.database),
+    ),
     8 =>
       widget.role == UserRole.owner
           ? DailyClosingScreen(
@@ -481,20 +480,11 @@ class _State extends State<AppShell> {
     11 => TransactionHistoryScreen(
       repository: TransactionHistoryRepository(widget.database),
     ),
-    12 =>
-      widget.role == UserRole.owner
-          ? GCashScreen(
-              repository: PaymentAccountingRepository(
-                widget.database,
-                actorRole: role,
-              ),
-              services: GCashServiceRepository(
-                widget.database,
-                actorRole: role,
-              ),
-              auth: AuthService(widget.database),
-            )
-          : _denied(),
+    12 => GCashScreen(
+      repository: PaymentAccountingRepository(widget.database, actorRole: role),
+      services: GCashServiceRepository(widget.database, actorRole: role),
+      auth: AuthService(widget.database),
+    ),
     _ => _more(),
   };
 
@@ -761,6 +751,12 @@ class _State extends State<AppShell> {
               children: [const Text('Simple to run. Built for your store.')],
             ),
           ),
+          (
+            label: 'Help & Guide',
+            icon: Icons.help_outline,
+            page: const HelpGuideScreen(),
+            action: null,
+          ),
           if (owner)
             (
               label: 'Appearance',
@@ -957,6 +953,7 @@ class _State extends State<AppShell> {
         .where((x) => const {'Security', 'Lock App'}.contains(x.label))
         .toList();
     final appearance = items.where((x) => x.label == 'Appearance').toList();
+    final help = items.where((x) => x.label == 'Help & Guide').toList();
     final backup = items.where((x) => x.label == 'Backup & Restore').toList();
     Widget section(
       String title,
@@ -1061,6 +1058,7 @@ class _State extends State<AppShell> {
                     'Choose the light, dark, or device theme',
                     appearance,
                   ),
+                section('HELP', 'Simple guides for using TindaSari PH', help),
                 section(
                   'SECURITY',
                   'Access controls and app locking',

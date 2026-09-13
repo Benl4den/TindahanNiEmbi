@@ -5,6 +5,7 @@ import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/inventory_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 
 void main() {
@@ -81,6 +82,33 @@ void main() {
       expect(stocked.photoPath, '/local/kape.jpg');
     },
   );
+
+  test('purchasing summary keeps lifetime cost after stock changes', () async {
+    final product = await products.create(draft(stock: 10));
+    await InventoryRepository(database)
+        .stockIn(productId: product.id, quantity: 10, unitCostCentavos: 700);
+    await database.transaction((tx) async {
+      final movement = await tx.insert('inventory_movements', {
+        'inventory_transaction_id': await tx.insert('inventory_transactions', {
+          'type': 'CASH_SALE',
+          'occurred_at': DateTime.now().toUtc().toIso8601String(),
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        }),
+        'product_id': product.id,
+        'quantity_change': -5,
+        'quantity_before': 20,
+        'quantity_after': 15,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      expect(movement, greaterThan(0));
+    });
+    final reloaded = (await products.searchActive()).single;
+    final summary = await products.purchasingSummary(reloaded);
+    expect(summary.lifetimeQuantity, 20);
+    expect(summary.lifetimePurchasedCostCentavos, 12000);
+    expect(summary.currentStockCostCentavos, 9000);
+    expect(summary.potentialSalesValueCentavos, 13500);
+  });
 
   test('rejects all negative numeric values', () async {
     for (final invalid in [

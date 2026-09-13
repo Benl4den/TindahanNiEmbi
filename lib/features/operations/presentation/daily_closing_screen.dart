@@ -4,6 +4,8 @@ import '../../../widgets/overview_banner.dart';
 
 import '../../../core/formatters/number_format.dart';
 import '../../../repositories/operations_repository.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 
 class DailyClosingScreen extends StatefulWidget {
   const DailyClosingScreen({super.key, required this.repository});
@@ -23,7 +25,7 @@ class _State extends State<DailyClosingScreen> {
   }
 
   void reload() {
-    data = widget.repository.daily(date);
+    data = widget.repository.summaryForDate(date);
     history = widget.repository.closingDates();
   }
 
@@ -48,6 +50,12 @@ class _State extends State<DailyClosingScreen> {
     appBar: AppBar(
       title: const Text('Daily Closing Summary'),
       actions: [
+        const HelpButton(topic: HelpTopicId.dailyClosing),
+        TextButton.icon(
+          onPressed: _confirmCloseDay,
+          icon: const Icon(Icons.lock_clock_outlined),
+          label: const Text('Close Day'),
+        ),
         TextButton.icon(
           onPressed: pick,
           icon: const Icon(Icons.calendar_month),
@@ -68,105 +76,119 @@ class _State extends State<DailyClosingScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Transaction-based summary — not a physical cash-drawer reconciliation.',
+            FutureBuilder<DailyClosingSnapshot?>(
+              future: widget.repository.snapshotFor(date),
+              builder: (_, snapshot) => Text(
+                snapshot.data == null
+                    ? 'Live transaction summary — not a physical cash-drawer reconciliation.'
+                    : 'Closed snapshot — saved ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.data!.closedAt))}. Later corrections stay in transaction history.',
+              ),
             ),
             const SizedBox(height: 16),
             OverviewBanner(
-              title: 'Daily overview',
-              value: m(x.totalSales),
+              title: "Today's Earnings",
+              value: m(x.totalEarnings),
               caption:
-                  'Product sales • Service fees ${m(x.serviceFeeIncome)} • ${x.transactionCount} transactions',
+                  'Product sales ${m(x.totalSales)} • GCash fees ${m(x.serviceFeeIncome)} • ${x.transactionCount} transactions\nBefore product costs and expenses',
               icon: Icons.insights_outlined,
             ),
             const SizedBox(height: 16),
             _section('PHYSICAL CASH', Icons.payments_outlined, [
-              _metric('Cash Sales (${x.cashSaleCount})', m(x.cashSales)),
-              _metric('Cash UTANG Payments', m(x.cashPayments)),
-              _metric('Cash Expenses', '-${m(x.cashExpenses)}'),
-              _metric('Cash Consignor Remittances', '-${m(x.cashRemittances)}'),
+              _metric('Cash Received', m(x.cashReceived), strong: true),
+              _metric('Cash Paid Out', m(x.cashPaid), strong: true),
+              _metric('Difference', _signed(x.cashDifference), strong: true),
+              _metric('Cash Sales (${x.cashSaleCount})', '+${m(x.cashSales)}'),
+              _metric('UTANG Payments in Cash', '+${m(x.cashPayments)}'),
               _metric(
-                'GCash Services Cash Movement',
-                m(x.gcashServicePhysicalCashChange),
+                'GCash Cash-In received',
+                '+${m(x.gcashServiceCashReceived)}',
               ),
-              _metric('Recorded Cash In', m(x.recordedCashIn), strong: true),
+              _metric('GCash Cash-Out paid', '-${m(x.gcashServiceCashPaid)}'),
+              _metric('Expenses paid in Cash', '-${m(x.cashExpenses)}'),
+              _metric(
+                'Consignor remittances in Cash',
+                '-${m(x.cashRemittances)}',
+              ),
             ]),
             const SizedBox(height: 14),
-            _section('GCASH WALLET', Icons.account_balance_wallet_outlined, [
-              _metric('Opening Balance', m(x.gcashOpeningBalance)),
-              _metric('GCash Sales (${x.gcashSaleCount})', m(x.gcashSales)),
-              _metric('GCash UTANG Payments', m(x.gcashPayments)),
-              _metric('GCash Expenses', '-${m(x.gcashExpenses)}'),
-              _metric(
-                'GCash Consignor Remittances',
-                '-${m(x.gcashRemittances)}',
-              ),
+            _section('GCASH', Icons.account_balance_wallet_outlined, [
+              _metric('Starting GCash Balance', m(x.gcashOpeningBalance)),
+              _metric('GCash Received', m(x.gcashMoneyIn), strong: true),
+              _metric('GCash Sent', m(x.gcashMoneyOut), strong: true),
+              _metric('Difference', _signed(x.gcashDifference), strong: true),
               _metric(
                 'Expected GCash Balance',
                 m(x.gcashEndingBalance),
                 strong: true,
               ),
+              _metric(
+                'GCash Sales (${x.gcashSaleCount})',
+                '+${m(x.gcashSales)}',
+              ),
+              _metric('UTANG Payments via GCash', '+${m(x.gcashPayments)}'),
+              _metric(
+                'GCash Cash-Out received',
+                '+${m(x.gcashServiceWalletReceived)}',
+              ),
+              _metric('GCash Cash-In sent', '-${m(x.gcashServiceWalletSent)}'),
+              _metric('Expenses paid via GCash', '-${m(x.gcashExpenses)}'),
+              _metric(
+                'Consignor remittances via GCash',
+                '-${m(x.gcashRemittances)}',
+              ),
             ]),
             const SizedBox(height: 14),
             _section('GCASH SERVICES', Icons.phone_android_outlined, [
               _metric(
-                'Net Cash-In (${x.cashInServiceCount} recorded)',
+                'Cash-In Amount (${x.cashInServiceCount})',
                 m(x.cashInServicePrincipal),
               ),
               _metric(
-                'Net Cash-Out (${x.cashOutServiceCount} recorded)',
+                'Cash-Out Amount (${x.cashOutServiceCount})',
                 m(x.cashOutServicePrincipal),
               ),
-              _metric('Net Cash-In Fees', m(x.cashInServiceFees)),
-              _metric('Net Cash-Out Fees', m(x.cashOutServiceFees)),
+              _metric('Cash-In Fees', m(x.cashInServiceFees)),
+              _metric('Cash-Out Fees', m(x.cashOutServiceFees)),
+              _metric('Total Fees Earned', m(x.serviceFeeIncome), strong: true),
               _metric(
-                'Service Fee Income (net of reversals today)',
-                m(x.serviceFeeIncome),
-                strong: true,
+                'Physical Cash Effect',
+                _signed(x.gcashServicePhysicalCashChange),
               ),
-              _metric('GCash Movement', m(x.gcashServiceWalletChange)),
+              _metric('GCash Effect', _signed(x.gcashServiceWalletChange)),
             ]),
             const SizedBox(height: 14),
-            LayoutBuilder(
-              builder: (_, box) {
-                final width = box.maxWidth >= 700
-                    ? (box.maxWidth - 14) / 2
-                    : box.maxWidth;
-                return Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: [
-                    SizedBox(
-                      width: width,
-                      child: _accentCard(
-                        'NEW CREDIT',
-                        m(x.newUtang),
-                        Icons.people_alt_outlined,
-                        Colors.orange.shade800,
-                      ),
-                    ),
-                    SizedBox(
-                      width: width,
-                      child: _accentCard(
-                        'OPERATING EXPENSES',
-                        m(x.operatingExpenses),
-                        Icons.receipt_long_outlined,
-                        Colors.red.shade700,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+            _section('NEW UTANG', Icons.people_alt_outlined, [
+              _metric('New UTANG', m(x.newUtang), strong: true),
+              _metric('UTANG Payments Collected', m(x.payments)),
+              _metric('Paid in Cash', m(x.cashPayments)),
+              _metric('Paid via GCash', m(x.gcashPayments)),
+            ]),
             const SizedBox(height: 14),
-            _hero('NET RECORDED CASH AFTER EXPENSES', m(x.netRecordedCash)),
+            _section('EXPENSES', Icons.receipt_long_outlined, [
+              _metric('Paid with Cash', m(x.cashExpenses)),
+              _metric('Paid with GCash', m(x.gcashExpenses)),
+              _metric('Total Expenses', m(x.operatingExpenses), strong: true),
+            ]),
             const SizedBox(height: 14),
             _section('CONSIGNMENT', Icons.handshake_outlined, [
               _metric('Consignment Sales', m(x.consignmentSales)),
-              _metric('Supplier Payable Generated', m(x.supplierPayable)),
+              _metric('Amount Owed to Supplier', m(x.supplierPayable)),
               _metric(
-                'Consignment Margin',
+                'Consignment Earnings',
                 m(x.consignmentMargin),
+                strong: true,
+              ),
+            ]),
+            const SizedBox(height: 14),
+            _section("TODAY'S MONEY SUMMARY", Icons.summarize_outlined, [
+              _metric(
+                'Physical Cash Difference',
+                _signed(x.cashDifference),
+                strong: true,
+              ),
+              _metric(
+                'GCash Difference',
+                _signed(x.gcashDifference),
                 strong: true,
               ),
             ]),
@@ -226,9 +248,7 @@ class _State extends State<DailyClosingScreen> {
                                   MaterialLocalizations.of(context)
                                       .formatMediumDate(d),
                                 ),
-                                subtitle: const Text(
-                                  'Transaction-based daily summary',
-                                ),
+                                subtitle: const Text('Open daily summary'),
                                 trailing: const Icon(Icons.chevron_right),
                                 onTap: () => _showDay(d),
                               ),
@@ -292,35 +312,49 @@ class _State extends State<DailyClosingScreen> {
     ),
   );
 
-  Widget _accentCard(String label, String value, IconData icon, Color color) =>
-      Card(
-        color: color.withValues(alpha: .08),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 34),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label),
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 27,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+  String _signed(int amount) => '${amount >= 0 ? '+' : '-'}${m(amount.abs())}';
+
+  Future<void> _confirmCloseDay() async {
+    final saved = await widget.repository.snapshotFor(date);
+    if (!mounted) return;
+    if (saved != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This day is already closed and read-only.'),
         ),
       );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.lock_clock_outlined),
+        title: const Text('Close this day?'),
+        content: const Text(
+          'This saves the displayed Daily Closing summary as a read-only record. Later reversals or corrections remain visible in transaction history, but will not change this closed record.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Close Day'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await widget.repository.closeDay(date);
+    if (!mounted) return;
+    setState(reload);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Daily Closing saved as a read-only snapshot.'),
+      ),
+    );
+  }
 
   Widget _hero(String label, String value) {
     final color = Theme.of(context).colorScheme.primary;
@@ -365,7 +399,8 @@ class _State extends State<DailyClosingScreen> {
   }
 
   Future<void> _showDay(DateTime day) async {
-    final summary = await widget.repository.daily(day);
+    final snapshot = await widget.repository.snapshotFor(day);
+    final summary = snapshot?.summary ?? await widget.repository.daily(day);
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -383,32 +418,100 @@ class _State extends State<DailyClosingScreen> {
           MaterialLocalizations.of(c).formatFullDate(day),
           textAlign: TextAlign.center,
         ),
+        contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         content: SizedBox(
           width: 680,
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _hero('NET RECORDED CASH', m(summary.netRecordedCash)),
+                Text(
+                  snapshot == null
+                      ? 'Live transaction summary'
+                      : 'Closed snapshot • saved ${MaterialLocalizations.of(c).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.closedAt))}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(c).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 12),
-                _section('CASH & UTANG', Icons.payments_outlined, [
-                  _metric('Cash Sales', m(summary.cashSales)),
-                  _metric('UTANG Created', m(summary.newUtang)),
-                  _metric('Cash UTANG Payments', m(summary.cashPayments)),
-                  _metric('Recorded Cash In', m(summary.recordedCashIn)),
+                _hero("TODAY'S EARNINGS", m(summary.totalEarnings)),
+                const SizedBox(height: 12),
+                _section('PHYSICAL CASH', Icons.payments_outlined, [
+                  _metric('Cash Received', m(summary.cashReceived)),
+                  _metric('Cash Paid Out', m(summary.cashPaid)),
+                  _metric(
+                    'Difference',
+                    _signed(summary.cashDifference),
+                    strong: true,
+                  ),
                 ]),
                 _section('GCASH', Icons.account_balance_wallet_outlined, [
-                  _metric('Opening Balance', m(summary.gcashOpeningBalance)),
-                  _metric('GCash Sales', m(summary.gcashSales)),
-                  _metric('Money In', m(summary.gcashMoneyIn)),
-                  _metric('Money Out', m(summary.gcashMoneyOut)),
-                  _metric('Expected Balance', m(summary.gcashEndingBalance)),
+                  _metric(
+                    'Starting GCash Balance',
+                    m(summary.gcashOpeningBalance),
+                  ),
+                  _metric('GCash Received', m(summary.gcashMoneyIn)),
+                  _metric('GCash Sent', m(summary.gcashMoneyOut)),
+                  _metric(
+                    'Difference',
+                    _signed(summary.gcashDifference),
+                    strong: true,
+                  ),
+                  _metric(
+                    'Expected GCash Balance',
+                    m(summary.gcashEndingBalance),
+                  ),
                 ]),
-                _section('EXPENSES & CONSIGNMENT', Icons.receipt_long, [
-                  _metric('Operating Expenses', m(summary.operatingExpenses)),
+                _section('GCASH SERVICES', Icons.phone_android_outlined, [
+                  _metric(
+                    'Cash-In Amount (${summary.cashInServiceCount})',
+                    m(summary.cashInServicePrincipal),
+                  ),
+                  _metric(
+                    'Cash-Out Amount (${summary.cashOutServiceCount})',
+                    m(summary.cashOutServicePrincipal),
+                  ),
+                  _metric(
+                    'Total Fees Earned',
+                    m(summary.serviceFeeIncome),
+                    strong: true,
+                  ),
+                  _metric(
+                    'Physical Cash Effect',
+                    _signed(summary.gcashServicePhysicalCashChange),
+                  ),
+                  _metric(
+                    'GCash Effect',
+                    _signed(summary.gcashServiceWalletChange),
+                  ),
+                ]),
+                _section('NEW UTANG', Icons.people_alt_outlined, [
+                  _metric('New UTANG', m(summary.newUtang)),
+                  _metric('UTANG Payments Collected', m(summary.payments)),
+                ]),
+                _section('EXPENSES', Icons.receipt_long, [
+                  _metric('Paid with Cash', m(summary.cashExpenses)),
+                  _metric('Paid with GCash', m(summary.gcashExpenses)),
+                  _metric('Total Expenses', m(summary.operatingExpenses)),
+                ]),
+                _section('CONSIGNMENT', Icons.handshake_outlined, [
                   _metric('Consignment Sales', m(summary.consignmentSales)),
-                  _metric('Supplier Payable', m(summary.supplierPayable)),
-                  _metric('Store Margin', m(summary.consignmentMargin)),
+                  _metric(
+                    'Amount Owed to Supplier',
+                    m(summary.supplierPayable),
+                  ),
+                  _metric('Consignment Earnings', m(summary.consignmentMargin)),
+                ]),
+                _section("TODAY'S MONEY SUMMARY", Icons.summarize_outlined, [
+                  _metric(
+                    'Physical Cash Difference',
+                    _signed(summary.cashDifference),
+                    strong: true,
+                  ),
+                  _metric(
+                    'GCash Difference',
+                    _signed(summary.gcashDifference),
+                    strong: true,
+                  ),
                 ]),
                 _section('STORE STATUS', Icons.storefront_outlined, [
                   _metric('Transactions', '${summary.transactionCount}'),

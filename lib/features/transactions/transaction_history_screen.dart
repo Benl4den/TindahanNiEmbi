@@ -169,6 +169,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                                   Text(
                                                     '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${entry.status}',
                                                   ),
+                                                  Text('By ${entry.actor}'),
                                                   TextButton.icon(
                                                     onPressed: () =>
                                                         _showDetails(entry),

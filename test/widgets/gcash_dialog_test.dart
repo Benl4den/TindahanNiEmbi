@@ -58,6 +58,7 @@ class Services extends GCashServiceRepository {
     required String type,
     required int principalCentavos,
     required int feeCentavos,
+    String feeOption = 'ADDED',
     String? gcashReference,
     String? notes,
     bool physicalCashAvailabilityAcknowledged = false,

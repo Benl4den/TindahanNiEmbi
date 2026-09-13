@@ -94,6 +94,9 @@ class _State extends State<AuthGate> {
           } else {
             failedAttempts = 0;
             role = found;
+            CurrentActor.staffName = found == UserRole.staff
+                ? selectedStaff?.name
+                : null;
           }
         });
       }
@@ -140,6 +143,7 @@ class _State extends State<AuthGate> {
   }
 
   void _lock() => setState(() {
+    CurrentActor.staffName = null;
     role = null;
     configured = widget.auth.hasOwner;
     selectedStaff = null;

@@ -72,7 +72,7 @@ class ProductCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   Text(
-                    'Minimum: ${standardNumber(product.minimumStockLevel)}${categoryName == null ? '' : ' • $categoryName'}${inventoryGroups.isEmpty ? '' : ' • ${inventoryGroups.join(', ')}'}',
+                    '${categoryName ?? 'Uncategorized'}${inventoryGroups.isEmpty ? '' : ' • ${inventoryGroups.join(', ')}'}',
                   ),
                   const SizedBox(height: 6),
                   Align(

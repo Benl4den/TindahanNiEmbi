@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import '../core/formatters/number_format.dart';
 
 import '../models/utang_draft.dart';
+import '../services/auth_service.dart';
 import 'consignment_allocation.dart';
 import '../services/app_refresh_controller.dart';
 
@@ -181,6 +182,7 @@ class UtangRepository {
       'description':
           'UTANG $reference created for ${customer.single['full_name']} — ${standardMoney(total)}',
       'actor_role': actorRole,
+      'actor_name': CurrentActor.labelFor(actorRole),
       'related_entity_type': 'UTANG',
       'related_entity_id': utangId,
       'created_at': now,

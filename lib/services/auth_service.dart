@@ -9,6 +9,16 @@ import 'app_refresh_controller.dart';
 
 enum UserRole { owner, staff }
 
+/// In-memory identity for the currently unlocked local user.
+abstract final class CurrentActor {
+  static String? staffName;
+  static String labelFor(String? role) => role == 'STAFF'
+      ? (staffName == null ? 'Staff' : staffName!)
+      : role == 'OWNER'
+      ? 'Owner'
+      : 'Not recorded';
+}
+
 class StaffAccount {
   const StaffAccount({
     required this.id,

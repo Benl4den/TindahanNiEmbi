@@ -9,7 +9,10 @@ import '../../../repositories/product_repository.dart';
 import '../../../services/product_photo_service.dart';
 import 'product_card.dart';
 import 'product_form_screen.dart';
+import 'product_details_screen.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({
@@ -31,6 +34,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String archiveFilter = 'ACTIVE';
   int? categoryId;
   String? groupCode;
+  String? ownership;
+  ProductStockStatus? stockStatus;
+  String sort = 'Name';
   List<Category> categories = const [];
   Map<int, List<String>> groups = const {};
   @override
@@ -59,6 +65,166 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _searchNow('');
   }
 
+  Future<void> _filterSort() async {
+    var nextArchive = archiveFilter;
+    var nextCategory = categoryId;
+    var nextGroup = groupCode;
+    var nextOwnership = ownership;
+    var nextStatus = stockStatus;
+    var nextSort = sort;
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('Filter & Sort'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: nextArchive,
+                    decoration: const InputDecoration(
+                      labelText: 'Product status',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+                      DropdownMenuItem(
+                        value: 'ARCHIVED',
+                        child: Text('Archived'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ALL',
+                        child: Text('Active & Archived'),
+                      ),
+                    ],
+                    onChanged: (v) => setDialog(() => nextArchive = v!),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<int>(
+                    initialValue: nextCategory,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    hint: const Text('All categories'),
+                    items: categories
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setDialog(() => nextCategory = v),
+                  ),
+                  TextButton(
+                    onPressed: () => setDialog(() => nextCategory = null),
+                    child: const Text('Clear category'),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: nextGroup,
+                    decoration: const InputDecoration(labelText: 'Group'),
+                    hint: const Text('All groups'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'SELECTA',
+                        child: Text('Managed Brand'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'CONSIGNMENT',
+                        child: Text('Consignment'),
+                      ),
+                    ],
+                    onChanged: (v) => setDialog(() => nextGroup = v),
+                  ),
+                  TextButton(
+                    onPressed: () => setDialog(() => nextGroup = null),
+                    child: const Text('Clear group'),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: nextOwnership,
+                    decoration: const InputDecoration(labelText: 'Ownership'),
+                    hint: const Text('All ownership'),
+                    items: const [
+                      DropdownMenuItem(value: 'OWNED', child: Text('Owned')),
+                    ],
+                    onChanged: (v) => setDialog(() => nextOwnership = v),
+                  ),
+                  TextButton(
+                    onPressed: () => setDialog(() => nextOwnership = null),
+                    child: const Text('Clear ownership'),
+                  ),
+                  DropdownButtonFormField<ProductStockStatus>(
+                    initialValue: nextStatus,
+                    decoration: const InputDecoration(
+                      labelText: 'Stock status',
+                    ),
+                    hint: const Text('All stock statuses'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: ProductStockStatus.inStock,
+                        child: Text('In Stock'),
+                      ),
+                      DropdownMenuItem(
+                        value: ProductStockStatus.lowStock,
+                        child: Text('Low Stock'),
+                      ),
+                      DropdownMenuItem(
+                        value: ProductStockStatus.outOfStock,
+                        child: Text('Out of Stock'),
+                      ),
+                    ],
+                    onChanged: (v) => setDialog(() => nextStatus = v),
+                  ),
+                  TextButton(
+                    onPressed: () => setDialog(() => nextStatus = null),
+                    child: const Text('Clear stock status'),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: nextSort,
+                    decoration: const InputDecoration(labelText: 'Sort by'),
+                    items:
+                        const [
+                              'Name',
+                              'Lowest Stock',
+                              'Highest Stock',
+                              'Recently Updated',
+                            ]
+                            .map(
+                              (x) => DropdownMenuItem(value: x, child: Text(x)),
+                            )
+                            .toList(),
+                    onChanged: (v) => setDialog(() => nextSort = v!),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (apply == true && mounted) {
+      setState(() {
+        archiveFilter = nextArchive;
+        categoryId = nextCategory;
+        groupCode = nextGroup;
+        ownership = nextOwnership;
+        stockStatus = nextStatus;
+        sort = nextSort;
+        _reload();
+      });
+    }
+  }
+
   Future<List<Product>> _loadProducts() async {
     final products = widget.repository is SqliteProductRepository
         ? await (widget.repository as SqliteProductRepository).searchAll(
@@ -66,6 +232,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             archiveFilter: archiveFilter,
             categoryId: categoryId,
             groupCode: groupCode,
+            ownership: ownership,
           )
         : await widget.repository.searchActive();
     if (widget.repository is SqliteProductRepository) {
@@ -138,7 +305,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text(AppStrings.products)),
+    appBar: AppBar(
+      title: const Text(AppStrings.products),
+      actions: const [HelpButton(topic: HelpTopicId.products)],
+    ),
     body: SafeArea(
       child: Column(
         children: [
@@ -161,56 +331,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
               onChanged: _searchNow,
             ),
           ),
-          SizedBox(
-            height: 48,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                for (final x in const [
-                  ('ALL', 'All'),
-                  ('ACTIVE', 'Active'),
-                  ('ARCHIVED', 'Archived'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(x.$2),
-                      selected: archiveFilter == x.$1,
-                      onSelected: (_) => setState(() {
-                        archiveFilter = x.$1;
-                        _reload();
-                      }),
-                    ),
-                  ),
-                for (final x in const [
-                  ('SELECTA', 'Selecta'),
-                  ('CONSIGNMENT', 'Consignment'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(x.$2),
-                      selected: groupCode == x.$1,
-                      onSelected: (_) => setState(() {
-                        groupCode = groupCode == x.$1 ? null : x.$1;
-                        _reload();
-                      }),
-                    ),
-                  ),
-                for (final c in categories)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(c.name),
-                      selected: categoryId == c.id,
-                      onSelected: (_) => setState(() {
-                        categoryId = categoryId == c.id ? null : c.id;
-                        _reload();
-                      }),
-                    ),
-                  ),
-              ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _filterSort,
+                icon: const Icon(Icons.tune),
+                label: Text(
+                  'Filter & Sort${_activeFilters == 0 ? '' : ' ($_activeFilters)'}',
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -237,7 +368,24 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           query.isEmpty ||
                           product.name.toLowerCase().contains(query),
                     )
-                    .toList(growable: false);
+                    .where(
+                      (product) =>
+                          stockStatus == null ||
+                          product.stockStatus == stockStatus,
+                    )
+                    .toList();
+                products.sort(
+                  (a, b) => switch (sort) {
+                    'Lowest Stock' => a.currentQuantity.compareTo(
+                      b.currentQuantity,
+                    ),
+                    'Highest Stock' => b.currentQuantity.compareTo(
+                      a.currentQuantity,
+                    ),
+                    'Recently Updated' => b.updatedAt.compareTo(a.updatedAt),
+                    _ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                  },
+                );
                 if (products.isEmpty) {
                   return AppStateView.empty(
                     title: query.isEmpty
@@ -291,52 +439,33 @@ class _ProductsScreenState extends State<ProductsScreen> {
     ),
   );
 
-  Future<void> _details(Product product) => showDialog<void>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(product.name),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Selling Price: ${standardMoney(product.sellingPriceCentavos)}',
-            ),
-            Text(
-              'Purchase Cost: ${standardMoney(product.purchasePriceCentavos)}',
-            ),
-            Text(
-              'Estimated Unit Margin: ${standardMoney(product.sellingPriceCentavos - product.purchasePriceCentavos)}',
-            ),
-            Text(
-              'Current Stock: ${productQuantityText(product, product.currentQuantity)}',
-            ),
-            Text(
-              'Minimum Stock: ${productQuantityText(product, product.minimumStockLevel)}',
-            ),
-            Text('Status: ${product.stockStatus.name}'),
-            const SizedBox(height: 12),
-            const Text(
-              'Stock quantity is maintained by inventory movements and cannot be edited here.',
-            ),
-          ],
+  int get _activeFilters =>
+      [
+        categoryId,
+        groupCode,
+        ownership,
+        stockStatus,
+      ].where((x) => x != null).length +
+      (archiveFilter == 'ACTIVE' ? 0 : 1);
+
+  Future<void> _details(Product product) async {
+    if (widget.repository is! SqliteProductRepository) return;
+    final edit = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => Dialog(
+        insetPadding: const EdgeInsets.all(18),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 920, maxHeight: 820),
+          child: ProductDetailsScreen(
+            product: product,
+            repository: widget.repository as SqliteProductRepository,
+            onEdit: () => Navigator.of(dialog).pop(true),
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(dialog);
-            WidgetsBinding.instance.addPostFrameCallback((_) => _form(product));
-          },
-          child: const Text('Edit'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(dialog),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
-  );
+    );
+    if (edit == true && mounted) await _form(product);
+    if (mounted) setState(_reload);
+  }
 }

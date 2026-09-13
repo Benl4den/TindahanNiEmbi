@@ -25,6 +25,8 @@ import 'utang_customer_card.dart';
 import '../../../widgets/app_search_field.dart';
 import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_alerts.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 
 class UtangCustomerScreen extends StatefulWidget {
   const UtangCustomerScreen({
@@ -125,7 +127,10 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('UTANG • Customer Accounts')),
+    appBar: AppBar(
+      title: const Text('UTANG • Customer Accounts'),
+      actions: const [HelpButton(topic: HelpTopicId.utang)],
+    ),
     body: Column(
       children: [
         Container(

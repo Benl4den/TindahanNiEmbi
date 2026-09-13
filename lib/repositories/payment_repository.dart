@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../core/formatters/number_format.dart';
 import '../models/payment_method.dart';
+import '../services/auth_service.dart';
 import 'payment_accounting_repository.dart';
 
 import '../services/app_refresh_controller.dart';
@@ -88,6 +89,7 @@ class PaymentRepository {
       'description':
           '${paymentMethod.label} payment received from ${customer.single['full_name']} — ${standardMoney(amountCentavos)}',
       'actor_role': actorRole,
+      'actor_name': CurrentActor.labelFor(actorRole),
       'related_entity_type': 'PAYMENT',
       'related_entity_id': paymentId,
       'created_at': now,

@@ -12,6 +12,8 @@ import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/operations_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/gcash_service_repository.dart';
+import 'package:tindahan_ni_embi/repositories/payment_accounting_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 import 'package:tindahan_ni_embi/services/data_integrity_service.dart';
 
@@ -65,6 +67,51 @@ void main() {
       expect(d.transactionCount, 3);
       final dates = await OperationsRepository(db).closingDates();
       expect(dates, hasLength(1));
+    },
+  );
+  test('daily closing uses stored GCash service movements and counts only fees as earnings', () async {
+    await PaymentAccountingRepository(db, actorRole: 'OWNER').addManual(
+      type: 'OPENING_BALANCE',
+      amountCentavos: 50000,
+      reason: 'Start',
+      ownerPinAuthorized: true,
+    );
+    final services = GCashServiceRepository(db);
+    await services.record(
+      type: 'CASH_IN',
+      principalCentavos: 10000,
+      feeCentavos: 500,
+      feeOption: 'DEDUCTED',
+    );
+    await services.record(
+      type: 'CASH_OUT',
+      principalCentavos: 10000,
+      feeCentavos: 500,
+      feeOption: 'ADDED',
+      physicalCashAvailabilityAcknowledged: true,
+    );
+    final daily = await OperationsRepository(db).daily(DateTime.now());
+    expect(daily.cashReceived, 10000);
+    expect(daily.cashPaid, 10000);
+    expect(daily.gcashMoneyIn, 60500);
+    expect(daily.gcashMoneyOut, 9500);
+    expect(daily.serviceFeeIncome, 1000);
+    expect(daily.totalEarnings, 1000);
+  });
+  test(
+    'closed daily summary remains frozen after later transactions',
+    () async {
+      final operations = OperationsRepository(db);
+      await CashSaleRepository(db)
+          .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      final snapshot = await operations.closeDay(DateTime.now());
+      expect(snapshot.summary.totalSales, 200);
+
+      await CashSaleRepository(db)
+          .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      expect((await operations.daily(DateTime.now())).totalSales, 400);
+      expect((await operations.summaryForDate(DateTime.now())).totalSales, 200);
+      expect(await operations.snapshotFor(DateTime.now()), isNotNull);
     },
   );
   test(

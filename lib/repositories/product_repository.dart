@@ -9,6 +9,52 @@ class InvalidProductException implements Exception {
   final String message;
 }
 
+class ProductPurchasingSummary {
+  const ProductPurchasingSummary({
+    required this.lifetimeQuantity,
+    required this.lifetimePurchasedCostCentavos,
+    required this.currentStockCostCentavos,
+    required this.potentialSalesValueCentavos,
+    required this.isOwned,
+    this.unpricedPurchaseQuantity = 0,
+  });
+  final int lifetimeQuantity;
+  final int lifetimePurchasedCostCentavos;
+  final int currentStockCostCentavos;
+  final int potentialSalesValueCentavos;
+  final bool isOwned;
+  final int unpricedPurchaseQuantity;
+  bool get hasIncompletePurchaseHistory => unpricedPurchaseQuantity > 0;
+  int get potentialGrossProfitCentavos =>
+      potentialSalesValueCentavos - currentStockCostCentavos;
+  int get averagePurchaseCostCentavos => lifetimeQuantity == 0
+      ? 0
+      : lifetimePurchasedCostCentavos ~/ lifetimeQuantity;
+}
+
+class ProductPurchaseRecord {
+  const ProductPurchaseRecord({
+    required this.quantity,
+    required this.totalCostCentavos,
+    required this.unit,
+    required this.occurredAt,
+  });
+  final int quantity, totalCostCentavos;
+  final String unit;
+  final DateTime occurredAt;
+}
+
+class ProductStockMovementRecord {
+  const ProductStockMovementRecord({
+    required this.type,
+    required this.quantityChange,
+    required this.occurredAt,
+  });
+  final String type;
+  final int quantityChange;
+  final DateTime occurredAt;
+}
+
 abstract interface class ProductRepository {
   Future<List<Product>> searchActive([String query = '']);
   Future<Product> create(ProductDraft draft);
@@ -31,6 +77,7 @@ class SqliteProductRepository implements ProductRepository {
     String archiveFilter = 'ALL',
     int? categoryId,
     String? groupCode,
+    String? ownership,
   }) async {
     final normalized = query.trim();
     final clauses = <String>[], args = <Object?>[];
@@ -49,6 +96,11 @@ class SqliteProductRepository implements ProductRepository {
         'EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code=?)',
       );
       args.add(groupCode);
+    }
+    if (ownership == 'OWNED') {
+      clauses.add(
+        "NOT EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')",
+      );
     }
     final rows = await _database.rawQuery(
       '''SELECT p.*,
@@ -76,6 +128,92 @@ class SqliteProductRepository implements ProductRepository {
           .add(row['name']! as String);
     }
     return result;
+  }
+
+  Future<ProductPurchasingSummary> purchasingSummary(Product product) async {
+    final owned = await _database.rawQuery(
+      '''SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+         WHERE m.product_id=? AND m.archived_at IS NULL AND g.code='CONSIGNMENT' LIMIT 1''',
+      [product.id],
+    );
+    if (owned.isNotEmpty) {
+      return const ProductPurchasingSummary(
+        lifetimeQuantity: 0,
+        lifetimePurchasedCostCentavos: 0,
+        currentStockCostCentavos: 0,
+        potentialSalesValueCentavos: 0,
+        isOwned: false,
+      );
+    }
+    final row = (await _database.rawQuery(
+      '''SELECT
+      COALESCE(SUM(CASE WHEN m.unit_cost_centavos IS NOT NULL THEN m.quantity_change ELSE 0 END),0) quantity,
+      COALESCE(SUM(m.unit_cost_centavos * COALESCE(m.entered_quantity,m.quantity_change)),0) cost,
+      COALESCE(SUM(CASE WHEN m.unit_cost_centavos IS NULL THEN m.quantity_change ELSE 0 END),0) unpriced_quantity
+      FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+      WHERE m.product_id=? AND t.type IN('INITIAL_STOCK','STOCK_IN')
+        AND m.quantity_change>0''',
+      [product.id],
+    )).single;
+    final quantity = row['quantity']! as int;
+    final lifetimeCost = row['cost']! as int;
+    final currentCost = quantity == 0
+        ? 0
+        : (product.currentQuantity * lifetimeCost) ~/ quantity;
+    return ProductPurchasingSummary(
+      lifetimeQuantity: quantity,
+      lifetimePurchasedCostCentavos: lifetimeCost,
+      currentStockCostCentavos: currentCost,
+      potentialSalesValueCentavos:
+          product.currentQuantity * product.sellingPriceCentavos,
+      isOwned: true,
+      unpricedPurchaseQuantity: row['unpriced_quantity']! as int,
+    );
+  }
+
+  Future<List<ProductPurchaseRecord>> purchaseHistory(int productId) async {
+    final rows = await _database.rawQuery(
+      '''SELECT m.quantity_change,m.unit_cost_centavos,
+      COALESCE(m.entered_quantity,m.quantity_change) entered_quantity,
+      COALESCE(m.entered_unit_snapshot,'unit') entered_unit,t.occurred_at
+      FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+      WHERE m.product_id=? AND t.type IN('INITIAL_STOCK','STOCK_IN')
+        AND m.quantity_change>0 AND m.unit_cost_centavos IS NOT NULL
+      ORDER BY t.occurred_at DESC,m.id DESC''',
+      [productId],
+    );
+    return rows
+        .map(
+          (row) => ProductPurchaseRecord(
+            quantity: row['entered_quantity']! as int,
+            totalCostCentavos:
+                (row['entered_quantity']! as int) *
+                (row['unit_cost_centavos']! as int),
+            unit: row['entered_unit']! as String,
+            occurredAt: DateTime.parse(row['occurred_at']! as String),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<ProductStockMovementRecord>> stockMovementHistory(
+    int productId,
+  ) async {
+    final rows = await _database.rawQuery(
+      '''SELECT t.type,m.quantity_change,t.occurred_at
+      FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+      WHERE m.product_id=? ORDER BY t.occurred_at DESC,m.id DESC''',
+      [productId],
+    );
+    return rows
+        .map(
+          (row) => ProductStockMovementRecord(
+            type: row['type']! as String,
+            quantityChange: row['quantity_change']! as int,
+            occurredAt: DateTime.parse(row['occurred_at']! as String),
+          ),
+        )
+        .toList(growable: false);
   }
 
   @override

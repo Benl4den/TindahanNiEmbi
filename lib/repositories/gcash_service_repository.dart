@@ -22,6 +22,7 @@ class GCashServiceTransaction {
     required this.status,
     required this.principalCentavos,
     required this.feeCentavos,
+    this.feeOption = 'ADDED',
     required this.customerTotalCentavos,
     required this.physicalCashChangeCentavos,
     required this.gcashChangeCentavos,
@@ -30,6 +31,7 @@ class GCashServiceTransaction {
     this.notes,
   });
   final int id, principalCentavos, feeCentavos, customerTotalCentavos;
+  final String feeOption;
   final int physicalCashChangeCentavos, gcashChangeCentavos;
   final String reference, type, status;
   final DateTime createdAt;
@@ -42,6 +44,7 @@ class GCashServiceTransaction {
         status: (row['effective_status'] ?? row['status'])! as String,
         principalCentavos: row['principal_centavos']! as int,
         feeCentavos: row['fee_centavos']! as int,
+        feeOption: (row['fee_option'] as String?) ?? 'ADDED',
         customerTotalCentavos: row['customer_total_centavos']! as int,
         physicalCashChangeCentavos:
             row['physical_cash_change_centavos']! as int,
@@ -96,6 +99,7 @@ class GCashServiceRepository {
     required String type,
     required int principalCentavos,
     required int feeCentavos,
+    String feeOption = 'ADDED',
     String? gcashReference,
     String? notes,
     bool physicalCashAvailabilityAcknowledged = false,
@@ -113,6 +117,7 @@ class GCashServiceRepository {
         if (row['service_type'] != type ||
             row['principal_centavos'] != principalCentavos ||
             row['fee_centavos'] != feeCentavos ||
+            (row['fee_option'] ?? 'ADDED') != feeOption ||
             row['gcash_reference'] !=
                 PaymentAccountingRepository.normalizeReference(
                   gcashReference,
@@ -127,7 +132,8 @@ class GCashServiceRepository {
       }
       if (!const {'CASH_IN', 'CASH_OUT'}.contains(type) ||
           principalCentavos <= 0 ||
-          feeCentavos < 0) {
+          feeCentavos < 0 ||
+          !const {'ADDED', 'DEDUCTED'}.contains(feeOption)) {
         throw const GCashServiceException(
           'Enter a valid principal and service fee.',
         );
@@ -139,11 +145,16 @@ class GCashServiceRepository {
         throw const GCashServiceException('The amount is too large.');
       }
       final now = DateTime.now().toUtc().toIso8601String();
-      // Fees are paid in physical cash for both service types.  GCash always
-      // moves only the customer's requested principal.
-      final gcashChange = type == 'CASH_IN'
-          ? -principalCentavos
-          : principalCentavos;
+      if (feeOption == 'DEDUCTED' && feeCentavos >= principalCentavos) {
+        throw const GCashServiceException(
+          'The deducted fee must be less than the amount.',
+        );
+      }
+      final customerReceives = feeOption == 'ADDED'
+          ? principalCentavos
+          : principalCentavos - feeCentavos;
+      final customerSends = feeOption == 'ADDED' ? total : principalCentavos;
+      final gcashChange = type == 'CASH_IN' ? -customerReceives : customerSends;
       if (type == 'CASH_IN') {
         final balance =
             Sqflite.firstIntValue(
@@ -152,11 +163,11 @@ class GCashServiceRepository {
               ),
             ) ??
             0;
-        if (balance < principalCentavos) {
+        if (balance < customerReceives) {
           throw GCashServiceException(
             'Insufficient GCash. Available: ${standardMoney(balance)}. '
-            'Required: ${standardMoney(principalCentavos)}. '
-            'Short: ${standardMoney(principalCentavos - balance)}.',
+            'Required: ${standardMoney(customerReceives)}. '
+            'Short: ${standardMoney(customerReceives - balance)}.',
           );
         }
       } else if (!physicalCashAvailabilityAcknowledged) {
@@ -166,19 +177,15 @@ class GCashServiceRepository {
         );
       }
       final physicalChange = type == 'CASH_IN'
-          ? total
-          : -principalCentavos + feeCentavos;
-      if (type == 'CASH_OUT' && feeCentavos >= principalCentavos) {
-        throw const GCashServiceException(
-          'Cash-Out fee must be less than the principal.',
-        );
-      }
+          ? customerSends
+          : -customerReceives;
       final id = await tx.insert('gcash_service_transactions', {
         'reference': reference,
         'service_type': type,
         'status': 'POSTED',
         'principal_centavos': principalCentavos,
         'fee_centavos': feeCentavos,
+        'fee_option': feeOption,
         'customer_total_centavos': total,
         'physical_cash_change_centavos': physicalChange,
         'gcash_change_centavos': gcashChange,
@@ -249,6 +256,7 @@ class GCashServiceRepository {
         'status': 'REVERSAL',
         'principal_centavos': row['principal_centavos'],
         'fee_centavos': row['fee_centavos'],
+        'fee_option': row['fee_option'] ?? 'ADDED',
         'customer_total_centavos': row['customer_total_centavos'],
         'physical_cash_change_centavos':
             -(row['physical_cash_change_centavos']! as int),

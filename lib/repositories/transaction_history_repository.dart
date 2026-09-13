@@ -8,9 +8,10 @@ class TransactionHistoryEntry {
     required this.amountCentavos,
     required this.occurredAt,
     required this.status,
+    required this.actor,
   });
   final int id, amountCentavos;
-  final String type, title, status;
+  final String type, title, status, actor;
   final DateTime occurredAt;
 }
 
@@ -25,12 +26,12 @@ class TransactionHistoryRepository {
   }) async {
     final rows = await db.rawQuery(
       '''SELECT * FROM (
-      SELECT s.id,'CASH' type,'Sale • '||COALESCE(sp.payment_method,'CASH') title,s.total_centavos amount,s.occurred_at occurred,s.status FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
-      UNION ALL SELECT u.id,'UTANG','UTANG • '||c.full_name,u.total_centavos,u.occurred_at,u.status FROM utang_transactions u JOIN customers c ON c.id=u.customer_id
-      UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||p.payment_method||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status FROM utang_payments p JOIN customers c ON c.id=p.customer_id
-      UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
-      UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Reversal' ELSE '' END,g.customer_total_centavos,g.created_at,g.status FROM gcash_service_transactions g
-      UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED' FROM consignment_batches b JOIN products p ON p.id=b.product_id
+      SELECT s.id,'CASH' type,'Sale • '||COALESCE(sp.payment_method,'CASH') title,s.total_centavos amount,s.occurred_at occurred,s.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) actor FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN activity_logs a ON a.related_entity_type='CASH_SALE' AND a.related_entity_id=s.id
+      UNION ALL SELECT u.id,'UTANG','UTANG • '||c.full_name,u.total_centavos,u.occurred_at,u.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_transactions u JOIN customers c ON c.id=u.customer_id LEFT JOIN activity_logs a ON a.related_entity_type='UTANG' AND a.related_entity_id=u.id
+      UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||p.payment_method||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_payments p JOIN customers c ON c.id=p.customer_id LEFT JOIN activity_logs a ON a.related_entity_type='PAYMENT' AND a.related_entity_id=p.id
+      UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id LEFT JOIN activity_logs a ON a.related_entity_type='EXPENSE' AND a.related_entity_id=e.id
+      UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Reversal' ELSE '' END,g.customer_total_centavos,g.created_at,g.status,COALESCE(g.created_by_name_snapshot,a.actor_name,CASE COALESCE(g.created_by_role_snapshot,a.actor_role) WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM gcash_service_transactions g LEFT JOIN activity_logs a ON a.related_entity_type='GCASH_SERVICE' AND a.related_entity_id=g.id
+      UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED',COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM consignment_batches b JOIN products p ON p.id=b.product_id LEFT JOIN activity_logs a ON a.related_entity_type='CONSIGNMENT' AND a.related_entity_id=b.id
     ) WHERE (?='ALL' OR type=?) AND instr(lower(title),lower(?))>0 ORDER BY occurred DESC,type,id DESC LIMIT ?''',
       [type, type, search, limit],
     );
@@ -43,6 +44,7 @@ class TransactionHistoryRepository {
             amountCentavos: x['amount']! as int,
             occurredAt: DateTime.parse(x['occurred']! as String),
             status: x['status']! as String,
+            actor: x['actor']! as String,
           ),
         )
         .toList(growable: false);

@@ -9,6 +9,32 @@ class InvalidInventoryOperation implements Exception {
   final String message;
 }
 
+class OwnedInventoryProductValue {
+  const OwnedInventoryProductValue({
+    required this.productId,
+    required this.currentStockCostCentavos,
+    required this.potentialSalesValueCentavos,
+  });
+
+  final int productId;
+  final int currentStockCostCentavos;
+  final int potentialSalesValueCentavos;
+  int get potentialGrossProfitCentavos =>
+      potentialSalesValueCentavos - currentStockCostCentavos;
+}
+
+class OwnedInventorySummary {
+  const OwnedInventorySummary({
+    required this.inventoryCostCentavos,
+    required this.potentialSalesValueCentavos,
+  });
+
+  final int inventoryCostCentavos;
+  final int potentialSalesValueCentavos;
+  int get potentialGrossProfitCentavos =>
+      potentialSalesValueCentavos - inventoryCostCentavos;
+}
+
 class InventoryRepository {
   const InventoryRepository(this._database, {this.actorRole});
   final Database _database;
@@ -30,19 +56,45 @@ class InventoryRepository {
   }
 
   Future<int> inventoryValueCentavos() async {
-    final rows = await _database.rawQuery(
-      '''SELECT COALESCE(SUM(
-           (p.current_quantity * p.purchase_price_centavos +
-             COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
-               WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)/2) /
-           COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
-             WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)
-         ), 0) value
-         FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
-           SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
-           WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
+    return (await ownedSummary()).inventoryCostCentavos;
+  }
+
+  Future<OwnedInventorySummary> ownedSummary() async {
+    final row = (await _database.rawQuery(
+      '''SELECT
+      COALESCE(SUM((p.current_quantity * p.purchase_price_centavos +
+        COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)/2) /
+        COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)),0) inventory_cost,
+      COALESCE(SUM(p.current_quantity * p.selling_price_centavos),0) potential_sales
+      FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
+        SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+        WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
+    )).single;
+    return OwnedInventorySummary(
+      inventoryCostCentavos: row['inventory_cost']! as int,
+      potentialSalesValueCentavos: row['potential_sales']! as int,
     );
-    return rows.single['value']! as int;
+  }
+
+  Future<Map<int, OwnedInventoryProductValue>> ownedProductValues() async {
+    final rows = await _database.rawQuery(
+      '''SELECT p.id,
+      (p.current_quantity * p.purchase_price_centavos +
+        COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)/2) /
+        COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1) AS stock_cost,
+      p.current_quantity * p.selling_price_centavos AS potential_sales
+      FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
+        SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+        WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
+    );
+    return {
+      for (final row in rows)
+        row['id']! as int: OwnedInventoryProductValue(
+          productId: row['id']! as int,
+          currentStockCostCentavos: row['stock_cost']! as int,
+          potentialSalesValueCentavos: row['potential_sales']! as int,
+        ),
+    };
   }
 
   Future<void> stockIn({

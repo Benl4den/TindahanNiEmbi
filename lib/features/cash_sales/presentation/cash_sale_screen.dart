@@ -17,6 +17,8 @@ import '../../../widgets/app_alerts.dart';
 import '../../../widgets/product_image.dart';
 import '../../transactions/product_selection_controller.dart';
 import 'sale_details_screen.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 
 class CashSaleScreen extends StatefulWidget {
   const CashSaleScreen({
@@ -731,7 +733,10 @@ class _State extends State<CashSaleScreen> {
     );
     if (widget.embedded) return content;
     return Scaffold(
-      appBar: AppBar(title: const Text('Sales')),
+      appBar: AppBar(
+        title: const Text('Sales'),
+        actions: const [HelpButton(topic: HelpTopicId.cashSale)],
+      ),
       body: content,
       floatingActionButton: landscape
           ? null
@@ -775,9 +780,19 @@ class _State extends State<CashSaleScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: AppSearchField(
-            hintText: 'Search products...',
-            onChanged: (v) => setState(() => search = v),
+          child: Row(
+            children: [
+              Expanded(
+                child: AppSearchField(
+                  hintText: 'Search products...',
+                  onChanged: (v) => setState(() => search = v),
+                ),
+              ),
+              if (widget.embedded) ...[
+                const SizedBox(width: 8),
+                const HelpButton(topic: HelpTopicId.cashSale),
+              ],
+            ],
           ),
         ),
         SizedBox(
@@ -1297,14 +1312,6 @@ class _State extends State<CashSaleScreen> {
                           ),
                         ),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: _showHistory,
-                          icon: const Icon(Icons.history, size: 19),
-                          label: const Text('Cash & UTANG History'),
-                        ),
-                      ),
                     ],
                   ],
                 ),
@@ -1385,7 +1392,7 @@ class _State extends State<CashSaleScreen> {
                       ],
                     ),
                     Text(
-                      '${utang ? 'UTANG • ${sale.customerName}' : 'Cash'} • ${_saleWhen(sale.occurredAt.toLocal())}',
+                      '${utang ? 'UTANG • ${sale.customerName}' : sale.paymentMethod.label} • ${_saleWhen(sale.occurredAt.toLocal())}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

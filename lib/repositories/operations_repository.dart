@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
@@ -44,6 +46,10 @@ class DailyClosingSummary {
     required this.cashOutServiceFees,
     required this.gcashServicePhysicalCashChange,
     required this.gcashServiceWalletChange,
+    required this.gcashServiceCashReceived,
+    required this.gcashServiceCashPaid,
+    required this.gcashServiceWalletReceived,
+    required this.gcashServiceWalletSent,
     required this.consignmentSales,
     required this.supplierPayable,
     required this.consignmentMargin,
@@ -76,6 +82,10 @@ class DailyClosingSummary {
       cashOutServiceFees,
       gcashServicePhysicalCashChange,
       gcashServiceWalletChange,
+      gcashServiceCashReceived,
+      gcashServiceCashPaid,
+      gcashServiceWalletReceived,
+      gcashServiceWalletSent,
       consignmentSales,
       supplierPayable,
       consignmentMargin,
@@ -85,16 +95,169 @@ class DailyClosingSummary {
   final List<Map<String, Object?>> topProducts;
   int get totalSales => cashSales + gcashSales;
   int get serviceFeeIncome => cashInServiceFees + cashOutServiceFees;
-  int get recordedCashIn =>
-      cashSales + cashPayments + gcashServicePhysicalCashChange;
-  int get netRecordedCash => recordedCashIn - cashExpenses - cashRemittances;
+  int get totalEarnings => totalSales + serviceFeeIncome;
+  int get cashReceived => cashSales + cashPayments + gcashServiceCashReceived;
+  int get cashPaid => cashExpenses + cashRemittances + gcashServiceCashPaid;
+  int get cashDifference => cashReceived - cashPaid;
+  int get gcashDifference => gcashMoneyIn - gcashMoneyOut;
+  // Retained for repository compatibility. Owner-facing UI uses the clearer
+  // received, paid out, and difference fields above.
+  int get recordedCashIn => cashReceived;
+  int get netRecordedCash => cashDifference;
   int get gcashEndingBalance =>
       gcashOpeningBalance + gcashMoneyIn - gcashMoneyOut;
+
+  Map<String, Object?> toJson() => {
+    'cashSales': cashSales,
+    'gcashSales': gcashSales,
+    'cashSaleCount': cashSaleCount,
+    'gcashSaleCount': gcashSaleCount,
+    'newUtang': newUtang,
+    'payments': payments,
+    'cashPayments': cashPayments,
+    'gcashPayments': gcashPayments,
+    'operatingExpenses': operatingExpenses,
+    'cashExpenses': cashExpenses,
+    'gcashExpenses': gcashExpenses,
+    'cashRemittances': cashRemittances,
+    'gcashRemittances': gcashRemittances,
+    'gcashOpeningBalance': gcashOpeningBalance,
+    'gcashMoneyIn': gcashMoneyIn,
+    'gcashMoneyOut': gcashMoneyOut,
+    'cashInServiceCount': cashInServiceCount,
+    'cashOutServiceCount': cashOutServiceCount,
+    'cashInServicePrincipal': cashInServicePrincipal,
+    'cashOutServicePrincipal': cashOutServicePrincipal,
+    'cashInServiceFees': cashInServiceFees,
+    'cashOutServiceFees': cashOutServiceFees,
+    'gcashServicePhysicalCashChange': gcashServicePhysicalCashChange,
+    'gcashServiceWalletChange': gcashServiceWalletChange,
+    'gcashServiceCashReceived': gcashServiceCashReceived,
+    'gcashServiceCashPaid': gcashServiceCashPaid,
+    'gcashServiceWalletReceived': gcashServiceWalletReceived,
+    'gcashServiceWalletSent': gcashServiceWalletSent,
+    'consignmentSales': consignmentSales,
+    'supplierPayable': supplierPayable,
+    'consignmentMargin': consignmentMargin,
+    'transactionCount': transactionCount,
+    'lowStock': lowStock,
+    'outOfStock': outOfStock,
+    'topProducts': topProducts,
+  };
+
+  factory DailyClosingSummary.fromJson(Map<String, dynamic> json) {
+    int value(String key) => json[key] is num ? (json[key] as num).toInt() : 0;
+    final products = (json['topProducts'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (row) => row.map<String, Object?>(
+            (key, value) => MapEntry(key.toString(), value),
+          ),
+        )
+        .toList();
+    return DailyClosingSummary(
+      cashSales: value('cashSales'),
+      gcashSales: value('gcashSales'),
+      cashSaleCount: value('cashSaleCount'),
+      gcashSaleCount: value('gcashSaleCount'),
+      newUtang: value('newUtang'),
+      payments: value('payments'),
+      cashPayments: value('cashPayments'),
+      gcashPayments: value('gcashPayments'),
+      operatingExpenses: value('operatingExpenses'),
+      cashExpenses: value('cashExpenses'),
+      gcashExpenses: value('gcashExpenses'),
+      cashRemittances: value('cashRemittances'),
+      gcashRemittances: value('gcashRemittances'),
+      gcashOpeningBalance: value('gcashOpeningBalance'),
+      gcashMoneyIn: value('gcashMoneyIn'),
+      gcashMoneyOut: value('gcashMoneyOut'),
+      cashInServiceCount: value('cashInServiceCount'),
+      cashOutServiceCount: value('cashOutServiceCount'),
+      cashInServicePrincipal: value('cashInServicePrincipal'),
+      cashOutServicePrincipal: value('cashOutServicePrincipal'),
+      cashInServiceFees: value('cashInServiceFees'),
+      cashOutServiceFees: value('cashOutServiceFees'),
+      gcashServicePhysicalCashChange: value('gcashServicePhysicalCashChange'),
+      gcashServiceWalletChange: value('gcashServiceWalletChange'),
+      gcashServiceCashReceived: value('gcashServiceCashReceived'),
+      gcashServiceCashPaid: value('gcashServiceCashPaid'),
+      gcashServiceWalletReceived: value('gcashServiceWalletReceived'),
+      gcashServiceWalletSent: value('gcashServiceWalletSent'),
+      consignmentSales: value('consignmentSales'),
+      supplierPayable: value('supplierPayable'),
+      consignmentMargin: value('consignmentMargin'),
+      transactionCount: value('transactionCount'),
+      lowStock: value('lowStock'),
+      outOfStock: value('outOfStock'),
+      topProducts: products,
+    );
+  }
+}
+
+class DailyClosingSnapshot {
+  const DailyClosingSnapshot({
+    required this.day,
+    required this.summary,
+    required this.closedAt,
+  });
+
+  final DateTime day;
+  final DailyClosingSummary summary;
+  final DateTime closedAt;
 }
 
 class OperationsRepository {
   const OperationsRepository(this.db);
   final Database db;
+
+  String _dayKey(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+
+  Future<DailyClosingSnapshot?> snapshotFor(DateTime day) async {
+    final rows = await db.query(
+      'daily_closing_snapshots',
+      where: 'closing_date=?',
+      whereArgs: [_dayKey(day)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    return DailyClosingSnapshot(
+      day: DateTime.parse(row['closing_date']! as String),
+      summary: DailyClosingSummary.fromJson(
+        jsonDecode(row['summary_json']! as String) as Map<String, dynamic>,
+      ),
+      closedAt: DateTime.parse(row['closed_at']! as String).toLocal(),
+    );
+  }
+
+  Future<DailyClosingSummary> summaryForDate(DateTime day) async =>
+      (await snapshotFor(day))?.summary ?? daily(day);
+
+  Future<DailyClosingSnapshot> closeDay(DateTime day) async {
+    final existing = await snapshotFor(day);
+    if (existing != null) return existing;
+    final summary = await daily(day);
+    final closedAt = DateTime.now();
+    try {
+      await db.insert('daily_closing_snapshots', {
+        'closing_date': _dayKey(day),
+        'summary_json': jsonEncode(summary.toJson()),
+        'closed_at': closedAt.toUtc().toIso8601String(),
+      });
+    } on DatabaseException {
+      final saved = await snapshotFor(day);
+      if (saved != null) return saved;
+      rethrow;
+    }
+    return DailyClosingSnapshot(
+      day: DateTime(day.year, day.month, day.day),
+      summary: summary,
+      closedAt: closedAt,
+    );
+  }
+
   Future<List<RestockItem>> restock({String filter = 'NEEDS'}) async {
     final rows = await db.rawQuery('''SELECT p.*,
       EXISTS(SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT') consigned,
@@ -188,7 +351,11 @@ class OperationsRepository {
       COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) ci_fees,
       COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) co_fees,
       COALESCE(SUM(physical_cash_change_centavos),0) cash_change,
-      COALESCE(SUM(gcash_change_centavos),0) wallet_change
+      COALESCE(SUM(gcash_change_centavos),0) wallet_change,
+      COALESCE(SUM(CASE WHEN physical_cash_change_centavos>0 THEN physical_cash_change_centavos ELSE 0 END),0) cash_received,
+      COALESCE(SUM(CASE WHEN physical_cash_change_centavos<0 THEN -physical_cash_change_centavos ELSE 0 END),0) cash_paid,
+      COALESCE(SUM(CASE WHEN gcash_change_centavos>0 THEN gcash_change_centavos ELSE 0 END),0) wallet_received,
+      COALESCE(SUM(CASE WHEN gcash_change_centavos<0 THEN -gcash_change_centavos ELSE 0 END),0) wallet_sent
       FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''');
     final con = await one(
       '''SELECT COALESCE(SUM(COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity)),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
@@ -233,6 +400,10 @@ class OperationsRepository {
       cashOutServiceFees: services['co_fees']! as int,
       gcashServicePhysicalCashChange: services['cash_change']! as int,
       gcashServiceWalletChange: services['wallet_change']! as int,
+      gcashServiceCashReceived: services['cash_received']! as int,
+      gcashServiceCashPaid: services['cash_paid']! as int,
+      gcashServiceWalletReceived: services['wallet_received']! as int,
+      gcashServiceWalletSent: services['wallet_sent']! as int,
       consignmentSales: con['sales']! as int,
       supplierPayable: con['payable']! as int,
       consignmentMargin: con['margin']! as int,
@@ -256,6 +427,9 @@ class OperationsRepository {
       UNION ALL SELECT occurred_at FROM utang_transactions WHERE status='POSTED'
       UNION ALL SELECT paid_at FROM utang_payments WHERE status='POSTED'
       UNION ALL SELECT expense_datetime FROM expenses WHERE status='POSTED'
+      UNION ALL SELECT remitted_at FROM consignor_remittances
+      UNION ALL SELECT created_at FROM gcash_service_transactions
+      UNION ALL SELECT closing_date FROM daily_closing_snapshots
       ORDER BY stamp DESC''');
     final days = <String, DateTime>{};
     for (final row in rows) {

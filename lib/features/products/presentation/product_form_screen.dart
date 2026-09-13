@@ -425,10 +425,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 const SizedBox(width: 16),
                               ],
                               Expanded(
-                                child: _field(
-                                  _minimum,
-                                  AppStrings.minimumStock,
-                                ),
+                                child: _field(_minimum, 'Low Stock Alert At'),
                               ),
                             ],
                           ),

@@ -7,6 +7,8 @@ import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/gcash_service_repository.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/app_refresh_controller.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 
 class GCashScreen extends StatefulWidget {
   const GCashScreen({
@@ -77,6 +79,7 @@ class _GCashScreenState extends State<GCashScreen> {
           ),
         ],
       ),
+      actions: const [HelpButton(topic: HelpTopicId.gcash)],
     ),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: _adjust,
@@ -404,10 +407,12 @@ class _GCashScreenState extends State<GCashScreen> {
       children: [
         Text('Status: ${service.status}'),
         Text(
-          'Principal: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)}',
+          'Amount: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)} (${service.feeOption == 'ADDED' ? 'Fee Added' : 'Fee Deducted'})',
         ),
         Text(
-          'Cash movement: ${standardMoney(service.physicalCashChangeCentavos)}',
+          service.type == 'CASH_IN'
+              ? 'Customer paid cash: ${standardMoney(service.physicalCashChangeCentavos.abs())} • Customer received GCash: ${standardMoney(service.gcashChangeCentavos.abs())}'
+              : 'Customer sent GCash: ${standardMoney(service.gcashChangeCentavos.abs())} • Customer received cash: ${standardMoney(service.physicalCashChangeCentavos.abs())}',
         ),
         if (service.status == 'POSTED')
           TextButton.icon(
@@ -626,6 +631,7 @@ class _GCashScreenState extends State<GCashScreen> {
     final notes = TextEditingController();
     String? error;
     var reviewing = false, saving = false, principalCents = 0, feeCents = 0;
+    var feeOption = 'ADDED';
     final route = DialogRoute<bool>(
       context: context,
       barrierDismissible: false,
@@ -659,15 +665,21 @@ class _GCashScreenState extends State<GCashScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Principal: ${standardMoney(principalCents)}'),
+                          Text('Amount: ${standardMoney(principalCents)}'),
+                          Text('Service Fee: ${standardMoney(feeCents)}'),
                           Text(
-                            'Service Fee (Cash): ${standardMoney(feeCents)}',
+                            feeOption == 'ADDED'
+                                ? 'Fee option: Fee Added'
+                                : 'Fee option: Fee Deducted',
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            type == 'CASH_IN'
-                                ? 'Customer Pays Cash: ${standardMoney(principalCents + feeCents)}\nGCash Sent: ${standardMoney(principalCents)}'
-                                : 'Customer Sends GCash: ${standardMoney(principalCents)}\nCash Given: ${standardMoney(principalCents)}\nCash Fee Received: ${standardMoney(feeCents)}',
+                            _serviceSummary(
+                              type,
+                              principalCents,
+                              feeCents,
+                              feeOption,
+                            ),
                           ),
                         ],
                       )
@@ -681,7 +693,7 @@ class _GCashScreenState extends State<GCashScreen> {
                               decimal: true,
                             ),
                             decoration: const InputDecoration(
-                              labelText: 'Principal Amount',
+                              labelText: 'Amount',
                               prefixText: '₱ ',
                             ),
                           ),
@@ -695,6 +707,25 @@ class _GCashScreenState extends State<GCashScreen> {
                               labelText: 'Service Fee',
                               prefixText: '₱ ',
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            initialValue: feeOption,
+                            decoration: const InputDecoration(
+                              labelText: 'Fee Option',
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'ADDED',
+                                child: Text('Fee Added'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'DEDUCTED',
+                                child: Text('Fee Deducted'),
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setDialog(() => feeOption = value!),
                           ),
                           const SizedBox(height: 16),
                           TextField(
@@ -745,9 +776,9 @@ class _GCashScreenState extends State<GCashScreen> {
                           if (p == null ||
                               f == null ||
                               p <= 0 ||
-                              (type == 'CASH_OUT' && f >= p)) {
+                              (feeOption == 'DEDUCTED' && f >= p)) {
                             setDialog(
-                              () => error = 'Enter a valid amount (up to two decimals). Cash-Out fee must be less than principal.',
+                              () => error = 'Enter a valid amount (up to two decimals). A deducted fee must be less than the amount.',
                             );
                             return;
                           }
@@ -768,11 +799,12 @@ class _GCashScreenState extends State<GCashScreen> {
                             }
                             if (!dialog.mounted) return;
                             setDialog(() => saving = false);
-                            if (p > available) {
+                            final needed = feeOption == 'ADDED' ? p : p - f;
+                            if (needed > available) {
                               if (dialog.mounted) {
                                 setDialog(
                                   () => error =
-                                      'Insufficient GCash Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(p)}\nShort: ${standardMoney(p - available)}',
+                                      'Insufficient GCash Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(needed)}\nShort: ${standardMoney(needed - available)}',
                                 );
                               }
                               return;
@@ -795,6 +827,7 @@ class _GCashScreenState extends State<GCashScreen> {
                             requestId: requestId,
                             principalCentavos: principalCents,
                             feeCentavos: feeCents,
+                            feeOption: feeOption,
                             gcashReference: reference.text,
                             notes: notes.text,
                             physicalCashAvailabilityAcknowledged:
@@ -832,6 +865,14 @@ class _GCashScreenState extends State<GCashScreen> {
     reference.dispose();
     notes.dispose();
     if (saved == true && mounted) setState(_reload);
+  }
+
+  String _serviceSummary(String type, int amount, int fee, String feeOption) {
+    final sent = feeOption == 'ADDED' ? amount + fee : amount;
+    final received = feeOption == 'ADDED' ? amount : amount - fee;
+    return type == 'CASH_IN'
+        ? 'Customer pays cash: ${standardMoney(sent)}\nCustomer receives GCash: ${standardMoney(received)}\nCash movement: +${standardMoney(sent)} • GCash movement: -${standardMoney(received)}\nFee income: ${standardMoney(fee)}'
+        : 'Customer sends GCash: ${standardMoney(sent)}\nCustomer receives cash: ${standardMoney(received)}\nCash movement: -${standardMoney(received)} • GCash movement: +${standardMoney(sent)}\nFee income: ${standardMoney(fee)}';
   }
 
   Future<void> _reverseService(GCashServiceTransaction service) async {

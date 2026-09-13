@@ -229,12 +229,34 @@ class _State extends State<RestockScreen> {
                           x.product.name,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
-                        subtitle: Text(
-                          'Current: ${productQuantityText(x.product, x.product.currentQuantity)}   Minimum: ${productQuantityText(x.product, x.product.minimumStockLevel)}\nSuggested Restock: +${productQuantityText(x.product, x.suggested)}${x.isConsignment ? ' • ${x.consignorName ?? 'Consignment'}' : ''}\n${out
-                              ? 'OUT OF STOCK'
-                              : low
-                              ? 'LOW STOCK'
-                              : 'IN STOCK'}',
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Current: ${productQuantityText(x.product, x.product.currentQuantity)}${x.isConsignment ? ' • ${x.consignorName ?? 'Consignment'}' : ''}',
+                            ),
+                            if (out || low)
+                              Text(
+                                out ? 'OUT OF STOCK' : 'LOW STOCK',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: low
+                                      ? [
+                                          Shadow(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .error
+                                                .withValues(alpha: .7),
+                                            blurRadius: 8,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                              )
+                            else
+                              const Text('IN STOCK'),
+                          ],
                         ),
                         trailing: FilledButton(
                           onPressed: () => stock(x),

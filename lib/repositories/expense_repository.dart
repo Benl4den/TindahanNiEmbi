@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/expense.dart';
+import '../services/auth_service.dart';
 import 'payment_accounting_repository.dart';
 import '../services/app_refresh_controller.dart';
 
@@ -109,6 +110,7 @@ class ExpenseRepository {
       'description':
           '$reference added. ${category.single['name']} — ${draft.amountCentavos} centavos',
       'actor_role': actorRole,
+      'actor_name': CurrentActor.labelFor(actorRole),
       'related_entity_type': 'EXPENSE',
       'related_entity_id': id,
       'created_at': now,

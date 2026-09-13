@@ -4,6 +4,7 @@ import '../core/formatters/number_format.dart';
 
 import '../models/utang_draft.dart';
 import '../models/payment_method.dart';
+import '../services/auth_service.dart';
 import 'consignment_allocation.dart';
 import 'payment_accounting_repository.dart';
 import '../services/app_refresh_controller.dart';
@@ -214,6 +215,7 @@ class CashSaleRepository {
       'description':
           '${paymentMethod.label} sale $reference completed — ${standardMoney(total)}',
       'actor_role': actorRole,
+      'actor_name': CurrentActor.labelFor(actorRole),
       'related_entity_type': 'CASH_SALE',
       'related_entity_id': sale,
       'created_at': now,
