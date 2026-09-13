@@ -1,5 +1,3 @@
-import '../../../widgets/brand_logo.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -183,7 +181,11 @@ class _State extends State<AuthGate> {
           return wide
               ? Stack(
                   children: [
-                    const Positioned.fill(child: _LoginBackdrop()),
+                    Positioned.fill(
+                      child: _LoginBackdrop(
+                        dark: Theme.of(context).brightness == Brightness.dark,
+                      ),
+                    ),
                     Row(
                       children: [
                         Expanded(flex: 47, child: brand),
@@ -379,8 +381,10 @@ class _State extends State<AuthGate> {
                   onPressed: backspace,
                   icon: const Icon(Icons.backspace_outlined),
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xff17211a),
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
                     elevation: 3,
                     shadowColor: Colors.black.withValues(alpha: .12),
                     shape: RoundedRectangleBorder(
@@ -407,10 +411,13 @@ class _State extends State<AuthGate> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'Your activity will be recorded securely',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54, fontSize: 13),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
           ),
         ],
       ),
@@ -441,10 +448,10 @@ class _State extends State<AuthGate> {
           ),
           Text(
             roleName,
-            style: const TextStyle(
+            style: TextStyle(
               height: 1.05,
               fontSize: 12,
-              color: Colors.black54,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -460,11 +467,16 @@ class _State extends State<AuthGate> {
       child: FilledButton(
         onPressed: () => digit(value),
         style: FilledButton.styleFrom(
-          foregroundColor: const Color(0xff17211a),
-          backgroundColor: Colors.white,
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          backgroundColor: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest,
           elevation: 3,
           shadowColor: Colors.black.withValues(alpha: .12),
-          side: const BorderSide(color: Color(0xffe1e7e2)),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.onSurface
+                .withValues(alpha: .24),
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -577,26 +589,11 @@ class _LoginBrand extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
+                Image.asset(
+                  'assets/branding/tindasari_ts_transparent.png',
                   width: 122,
                   height: 122,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xff278b50), Color(0xff0c4e2c)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(color: Colors.white54, width: 2),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 24,
-                        offset: Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: const BrandLogo(size: 122, dark: true),
+                  semanticLabel: 'TindaSari PH',
                 ),
                 const SizedBox(height: 30),
                 const FittedBox(
@@ -630,9 +627,14 @@ class _LoginBrand extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Opacity(
+                Opacity(
                   opacity: .14,
-                  child: BrandLogo(size: 150, dark: true),
+                  child: Image.asset(
+                    'assets/branding/tindasari_ts_transparent.png',
+                    width: 150,
+                    height: 150,
+                    excludeFromSemantics: true,
+                  ),
                 ),
               ],
             ),
@@ -674,19 +676,21 @@ class _LoginBrand extends StatelessWidget {
 }
 
 class _LoginBackdrop extends StatelessWidget {
-  const _LoginBackdrop();
+  const _LoginBackdrop({required this.dark});
+  final bool dark;
   @override
   Widget build(BuildContext context) =>
-      const CustomPaint(painter: _LoginBackdropPainter());
+      CustomPaint(painter: _LoginBackdropPainter(dark));
 }
 
 class _LoginBackdropPainter extends CustomPainter {
-  const _LoginBackdropPainter();
+  const _LoginBackdropPainter(this.dark);
+  final bool dark;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(
       Offset.zero & size,
-      Paint()..color = const Color(0xfff7f8f7),
+      Paint()..color = dark ? const Color(0xFF141816) : const Color(0xfff7f8f7),
     );
     final path = Path()
       ..moveTo(0, 0)
@@ -706,7 +710,8 @@ class _LoginBackdropPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _LoginBackdropPainter oldDelegate) =>
+      dark != oldDelegate.dark;
 }
 
 class _GreenPatternPainter extends CustomPainter {

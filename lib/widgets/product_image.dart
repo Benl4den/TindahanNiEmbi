@@ -19,20 +19,24 @@ class ProductImage extends StatelessWidget {
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(borderRadius),
     child: ColoredBox(
-      color: const Color(0xFFF0F3F0),
+      color: Theme.of(context).colorScheme.surfaceContainer,
       child: path.isEmpty
-          ? _placeholder()
+          ? _placeholder(context)
           : Image.file(
               File(path),
               fit: BoxFit.scaleDown,
               filterQuality: FilterQuality.medium,
               gaplessPlayback: true,
-              errorBuilder: (_, _, _) => _placeholder(),
+              errorBuilder: (_, _, _) => _placeholder(context),
             ),
     ),
   );
 
-  Widget _placeholder() => Center(
-    child: Icon(placeholderIcon, size: 42, color: const Color(0xFF7A847D)),
+  Widget _placeholder(BuildContext context) => Center(
+    child: Icon(
+      placeholderIcon,
+      size: 42,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
   );
 }

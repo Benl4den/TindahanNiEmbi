@@ -33,6 +33,8 @@ import '../../../services/product_photo_service.dart';
 import '../../../services/data_integrity_service.dart';
 import '../../../services/storage_management_service.dart';
 import '../../../services/app_refresh_controller.dart';
+import '../../../services/settings_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../activity_logs/presentation/activity_logs_screen.dart';
 import '../../backup/presentation/backup_screen.dart';
 import '../../cash_sales/presentation/cash_sale_screen.dart';
@@ -64,11 +66,13 @@ class AppShell extends StatefulWidget {
     required this.appDatabase,
     required this.role,
     required this.lock,
+    required this.onThemePreferenceChanged,
   });
   final Database database;
   final AppDatabase appDatabase;
   final UserRole role;
   final VoidCallback lock;
+  final Future<void> Function(AppThemePreference) onThemePreferenceChanged;
   @override
   State<AppShell> createState() => _State();
 }
@@ -82,6 +86,109 @@ class _State extends State<AppShell> {
   int? pendingConsignmentProductId;
   bool railExpanded = true;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
+
+  Future<void> _showAppearanceDialog() async {
+    var selectedPreference = await SettingsService(widget.database)
+        .themePreference;
+    if (!mounted) return;
+    var saving = false;
+    String? saveError;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, setDialogState) => AlertDialog(
+          scrollable: true,
+          icon: const Icon(Icons.dark_mode_outlined),
+          title: const Text('Appearance'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Choose how TindaSari PH looks.'),
+                const SizedBox(height: 12),
+                if (saveError != null)
+                  Text(
+                    saveError!,
+                    style: TextStyle(
+                      color: Theme.of(dialogContext).colorScheme.error,
+                    ),
+                  ),
+                if (saving) const LinearProgressIndicator(),
+                RadioGroup<AppThemePreference>(
+                  groupValue: selectedPreference,
+                  onChanged: (value) async {
+                    if (value == null ||
+                        saving ||
+                        value == selectedPreference) {
+                      return;
+                    }
+                    setDialogState(() {
+                      saving = true;
+                      saveError = null;
+                    });
+                    try {
+                      await widget.onThemePreferenceChanged(value);
+                      if (dialogContext.mounted) {
+                        setDialogState(() => selectedPreference = value);
+                      }
+                    } catch (_) {
+                      if (dialogContext.mounted) {
+                        setDialogState(
+                          () => saveError =
+                              'Could not save appearance. Please try again.',
+                        );
+                      }
+                    } finally {
+                      if (dialogContext.mounted) {
+                        setDialogState(() => saving = false);
+                      }
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      for (final option in AppThemePreference.values)
+                        RadioListTile<AppThemePreference>(
+                          contentPadding: EdgeInsets.zero,
+                          value: option,
+                          title: Text(switch (option) {
+                            AppThemePreference.system => 'System Default',
+                            AppThemePreference.light => 'Light',
+                            AppThemePreference.dark => 'Dark',
+                          }),
+                          subtitle: Text(switch (option) {
+                            AppThemePreference.system =>
+                              'Use your device setting',
+                            AppThemePreference.light =>
+                              'A clean and bright experience',
+                            AppThemePreference.dark =>
+                              'A focused, easy-on-the-eyes experience',
+                          }),
+                          secondary: Icon(switch (option) {
+                            AppThemePreference.system =>
+                              Icons.desktop_windows_outlined,
+                            AppThemePreference.light =>
+                              Icons.light_mode_outlined,
+                            AppThemePreference.dark => Icons.dark_mode_outlined,
+                          }),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -396,19 +503,16 @@ class _State extends State<AppShell> {
     List<int> navTargets,
     StateSetter updateSidebar,
   ) {
-    const ink = Color(0xFF15292D);
-    const mint = Color(0xFFBFE8D1);
+    final colors = Theme.of(context).colorScheme;
+    final semantic = context.semanticColors;
     Widget toggle() => IconButton.filledTonal(
       tooltip: railExpanded ? 'Collapse navigation' : 'Expand navigation',
-      style: IconButton.styleFrom(backgroundColor: const Color(0xFFD8EAE3)),
+      style: IconButton.styleFrom(backgroundColor: colors.primaryContainer),
       onPressed: () => updateSidebar(() => railExpanded = !railExpanded),
       icon: AnimatedRotation(
         turns: railExpanded ? 0 : .5,
         duration: const Duration(milliseconds: 250),
-        child: const Icon(
-          Icons.keyboard_double_arrow_left,
-          color: Color(0xFF07563D),
-        ),
+        child: Icon(Icons.keyboard_double_arrow_left, color: colors.primary),
       ),
     );
     return AnimatedContainer(
@@ -417,12 +521,12 @@ class _State extends State<AppShell> {
       width: railExpanded ? 292 : 88,
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFCFB),
+        color: semantic.sidebar,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFD8E5DF)),
-        boxShadow: const [
+        border: Border.all(color: colors.outline),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x140B4935),
+            color: Colors.black.withValues(alpha: .08),
             blurRadius: 18,
             offset: Offset(0, 5),
           ),
@@ -476,11 +580,11 @@ class _State extends State<AppShell> {
                                 padding: const EdgeInsets.fromLTRB(8, 3, 0, 9),
                                 child: Text(
                                   _navSection(target).toUpperCase(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     letterSpacing: 1,
                                     fontWeight: FontWeight.w800,
-                                    color: Color(0xFF48606A),
+                                    color: colors.onSurfaceVariant,
                                   ),
                                 ),
                               ),
@@ -490,15 +594,17 @@ class _State extends State<AppShell> {
                             child: Tooltip(
                               message: expanded ? '' : destination.label,
                               decoration: BoxDecoration(
-                                color: ink,
+                                color: colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              textStyle: const TextStyle(
-                                color: Colors.white,
+                              textStyle: TextStyle(
+                                color: colors.onSurface,
                                 fontSize: 14,
                               ),
                               child: Material(
-                                color: active ? mint : Colors.transparent,
+                                color: active
+                                    ? colors.primaryContainer
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(14),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
@@ -515,8 +621,8 @@ class _State extends State<AppShell> {
                                           data: IconThemeData(
                                             size: 27,
                                             color: active
-                                                ? const Color(0xFF07563D)
-                                                : ink,
+                                                ? colors.primary
+                                                : colors.onSurface,
                                           ),
                                           child: destination.icon,
                                         ),
@@ -532,15 +638,15 @@ class _State extends State<AppShell> {
                                                 fontWeight: active
                                                     ? FontWeight.w800
                                                     : FontWeight.w600,
-                                                color: ink,
+                                                color: colors.onSurface,
                                               ),
                                             ),
                                           ),
                                           if (active)
-                                            const Icon(
+                                            Icon(
                                               Icons.chevron_right,
                                               size: 21,
-                                              color: Color(0xFF07563D),
+                                              color: colors.primary,
                                             ),
                                           const SizedBox(width: 12),
                                         ],
@@ -559,7 +665,7 @@ class _State extends State<AppShell> {
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Material(
-                    color: const Color(0xFFDCEAE5),
+                    color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
@@ -574,14 +680,14 @@ class _State extends State<AppShell> {
                                 : MainAxisAlignment.center,
                             children: [
                               if (expanded) const SizedBox(width: 16),
-                              const Icon(
+                              Icon(
                                 Icons.lock_outline,
                                 size: 29,
-                                color: ink,
+                                color: colors.onSurface,
                               ),
                               if (expanded) ...[
                                 const SizedBox(width: 14),
-                                const Expanded(
+                                Expanded(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment:
@@ -592,20 +698,23 @@ class _State extends State<AppShell> {
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w800,
-                                          color: ink,
+                                          color: colors.onSurface,
                                         ),
                                       ),
                                       Text(
                                         'Keep your store secure',
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: Color(0xFF48606A),
+                                          color: colors.onSurfaceVariant,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.chevron_right, color: ink),
+                                Icon(
+                                  Icons.chevron_right,
+                                  color: colors.onSurface,
+                                ),
                                 const SizedBox(width: 12),
                               ],
                             ],
@@ -652,6 +761,13 @@ class _State extends State<AppShell> {
               children: [const Text('Simple to run. Built for your store.')],
             ),
           ),
+          if (owner)
+            (
+              label: 'Appearance',
+              icon: Icons.dark_mode_outlined,
+              page: null,
+              action: _showAppearanceDialog,
+            ),
           if (owner)
             (
               label: 'Managed Brands',
@@ -840,6 +956,7 @@ class _State extends State<AppShell> {
     final security = items
         .where((x) => const {'Security', 'Lock App'}.contains(x.label))
         .toList();
+    final appearance = items.where((x) => x.label == 'Appearance').toList();
     final backup = items.where((x) => x.label == 'Backup & Restore').toList();
     Widget section(
       String title,
@@ -923,10 +1040,10 @@ class _State extends State<AppShell> {
       appBar: AppBar(title: const Text('Settings')),
       body: Column(
         children: [
-          if (owner) _ownerAlerts(),
+          if (owner) SizedBox(height: 96, child: _ownerAlerts()),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.only(bottom: 32),
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
               children: [
                 section(
                   'MANAGEMENT',
@@ -938,6 +1055,12 @@ class _State extends State<AppShell> {
                   'Operational checks, reports, and audit history',
                   tools,
                 ),
+                if (owner)
+                  section(
+                    'APPEARANCE',
+                    'Choose the light, dark, or device theme',
+                    appearance,
+                  ),
                 section(
                   'SECURITY',
                   'Access controls and app locking',

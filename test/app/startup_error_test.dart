@@ -18,7 +18,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(TindahanNiEmbiApp(database: _FailingDatabase()));
       await tester.pump();
-      expect(find.text('Could not start TindahanNiEmbi'), findsOneWidget);
+      expect(find.text('Could not start TindaSari PH'), findsOneWidget);
       expect(find.text('Try Again'), findsOneWidget);
       expect(find.byType(TindahanNiEmbiApp), findsOneWidget);
     },

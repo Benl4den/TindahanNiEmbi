@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/formatters/number_format.dart';
+import '../../../core/theme/app_theme.dart';
 
 import '../../../models/customer.dart';
 
@@ -22,7 +23,7 @@ class UtangCustomerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final outstanding = customer.balanceCentavos > 0;
     final amountColor = outstanding
-        ? Colors.orange.shade800
+        ? context.semanticColors.utang
         : Theme.of(context).colorScheme.onSurfaceVariant;
     return Semantics(
       label: outstanding ? 'Outstanding UTANG' : 'Zero UTANG Balance',
@@ -32,8 +33,8 @@ class UtangCustomerCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: outstanding
-                ? const Color(0xFFEAD8BB)
-                : const Color(0xFFE3E6E1),
+                ? context.semanticColors.utang.withValues(alpha: .45)
+                : Theme.of(context).colorScheme.outline,
           ),
         ),
         child: InkWell(
@@ -45,8 +46,10 @@ class UtangCustomerCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: const Color(0xFFFFF0D8),
-                  foregroundColor: const Color(0xFF79552F),
+                  backgroundColor: context.semanticColors.utang.withValues(
+                    alpha: .18,
+                  ),
+                  foregroundColor: context.semanticColors.utang,
                   child: Text(initials),
                 ),
                 const SizedBox(width: 16),
@@ -92,8 +95,10 @@ class UtangCustomerCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: outstanding
-                            ? const Color(0xFFFFF0D8)
-                            : const Color(0xFFF0F3EF),
+                            ? context.semanticColors.utang.withValues(
+                                alpha: .18,
+                              )
+                            : Theme.of(context).colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

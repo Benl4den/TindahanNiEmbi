@@ -37,7 +37,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('TindahanNiEmbi'), findsOneWidget);
+    expect(find.text('TindaSari PH'), findsOneWidget);
     expect(find.text('Inventory'), findsWidgets);
     expect(find.text('UTANG'), findsWidgets);
     expect(find.text('Sales'), findsOneWidget);

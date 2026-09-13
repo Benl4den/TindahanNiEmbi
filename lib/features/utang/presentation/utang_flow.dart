@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../models/customer.dart';
 import '../../../models/product.dart';
 import '../../../models/product_unit.dart';
@@ -132,14 +133,15 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
           margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF3DF),
+            color: context.semanticColors.surfaceContainer,
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.menu_book_rounded,
-                color: Color(0xFF8B5B29),
+                color: context.semanticColors.utang,
                 size: 36,
               ),
               const SizedBox(width: 16),
@@ -151,8 +153,11 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                       'Tiwala, with every transaction',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const Text(
+                    Text(
                       'Your store’s UTANG notebook. Track balances, record payments, and keep accounts clear.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -188,17 +193,17 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                   _utangMetric(
                     'Total Outstanding UTANG',
                     standardMoney(total),
-                    Colors.orange.shade800,
+                    context.semanticColors.utang,
                   ),
                   _utangMetric(
                     'Customers with Balance',
                     '${owing.length}',
-                    Colors.orange.shade800,
+                    context.semanticColors.utang,
                   ),
                   _utangMetric(
                     'Paid in the Last 7 Days',
                     '$recent customers',
-                    Colors.teal.shade700,
+                    context.semanticColors.success,
                   ),
                 ],
               ),

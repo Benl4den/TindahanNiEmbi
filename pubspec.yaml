@@ -64,6 +64,7 @@ flutter:
     - assets/branding/tindasari_logo.png
     - assets/branding/tindasari_icon.png
     - assets/branding/tindasari_icon_dark.png
+    - assets/branding/tindasari_ts_transparent.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

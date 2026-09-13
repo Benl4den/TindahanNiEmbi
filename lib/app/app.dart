@@ -10,6 +10,7 @@ import '../features/security/presentation/auth_gate.dart';
 import '../features/shell/presentation/app_shell.dart';
 import '../services/auth_service.dart';
 import '../repositories/category_repository.dart';
+import '../services/settings_service.dart';
 import '../widgets/app_state_view.dart';
 
 class TindahanNiEmbiApp extends StatefulWidget {
@@ -22,6 +23,7 @@ class TindahanNiEmbiApp extends StatefulWidget {
 class _State extends State<TindahanNiEmbiApp> {
   late final AppDatabase db;
   late Future<Database> startup;
+  AppThemePreference themePreference = AppThemePreference.system;
 
   @override
   void initState() {
@@ -33,7 +35,16 @@ class _State extends State<TindahanNiEmbiApp> {
   Future<Database> _bootstrap() async {
     final database = await db.database;
     await SqliteCategoryRepository(database).ensureDefaultCategories();
+    final savedPreference = await SettingsService(database).themePreference;
+    // Rebuild MaterialApp itself; FutureBuilder only rebuilds its home subtree.
+    if (mounted) setState(() => themePreference = savedPreference);
     return database;
+  }
+
+  Future<void> _setThemePreference(AppThemePreference preference) async {
+    final database = await db.database;
+    await SettingsService(database).setThemePreference(preference);
+    if (mounted) setState(() => themePreference = preference);
   }
 
   void retryStartup() => setState(() => startup = _bootstrap());
@@ -48,6 +59,13 @@ class _State extends State<TindahanNiEmbiApp> {
     title: AppStrings.appName,
     debugShowCheckedModeBanner: false,
     theme: AppTheme.light,
+    darkTheme: AppTheme.dark,
+    themeMode: switch (themePreference) {
+      AppThemePreference.system => ThemeMode.system,
+      AppThemePreference.light => ThemeMode.light,
+      AppThemePreference.dark => ThemeMode.dark,
+    },
+    themeAnimationDuration: Duration.zero,
     home: FutureBuilder(
       future: startup,
       builder: (_, s) {
@@ -71,6 +89,7 @@ class _State extends State<TindahanNiEmbiApp> {
             appDatabase: db,
             role: role,
             lock: lock,
+            onThemePreferenceChanged: _setThemePreference,
           ),
         );
       },

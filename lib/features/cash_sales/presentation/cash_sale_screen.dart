@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/product.dart';
 import '../../../core/formatters/number_format.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../models/utang_draft.dart';
 import '../../../models/product_unit.dart';
 import '../../../models/payment_method.dart';
@@ -596,19 +597,19 @@ class _State extends State<CashSaleScreen> {
         await showDialog<void>(
           context: context,
           builder: (x) => AlertDialog(
-            title: const Column(
+            title: Column(
               children: [
                 CircleAvatar(
                   radius: 32,
-                  backgroundColor: Color(0xFFE5F3E9),
+                  backgroundColor: Theme.of(x).colorScheme.primaryContainer,
                   child: Icon(
                     Icons.check_rounded,
-                    color: Color(0xFF287443),
+                    color: x.semanticColors.success,
                     size: 40,
                   ),
                 ),
                 SizedBox(height: 16),
-                Text('Sale Completed'),
+                const Text('Sale Completed'),
               ],
             ),
             content: SizedBox(
@@ -865,7 +866,12 @@ class _State extends State<CashSaleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: ProductImage(path: p.photoPath)),
+            Expanded(
+              child: ColoredBox(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                child: ProductImage(path: p.photoPath),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -906,7 +912,7 @@ class _State extends State<CashSaleScreen> {
                           ? Colors.red.shade700
                           : low
                           ? Colors.orange.shade800
-                          : Colors.black54,
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -966,7 +972,7 @@ class _State extends State<CashSaleScreen> {
       standardNumber(value / scale);
 
   Widget _cart() => Material(
-    color: Colors.white,
+    color: Theme.of(context).colorScheme.surface,
     child: SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1011,8 +1017,8 @@ class _State extends State<CashSaleScreen> {
                 liveRegion: true,
                 child: Text(
                   _cartFeedback!,
-                  style: const TextStyle(
-                    color: Color(0xFF126343),
+                  style: TextStyle(
+                    color: context.semanticColors.success,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1022,10 +1028,22 @@ class _State extends State<CashSaleScreen> {
           const Divider(height: 1),
           Expanded(
             child: c.selectedProducts.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Your cart is empty.\nSelect products to begin a sale.',
-                      textAlign: TextAlign.center,
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.shopping_basket_outlined,
+                          size: 42,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Your cart is empty.\nSelect products to begin a sale.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
                   )
                 : Scrollbar(
@@ -1057,12 +1075,14 @@ class _State extends State<CashSaleScreen> {
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: _highlightedLine == line.key
-                                  ? const Color(0xFFB7E6C9)
-                                  : const Color(0xFFEDF7EF),
+                                  ? Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                  : context.semanticColors.surfaceContainer,
                               border: Border.all(
                                 color: _highlightedLine == line.key
-                                    ? const Color(0xFF228557)
-                                    : const Color(0xFFC4DFCD),
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outline,
                                 width: _highlightedLine == line.key ? 2 : 1,
                               ),
                               borderRadius: BorderRadius.circular(12),
