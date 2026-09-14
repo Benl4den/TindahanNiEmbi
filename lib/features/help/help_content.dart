@@ -119,11 +119,12 @@ const helpArticles = <HelpArticle>[
   HelpArticle(
     id: HelpTopicId.utang,
     group: 'Sales & UTANG',
-    title: 'MGA UTANGAN',
+    title: 'Mga Nangutang',
     icon: Icons.people_alt_outlined,
-    description: 'Keep UTANG sales and remaining balances in one place.',
+    description:
+        'Keep customer credit sales and remaining balances in one place.',
     steps: [
-      'Choose an existing customer or add a new one.',
+      'Choose an existing customer or add one with their full name, phone number, and notes.',
       'Create the UTANG sale.',
       'Review the customer balance in their account.',
     ],
@@ -209,17 +210,17 @@ const helpArticles = <HelpArticle>[
   HelpArticle(
     id: HelpTopicId.stockMovement,
     group: 'Inventory',
-    title: 'Stock In & Adjustments',
+    title: 'Stock Changes',
     icon: Icons.swap_vert_outlined,
-    description:
-        'Use this guide to understand stock changes recorded by the app.',
+    description: 'Use this guide to understand Stock Added, Stock Removed, and All Stock Changes.',
     steps: [
       'Open Restock when products need replenishing.',
-      'Use product movement history to review stock changes.',
+      'Open All Stock Changes to see the product, quantity, date, and reason for every change.',
       'Check the current quantity after a sale, restock, cancellation, or fix.',
     ],
     notes: [
       'Use an adjustment only when the actual count differs from the saved count.',
+      'Changes may come from starting stock, restocking, a sale, an adjustment, a supplier return, or a cancelled sale.',
     ],
     keywords: ['restock adjust movement stock in cancellation fix'],
   ),

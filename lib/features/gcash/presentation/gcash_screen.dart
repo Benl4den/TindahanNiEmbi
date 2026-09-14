@@ -710,6 +710,9 @@ class _GCashScreenState extends State<GCashScreen> {
                           const SizedBox(height: 16),
                           TextField(
                             controller: fee,
+                            onTap: () {
+                              if (fee.text.trim() == '0') fee.clear();
+                            },
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),

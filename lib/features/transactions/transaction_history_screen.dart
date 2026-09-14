@@ -158,100 +158,118 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               child: groups.isEmpty
                   ? const AppStateView.empty(title: 'No transactions found')
                   : ListView(
-                      children: groups.entries
-                          .take(selectedDay == null ? 5 : groups.length)
-                          .map((group) {
-                            final open = expanded.contains(group.key),
-                                day = group.value.first.occurredAt.toLocal();
-                            return Card(
-                              key: ValueKey('history-day-${group.key}'),
-                              margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
-                              child: Column(
-                                children: [
-                                  ListTile(
-                                    onTap: () => setState(
-                                      () => open
-                                          ? expanded.remove(group.key)
-                                          : expanded.add(group.key),
-                                    ),
-                                    title: Text(
-                                      MaterialLocalizations.of(context)
-                                          .formatFullDate(day),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
-                                    ),
-                                    trailing: Icon(
-                                      open
-                                          ? Icons.expand_less
-                                          : Icons.expand_more,
-                                    ),
+                      children: groups.entries.take(selectedDay == null ? 5 : groups.length).map((
+                        group,
+                      ) {
+                        final open = expanded.contains(group.key),
+                            day = group.value.first.occurredAt.toLocal();
+                        return Card(
+                          key: ValueKey('history-day-${group.key}'),
+                          margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                onTap: () => setState(
+                                  () => open
+                                      ? expanded.remove(group.key)
+                                      : expanded.add(group.key),
+                                ),
+                                title: Text(
+                                  MaterialLocalizations.of(context)
+                                      .formatFullDate(day),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
                                   ),
-                                  if (open)
-                                    Column(
-                                      children: group.value
-                                          .map(
-                                            (entry) => ExpansionTile(
-                                              key: PageStorageKey(
-                                                'transaction-${entry.type}-${entry.id}',
-                                              ),
-                                              leading: Icon(_icon(entry.type)),
-                                              title: Text(entry.title),
-                                              subtitle: Text(
-                                                standardMoney(
-                                                  entry.amountCentavos,
-                                                ),
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                              ),
-                                              children: [
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.fromLTRB(
-                                                        20,
-                                                        0,
-                                                        20,
-                                                        12,
-                                                      ),
-                                                  child: Wrap(
-                                                    spacing: 16,
-                                                    runSpacing: 8,
-                                                    crossAxisAlignment:
-                                                        WrapCrossAlignment
-                                                            .center,
-                                                    children: [
-                                                      Text(
-                                                        '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${_displayStatus(entry.status)}',
-                                                      ),
-                                                      Text('By ${entry.actor}'),
-                                                      TextButton.icon(
-                                                        onPressed: () =>
-                                                            _showDetails(entry),
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .receipt_long_outlined,
-                                                        ),
-                                                        label: const Text(
-                                                          'Open full details',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                ],
+                                ),
+                                subtitle: Text(
+                                  '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
+                                ),
+                                trailing: Icon(
+                                  open ? Icons.expand_less : Icons.expand_more,
+                                ),
                               ),
-                            );
-                          })
-                          .toList(),
+                              if (open)
+                                Column(
+                                  children: group.value
+                                      .map(
+                                        (entry) => Card(
+                                          color: _entryColor(
+                                            context,
+                                            entry.type,
+                                          ),
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
+                                          child: ExpansionTile(
+                                            key: PageStorageKey(
+                                              'transaction-${entry.type}-${entry.id}',
+                                            ),
+                                            leading: CircleAvatar(
+                                              backgroundColor: _entryAccent(
+                                                context,
+                                                entry.type,
+                                              ).withValues(alpha: .16),
+                                              child: Icon(
+                                                _icon(entry.type),
+                                                color: _entryAccent(
+                                                  context,
+                                                  entry.type,
+                                                ),
+                                              ),
+                                            ),
+                                            title: Text(entry.title),
+                                            subtitle: Text(
+                                              standardMoney(
+                                                entry.amountCentavos,
+                                              ),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                            children: [
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      20,
+                                                      0,
+                                                      20,
+                                                      12,
+                                                    ),
+                                                child: Wrap(
+                                                  spacing: 16,
+                                                  runSpacing: 8,
+                                                  crossAxisAlignment:
+                                                      WrapCrossAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${_displayStatus(entry.status)}',
+                                                    ),
+                                                    Text('By ${entry.actor}'),
+                                                    TextButton.icon(
+                                                      onPressed: () =>
+                                                          _showDetails(entry),
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .receipt_long_outlined,
+                                                      ),
+                                                      label: const Text(
+                                                        'Open full details',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
                     ),
             ),
           ],
@@ -268,6 +286,16 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     'GCASH_SERVICE' => Icons.phone_android_outlined,
     _ => Icons.inventory_2_outlined,
   };
+
+  Color _entryAccent(BuildContext context, String type) => switch (type) {
+    'EXPENSE' => Theme.of(context).colorScheme.error,
+    'UTANG' => const Color(0xFFF39C4A),
+    'GCASH_SERVICE' => Theme.of(context).colorScheme.primary,
+    _ => Theme.of(context).colorScheme.primary,
+  };
+
+  Color _entryColor(BuildContext context, String type) =>
+      _entryAccent(context, type).withValues(alpha: .055);
 
   Future<void> _showDetails(TransactionHistoryEntry entry) async {
     Map<String, Object?> details;

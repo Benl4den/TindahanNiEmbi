@@ -1617,24 +1617,52 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            x['name']! as String,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount Owed: ${money(x['payable_centavos']! as int)}',
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: () => _receive(
-                                initialProductId: x['product_id']! as int,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SizedBox(
+                                  width: 64,
+                                  height: 64,
+                                  child: ProductImage(
+                                    path: (x['photo_path'] as String?) ?? '',
+                                  ),
+                                ),
                               ),
-                              icon: const Icon(Icons.add_box_outlined),
-                              label: const Text('Receive Again'),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      x['name']! as String,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${x['consignor_name']} • ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)} remaining',
+                                    ),
+                                    Text(
+                                      'Received: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}  •  Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}',
+                                    ),
+                                    Text(
+                                      'Selling: ${money(x['selling_price_centavos']! as int)}  •  Amount owed: ${money(x['payable_centavos']! as int)}',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.icon(
+                                onPressed: () => _receive(
+                                  initialProductId: x['product_id']! as int,
+                                ),
+                                icon: const Icon(Icons.add_box_outlined),
+                                label: const Text('Receive Again'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

@@ -202,11 +202,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                   children: [
                                     CircleAvatar(
                                       radius: 27,
-                                      child: Icon(
-                                        group.code == 'SELECTA'
-                                            ? Icons.icecream_outlined
-                                            : Icons.sell_outlined,
-                                      ),
+                                      child: Icon(Icons.inventory_2_outlined),
                                     ),
                                     const SizedBox(width: 14),
                                     Expanded(

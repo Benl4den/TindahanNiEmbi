@@ -73,17 +73,9 @@ class ReportsScreen extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _open(
-                c,
-                'Stock-In History',
-                repository.movements(outgoing: false),
-              ),
-              _open(
-                c,
-                'Stock-Out History',
-                repository.movements(outgoing: true),
-              ),
-              _open(c, 'All Stock Movements', repository.movements()),
+              _open(c, 'Stock Added', repository.movements(outgoing: false)),
+              _open(c, 'Stock Removed', repository.movements(outgoing: true)),
+              _open(c, 'All Stock Changes', repository.movements()),
             ],
           ),
           const SizedBox(height: 20),
@@ -526,6 +518,10 @@ class _RowsScreen extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (_, index) {
                 final row = snapshot.data![index];
+                final movement = row['type'];
+                final isMovement =
+                    movement != null && row.containsKey('quantity_change');
+                if (isMovement) return _stockChangeTile(context, row);
                 return Card(
                   child: ListTile(
                     title: Text(
@@ -557,6 +553,52 @@ class _RowsScreen extends StatelessWidget {
           : const AppLoadingView(label: 'Loading report…'),
     ),
   );
+
+  Widget _stockChangeTile(BuildContext context, Map<String, Object?> row) {
+    final change = row['quantity_change']! as int;
+    final isAdded = change > 0;
+    final unit = baseQuantityText(
+      change.abs(),
+      baseUnitCode: row['base_unit_code'] as String? ?? 'PIECE',
+      baseUnitLabel: row['base_unit_label'] as String? ?? 'piece',
+    );
+    final cause = DisplayLabels.movement(row['type']);
+    final note = (row['notes'] as String?)?.trim();
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor:
+              (isAdded
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.error)
+                  .withValues(alpha: .13),
+          child: Icon(
+            isAdded ? Icons.add_circle_outline : Icons.remove_circle_outline,
+            color: isAdded
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.error,
+          ),
+        ),
+        title: Text('${row['name']} • $cause'),
+        subtitle: Text(
+          [
+            isAdded ? 'Added: $unit' : 'Removed: $unit',
+            if (row['occurred_at'] != null) 'When: ${row['occurred_at']}',
+            if (note != null && note.isNotEmpty) 'Note: $note',
+          ].join('\n'),
+        ),
+        trailing: Text(
+          '${isAdded ? '+' : '−'}$unit',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: isAdded
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.error,
+          ),
+        ),
+      ),
+    );
+  }
 
   String _rowLabel(String key) => switch (key) {
     'reference' => 'Reference',

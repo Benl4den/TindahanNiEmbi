@@ -29,6 +29,41 @@ class SpecialInventoryRepository {
   final Database db;
   final String? actorRole;
 
+  /// Posted sales only: cancelled and corrected originals are deliberately
+  /// excluded so this is useful as an owner-facing product history.
+  Future<List<Map<String, Object?>>> productSalesHistory(
+    int productId, {
+    DateTime? day,
+  }) async {
+    final whereDay = day == null ? '' : ' AND occurred_at>=? AND occurred_at<?';
+    final args = <Object?>[productId];
+    if (day != null) {
+      final start = DateTime(
+        day.year,
+        day.month,
+        day.day,
+      ).toUtc().toIso8601String();
+      final end = DateTime(
+        day.year,
+        day.month,
+        day.day + 1,
+      ).toUtc().toIso8601String();
+      args.addAll([start, end, productId, start, end]);
+    } else {
+      args.add(productId);
+    }
+    return db.rawQuery('''
+      SELECT occurred_at,quantity,line_total_centavos,'Cash sale' source
+      FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
+      WHERE i.product_id=? AND s.status='POSTED'$whereDay
+      UNION ALL
+      SELECT occurred_at,quantity,line_total_centavos,'UTANG sale' source
+      FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id
+      WHERE i.product_id=? AND u.status='POSTED'$whereDay
+      ORDER BY occurred_at DESC
+    ''', args);
+  }
+
   Future<List<InventoryGroup>> managedBrands() async =>
       (await db.query(
             'inventory_groups',

@@ -39,9 +39,11 @@ class LocalProductPhotoService
     try {
       final photo = await _picker.pickImage(
         source: source,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        imageQuality: 75,
+        // Smaller product photos finish encoding and saving faster while
+        // remaining more than sharp enough for a catalogue card.
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 70,
         requestFullMetadata: false,
       );
       if (photo == null) return null;

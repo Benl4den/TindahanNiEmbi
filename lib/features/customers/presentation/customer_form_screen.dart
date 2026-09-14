@@ -9,9 +9,11 @@ class CustomerFormScreen extends StatefulWidget {
     super.key,
     required this.repository,
     this.customer,
+    this.compact = false,
   });
   final CustomerRepository repository;
   final Customer? customer;
+  final bool compact;
   @override
   State<CustomerFormScreen> createState() => _CustomerFormScreenState();
 }
@@ -75,51 +77,82 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(
-        widget.customer == null ? AppStrings.newCustomer : AppStrings.edit,
-      ),
-    ),
-    body: SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Form(
-              key: _key,
-              child: Column(
-                children: [
-                  _field(0, AppStrings.name, required: true),
-                  _field(1, AppStrings.nickname),
-                  _field(2, AppStrings.phone, phone: true),
-                  _field(3, AppStrings.address),
-                  _field(4, AppStrings.customerNotes, lines: 3),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: _saving ? null : _save,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(68),
-                    ),
-                    child: const Text(AppStrings.save),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(68),
-                    ),
-                    child: const Text(AppStrings.back),
-                  ),
-                ],
+  Widget build(BuildContext context) {
+    final form = Form(
+      key: _key,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _field(0, AppStrings.name, required: true),
+          if (!widget.compact) ...[
+            _field(1, AppStrings.nickname),
+            _field(3, AppStrings.address),
+          ],
+          _field(2, AppStrings.phone, phone: true),
+          _field(4, AppStrings.customerNotes, lines: 3),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? 'Saving…' : AppStrings.save),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    if (widget.compact) {
+      return Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppStrings.newCustomer,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 20),
+                form,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.customer == null ? AppStrings.newCustomer : AppStrings.edit,
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: form,
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
+
   Widget _field(
     int i,
     String label, {

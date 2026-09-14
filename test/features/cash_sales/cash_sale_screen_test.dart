@@ -101,9 +101,7 @@ void main() {
         expect(find.text('Sales'), findsOneWidget);
         expect(
           tester
-              .widget<ChoiceChip>(
-                find.widgetWithText(ChoiceChip, 'Frequently Sold'),
-              )
+              .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'All'))
               .selected,
           isTrue,
         );

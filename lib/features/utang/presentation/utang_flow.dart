@@ -79,11 +79,10 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
         .map((customer) => customer.id)
         .toSet();
     if (!mounted) return;
-    final ok = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CustomerFormScreen(repository: widget.customers),
-      ),
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          CustomerFormScreen(repository: widget.customers, compact: true),
     );
     if (ok == true && mounted) {
       final customers = await widget.customers.searchActive();
@@ -130,7 +129,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('MGA UTANGAN'),
+      title: const Text('Mga Nangutang'),
       actions: const [HelpButton(topic: HelpTopicId.utang)],
     ),
     body: Column(

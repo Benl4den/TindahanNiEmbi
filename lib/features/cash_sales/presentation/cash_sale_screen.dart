@@ -58,7 +58,7 @@ class _State extends State<CashSaleScreen> {
   late ProductSelectionController c;
   late List<Product> products;
   String search = '';
-  String filter = 'FREQUENT';
+  String filter = 'ALL';
   bool saving = false;
   SalesHistoryEntry? lastTransaction;
   int todaySalesTotal = 0;
@@ -411,6 +411,7 @@ class _State extends State<CashSaleScreen> {
     var paymentMethod = PaymentMethod.cash;
     final saleTotal = c.totalCentavos;
     var received = (saleTotal / 100).toStringAsFixed(2);
+    final receivedController = TextEditingController(text: received);
     int receivedCents() {
       final value = double.tryParse(received) ?? 0;
       return value.isFinite && value >= 0 && value <= 90000000000
@@ -425,6 +426,7 @@ class _State extends State<CashSaleScreen> {
       barrierDismissible: false,
       builder: (x) => StatefulBuilder(
         builder: (_, setDialog) => AlertDialog(
+          scrollable: true,
           title: const Row(
             children: [
               Icon(Icons.receipt_long),
@@ -432,7 +434,7 @@ class _State extends State<CashSaleScreen> {
               Text('Review Sale'),
             ],
           ),
-          contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+          contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
           content: SizedBox(
             width: 560,
             child: Column(
@@ -466,62 +468,108 @@ class _State extends State<CashSaleScreen> {
                   ),
                 ],
                 const Divider(),
-                Flexible(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 380),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: c.lines.length,
-                      separatorBuilder: (_, _) => const Divider(height: 12),
-                      itemBuilder: (_, i) {
-                        final line = c.lines[i], p = line.product;
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    p.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                for (var i = 0; i < c.lines.length; i++) ...[
+                  if (i > 0) const Divider(height: 12),
+                  Builder(
+                    builder: (_) {
+                      final line = c.lines[i], p = line.product;
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  Text(
-                                    '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
-                                  ),
-                                ],
-                              ),
+                                ),
+                                Text(
+                                  '${line.quantityText}${line.option.id < 0 ? '' : ' ${line.option.name}'} × ${money(line.option.priceCentavos)}',
+                                ),
+                              ],
                             ),
-                            Text(
-                              money(line.lineTotalCentavos),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                          ),
+                          Text(
+                            money(line.lineTotalCentavos),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                ),
+                ],
                 const Divider(),
                 if (paymentMethod == PaymentMethod.cash)
-                  TextFormField(
-                    initialValue: received,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (value) => setDialog(() => received = value),
-                    decoration: InputDecoration(
-                      labelText: 'Amount received',
-                      prefixText: '₱ ',
-                      errorText: receivedCents() < saleTotal
-                          ? 'Amount must cover the total'
-                          : null,
-                      helperText:
-                          'Change: ${money((receivedCents() - saleTotal).clamp(0, 1 << 53))}',
-                    ),
+                  Column(
+                    children: [
+                      TextFormField(
+                        controller: receivedController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onTap: () {
+                          if (receivedController.text.isNotEmpty) {
+                            setDialog(() {
+                              receivedController.clear();
+                              received = '';
+                            });
+                          }
+                        },
+                        onChanged: (value) => setDialog(() => received = value),
+                        decoration: InputDecoration(
+                          labelText: 'Amount received',
+                          prefixText: '₱ ',
+                          errorText: receivedCents() < saleTotal
+                              ? 'Amount must cover the total'
+                              : null,
+                          helperText:
+                              'Change: ${money((receivedCents() - saleTotal).clamp(0, 1 << 53))}',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'QUICK CASH AMOUNT',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => setDialog(() {
+                              received = (saleTotal / 100).toStringAsFixed(2);
+                              receivedController.text = received;
+                            }),
+                            icon: const Icon(
+                              Icons.check_circle_outline,
+                              size: 18,
+                            ),
+                            label: const Text('Exact amount'),
+                          ),
+                          for (final cents in const [
+                            2000,
+                            5000,
+                            10000,
+                            20000,
+                            50000,
+                            100000,
+                          ])
+                            OutlinedButton(
+                              onPressed: () => setDialog(() {
+                                received = (cents / 100).toStringAsFixed(0);
+                                receivedController.text = received;
+                              }),
+                              child: Text(money(cents)),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -762,21 +810,20 @@ class _State extends State<CashSaleScreen> {
         .where((p) => p.name.toLowerCase().contains(search.toLowerCase()))
         .where(
           (p) => switch (filter) {
-            'FREQUENT' =>
-              widget.frequentProductIds.contains(p.id) ||
-                  widget.frequentProductNames.contains(p.name),
             'SELECTA' => widget.selectaProductIds.contains(p.id),
             'ALL' => true,
             _ => p.categoryId.toString() == filter,
           },
         )
         .toList();
-    if (filter == 'FREQUENT' && widget.frequentProductIds.isNotEmpty) {
-      shown.sort(
-        (a, b) => widget.frequentProductIds
-            .indexOf(a.id)
-            .compareTo(widget.frequentProductIds.indexOf(b.id)),
-      );
+    if (filter == 'ALL' && widget.frequentProductIds.isNotEmpty) {
+      shown.sort((a, b) {
+        final left = widget.frequentProductIds.indexOf(a.id);
+        final right = widget.frequentProductIds.indexOf(b.id);
+        return (left < 0 ? 1 << 30 : left).compareTo(
+          right < 0 ? 1 << 30 : right,
+        );
+      });
     }
     return Column(
       children: [
@@ -804,7 +851,6 @@ class _State extends State<CashSaleScreen> {
             scrollDirection: Axis.horizontal,
             children: [
               for (final item in <(String, String)>[
-                ('FREQUENT', 'Frequently Sold'),
                 ('ALL', 'All'),
                 if (widget.selectaProductIds.isNotEmpty) ('SELECTA', 'Selecta'),
                 ...widget.categoryNames.entries.map(

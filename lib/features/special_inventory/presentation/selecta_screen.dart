@@ -162,6 +162,79 @@ class _SelectaScreenState extends State<SelectaScreen> {
     if (saved && mounted) setState(() {});
   }
 
+  Future<void> _saleHistory(Product product) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${product.name} Sales History'),
+        content: SizedBox(
+          width: 520,
+          child: FutureBuilder<List<Map<String, Object?>>>(
+            future: widget.special.productSalesHistory(product.id),
+            builder: (_, snapshot) {
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final rows = snapshot.data!;
+              if (rows.isEmpty) {
+                return const Text(
+                  'No completed sales recorded for this product yet.',
+                );
+              }
+              final quantity = rows.fold<int>(
+                0,
+                (sum, row) => sum + (row['quantity']! as int),
+              );
+              final total = rows.fold<int>(
+                0,
+                (sum, row) => sum + (row['line_total_centavos']! as int),
+              );
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$quantity sold • ${standardMoney(total)} from ${rows.length} transaction${rows.length == 1 ? '' : 's'}',
+                  ),
+                  const Divider(),
+                  Flexible(
+                    child: ListView(
+                      children: rows
+                          .map(
+                            (row) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                '${row['source']} • ${row['quantity']} sold',
+                              ),
+                              subtitle: Text('${row['occurred_at']}'),
+                              trailing: Text(
+                                standardMoney(
+                                  row['line_total_centavos']! as int,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _remove(Product product) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -316,7 +389,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                               height: 140,
                               child: ProductImage(
                                 path: p.photoPath,
-                                placeholderIcon: Icons.icecream_outlined,
+                                placeholderIcon: Icons.inventory_2_outlined,
                               ),
                             ),
                           ),
@@ -365,6 +438,14 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                       alignment: Alignment.centerRight,
                                       child: Wrap(
                                         children: [
+                                          TextButton.icon(
+                                            onPressed: () => _saleHistory(p),
+                                            icon: const Icon(
+                                              Icons.bar_chart_outlined,
+                                              size: 18,
+                                            ),
+                                            label: const Text('Sale History'),
+                                          ),
                                           TextButton(
                                             onPressed: () => _remove(p),
                                             child: const Text('Remove'),

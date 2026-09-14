@@ -272,7 +272,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               icon: const Icon(Icons.camera_alt_outlined),
                               label: Text(
                                 _processingPhoto
-                                    ? 'Processing photo…'
+                                    ? 'Saving photo…'
                                     : _photoPath == null
                                     ? AppStrings.takePhoto
                                     : AppStrings.retakePhoto,
