@@ -8,11 +8,11 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: HelpGuideScreen()));
 
-    expect(find.text('Cash Sale'), findsOneWidget);
+    expect(find.text('Sales'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'cash in');
     await tester.pump();
 
     expect(find.text('GCash Cash-In'), findsOneWidget);
-    expect(find.text('Cash Sale'), findsNothing);
+    expect(find.text('Sales'), findsNothing);
   });
 }

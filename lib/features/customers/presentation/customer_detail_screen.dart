@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/customer.dart';
@@ -51,13 +53,7 @@ class _State extends State<CustomerDetailScreen> {
     refreshDetailsNow();
   }
 
-  String type(String x) => switch (x) {
-    'UTANG' => 'UTANG Sale',
-    'PAYMENT' => 'Payment',
-    'UTANG_REVERSAL' => 'UTANG Reversal',
-    'PAYMENT_REVERSAL' => 'Payment Reversal',
-    _ => x,
-  };
+  String type(String x) => DisplayLabels.movement(x);
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text(AppStrings.customers)),

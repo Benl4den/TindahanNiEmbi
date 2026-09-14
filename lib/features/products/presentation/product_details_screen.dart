@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/formatters/number_format.dart';
+import '../../../core/formatters/display_labels.dart';
 import '../../../models/product.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../widgets/product_image.dart';
@@ -85,7 +86,7 @@ class ProductDetailsScreen extends StatelessWidget {
                   ),
                   _metric(
                     'Current Stock Cost',
-                    standardMoney(s.currentStockCostCentavos),
+                    '${standardMoney(s.currentStockCostCentavos)}${s.hasIncompletePurchaseHistory ? ' • Estimated' : ''}',
                   ),
                   _metric(
                     'Potential Sales Value',
@@ -93,7 +94,7 @@ class ProductDetailsScreen extends StatelessWidget {
                   ),
                   _metric(
                     'Potential Gross Profit',
-                    standardMoney(s.potentialGrossProfitCentavos),
+                    '${standardMoney(s.potentialGrossProfitCentavos)}${s.hasIncompletePurchaseHistory ? ' • Estimated' : ''}',
                   ),
                 ],
               ),
@@ -110,11 +111,11 @@ class ProductDetailsScreen extends StatelessWidget {
                   ),
                   _metric(
                     'Lifetime Purchased Cost',
-                    standardMoney(s.lifetimePurchasedCostCentavos),
+                    '${standardMoney(s.lifetimePurchasedCostCentavos)}${s.hasIncompletePurchaseHistory ? ' • Estimated' : ''}',
                   ),
                   _metric(
                     'Average Purchase Cost',
-                    '${standardMoney(_displayAverage(s))}/$_averageUnit',
+                    '${standardMoney(_displayAverage(s))}/$_averageUnit${s.hasIncompletePurchaseHistory ? ' • Estimated' : ''}',
                   ),
                 ],
               ),
@@ -122,7 +123,7 @@ class ProductDetailsScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                  'Cost not recorded for ${productQuantityText(product, s.unpricedPurchaseQuantity)} of historical purchases. Lifetime cost uses recorded costs only.',
+                  'Purchase cost is missing for ${productQuantityText(product, s.unpricedPurchaseQuantity)}. The latest recorded purchase cost for this product is used as an estimate. Potential sales value is unaffected.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -232,7 +233,7 @@ class ProductDetailsScreen extends StatelessWidget {
               }
               final movement = row as ProductStockMovementRecord;
               return ListTile(
-                title: Text(movement.type.replaceAll('_', ' ')),
+                title: Text(DisplayLabels.movement(movement.type)),
                 subtitle: Text(
                   MaterialLocalizations.of(dialog)
                       .formatMediumDate(movement.occurredAt.toLocal()),

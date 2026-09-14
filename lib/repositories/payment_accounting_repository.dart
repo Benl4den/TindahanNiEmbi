@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/payment_method.dart';
 import '../services/app_refresh_controller.dart';
+import '../services/auth_service.dart';
 
 class GCashLedgerEntry {
   const GCashLedgerEntry({
@@ -288,6 +289,7 @@ class PaymentAccountingRepository {
           'event_type': 'GCASH_$type',
           'description': 'GCash $type recorded. Reason: ${reason.trim()}',
           'actor_role': actorRole,
+          'actor_name': CurrentActor.labelFor(actorRole),
           'related_entity_type': 'GCASH_LEDGER',
           'related_entity_id': id,
           'created_at': now,

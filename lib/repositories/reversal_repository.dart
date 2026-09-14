@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../services/app_refresh_controller.dart';
+import '../services/auth_service.dart';
 import 'payment_accounting_repository.dart';
 
 class ReversalException implements Exception {
@@ -314,9 +315,32 @@ class ReversalRepository {
     'utang_transaction_id': utang,
     'payment_id': payment,
     'reason': reason.trim(),
+    'actor_name': CurrentActor.labelFor(actorRole),
     'occurred_at': now,
     'created_at': now,
   });
+
+  Future<Map<String, Object?>?> cancellation({
+    int? cashSaleId,
+    int? utangTransactionId,
+    int? paymentId,
+  }) async {
+    final values = <String, Object?>{
+      'cash_sale_id': cashSaleId,
+      'utang_transaction_id': utangTransactionId,
+      'payment_id': paymentId,
+    }..removeWhere((_, value) => value == null);
+    if (values.length != 1) return null;
+    final entry = values.entries.single;
+    final rows = await db.query(
+      'transaction_reversals',
+      where: '${entry.key}=?',
+      whereArgs: [entry.value],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
+
   String _ref(int id) => 'REV-${id.toString().padLeft(6, '0')}';
   Future<void> _log(
     DatabaseExecutor tx,

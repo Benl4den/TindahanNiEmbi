@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import '../core/formatters/number_format.dart';
 
 import '../services/app_refresh_controller.dart';
+import '../services/auth_service.dart';
 import 'payment_accounting_repository.dart';
 
 class GCashServiceException implements Exception {
@@ -29,6 +30,9 @@ class GCashServiceTransaction {
     required this.createdAt,
     this.gcashReference,
     this.notes,
+    this.cancelledBy,
+    this.cancelledAt,
+    this.cancellationReason,
   });
   final int id, principalCentavos, feeCentavos, customerTotalCentavos;
   final String feeOption;
@@ -36,6 +40,8 @@ class GCashServiceTransaction {
   final String reference, type, status;
   final DateTime createdAt;
   final String? gcashReference, notes;
+  final String? cancelledBy, cancellationReason;
+  final DateTime? cancelledAt;
   factory GCashServiceTransaction.fromMap(Map<String, Object?> row) =>
       GCashServiceTransaction(
         id: row['id']! as int,
@@ -52,6 +58,11 @@ class GCashServiceTransaction {
         createdAt: DateTime.parse(row['created_at']! as String),
         gcashReference: row['gcash_reference'] as String?,
         notes: row['notes'] as String?,
+        cancelledBy: row['cancelled_by'] as String?,
+        cancelledAt: row['cancelled_at'] == null
+            ? null
+            : DateTime.parse(row['cancelled_at']! as String),
+        cancellationReason: row['cancellation_reason'] as String?,
       );
 }
 
@@ -194,6 +205,7 @@ class GCashServiceRepository {
         ),
         'notes': PaymentAccountingRepository.normalizeReference(notes),
         'created_by_role_snapshot': actorRole,
+        'created_by_name_snapshot': CurrentActor.labelFor(actorRole),
         'created_at': now,
       });
       await PaymentAccountingRepository.postGCashService(
@@ -211,6 +223,7 @@ class GCashServiceRepository {
         'description':
             'GCash ${type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} $principalCentavos centavos.',
         'actor_role': actorRole,
+        'actor_name': CurrentActor.labelFor(actorRole),
         'related_entity_type': 'GCASH_SERVICE',
         'related_entity_id': id,
         'created_at': now,
@@ -264,6 +277,7 @@ class GCashServiceRepository {
         'gcash_reference': row['gcash_reference'],
         'notes': reason.trim(),
         'created_by_role_snapshot': actorRole,
+        'created_by_name_snapshot': CurrentActor.labelFor(actorRole),
         'reversal_of_service_id': id,
         'created_at': now,
       });
@@ -283,6 +297,7 @@ class GCashServiceRepository {
         'description':
             'GCash service ${row['reference']} reversed — ${reason.trim()}',
         'actor_role': actorRole,
+        'actor_name': CurrentActor.labelFor(actorRole),
         'related_entity_type': 'GCASH_SERVICE',
         'related_entity_id': reversalId,
         'created_at': now,
@@ -299,7 +314,7 @@ class GCashServiceRepository {
 
   Future<List<GCashServiceTransaction>> recent({int limit = 50}) async =>
       (await db.rawQuery(
-        "SELECT s.*, CASE WHEN EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id) THEN 'REVERSED' ELSE s.status END effective_status FROM gcash_service_transactions s ORDER BY s.created_at DESC,s.id DESC LIMIT ?",
+        "SELECT s.*, CASE WHEN EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id) THEN 'REVERSED' ELSE s.status END effective_status, (SELECT r.created_by_name_snapshot FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_by, (SELECT r.created_at FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_at, (SELECT r.notes FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancellation_reason FROM gcash_service_transactions s ORDER BY s.created_at DESC,s.id DESC LIMIT ?",
         [limit],
       )).map(GCashServiceTransaction.fromMap).toList(growable: false);
 

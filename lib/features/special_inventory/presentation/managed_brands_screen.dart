@@ -6,6 +6,8 @@ import '../../../repositories/product_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../widgets/app_state_view.dart';
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
 import 'selecta_screen.dart';
 
 class ManagedBrandsScreen extends StatefulWidget {
@@ -34,11 +36,18 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Managed Brand'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Brand name'),
+        icon: const Icon(Icons.sell_outlined),
+        title: const Text('Add Brand'),
+        content: SizedBox(
+          width: 420,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Brand name',
+              helperText: 'Use a name that is easy to recognize.',
+            ),
+          ),
         ),
         actions: [
           TextButton(
@@ -82,7 +91,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
       title: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Managed Brands'),
+          Text('Brands'),
           Text(
             'Organize supplier and branded product groups',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
@@ -90,6 +99,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         ],
       ),
       actions: [
+        const HelpButton(topic: HelpTopicId.brands),
         Padding(
           padding: const EdgeInsets.all(8),
           child: FilledButton.icon(
@@ -105,16 +115,16 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
       builder: (_, snapshot) {
         if (snapshot.hasError) {
           return AppStateView.error(
-            title: 'Could not load managed brands',
+            title: 'Could not load brands',
             onAction: () => setState(() {}),
           );
         }
         if (!snapshot.hasData) {
-          return const AppLoadingView(label: 'Loading managed brands…');
+          return const AppLoadingView(label: 'Loading brands…');
         }
         if (snapshot.data!.isEmpty) {
           return AppStateView.empty(
-            title: 'No managed brands yet',
+            title: 'No brands yet',
             actionLabel: 'Add Brand',
             onAction: _add,
           );
@@ -131,7 +141,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${snapshot.data!.length} managed brands',
+                          '${snapshot.data!.length} brands',
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 8),

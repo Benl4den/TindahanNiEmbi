@@ -61,6 +61,7 @@ void main() {
           20,
           21,
           22,
+          23,
         ],
       );
       expect(
@@ -98,7 +99,7 @@ void main() {
     await old.close();
     final app = AppDatabase(factory: databaseFactoryFfi, databasePath: file);
     final db = await app.database;
-    expect(await db.getVersion(), 22);
+    expect(await db.getVersion(), 23);
     expect(
       (await db.query('inventory_groups')).map((x) => x['code']),
       containsAll(['SELECTA', 'CONSIGNMENT']),

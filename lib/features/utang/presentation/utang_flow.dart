@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../core/theme/app_theme.dart';
@@ -128,7 +130,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('UTANG • Customer Accounts'),
+      title: const Text('MGA UTANGAN'),
       actions: const [HelpButton(topic: HelpTopicId.utang)],
     ),
     body: Column(
@@ -155,7 +157,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Tiwala, with every transaction',
+                      'Keep every UTANG clear',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text(
@@ -1019,7 +1021,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       context: context,
       builder: (x) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
-          title: const Text('Reverse Only?'),
+          title: const Text('Cancel Payment Record?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1076,12 +1078,12 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     set(
                       () => error = e is ReversalException
                           ? e.message
-                          : 'Could not reverse payment.',
+                          : 'Could not cancel payment.',
                     );
                   }
                 }
               },
-              child: const Text('Confirm Reversal'),
+              child: const Text('Confirm Cancellation'),
             ),
           ],
         ),
@@ -1119,8 +1121,8 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
               if (relation != null)
                 Text(
                   relation['original_entity_id'] == entry.paymentId
-                      ? 'Status: CORRECTED\nCorrected by PAY-${(relation['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${relation['reason']}'
-                      : 'Status: COMPLETED — correction of PAY-${(relation['original_entity_id']! as int).toString().padLeft(6, '0')}',
+                      ? 'Status: ${DisplayLabels.status('CORRECTED')}\nUpdated Record: PAY-${(relation['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nRecorded by: ${relation['actor_name'] ?? 'Not recorded'}\nFixed at: ${relation['occurred_at']}\nReason: ${relation['reason']}'
+                      : 'Status: ${DisplayLabels.status('POSTED')} — Original Record: PAY-${(relation['original_entity_id']! as int).toString().padLeft(6, '0')}',
                 ),
             ],
           ),
@@ -1132,7 +1134,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 Navigator.pop(dialog);
                 await _correctPayment(entry, customer);
               },
-              child: const Text('Correct Transaction'),
+              child: const Text('Fix Payment Details'),
             ),
           if (relation == null)
             TextButton(
@@ -1140,7 +1142,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 Navigator.pop(dialog);
                 await _reversePayment(entry);
               },
-              child: const Text('Reverse Only'),
+              child: const Text('Cancel Payment Record'),
             ),
           FilledButton(
             onPressed: () => Navigator.pop(dialog),
@@ -1166,7 +1168,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
         builder: (_, set) {
           final cents = ((double.tryParse(amount.text) ?? 0) * 100).round();
           return AlertDialog(
-            title: const Text('Correct Transaction'),
+            title: const Text('Fix Payment Details'),
             content: SizedBox(
               width: 520,
               child: Column(
@@ -1184,7 +1186,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     ),
                     onChanged: (_) => set(() {}),
                     decoration: const InputDecoration(
-                      labelText: 'Corrected Payment',
+                      labelText: 'Updated Payment',
                       prefixText: '₱ ',
                       border: OutlineInputBorder(),
                     ),
@@ -1196,7 +1198,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                   TextField(
                     controller: reason,
                     decoration: InputDecoration(
-                      labelText: 'Correction reason',
+                      labelText: 'Reason for this fix',
                       border: const OutlineInputBorder(),
                       errorText: error,
                     ),
@@ -1243,12 +1245,12 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                               saving = false;
                               error = e is CorrectionException
                                   ? e.message
-                                  : 'Could not correct payment.';
+                                  : 'Could not save payment changes.';
                             });
                           }
                         }
                       },
-                child: const Text('Confirm Correction'),
+                child: const Text('Save Changes'),
               ),
             ],
           );
@@ -1323,7 +1325,7 @@ class UtangDetailsDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'CREDIT SALE DETAILS',
+                            'UTANG SALE DETAILS',
                             style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                           Text(
@@ -1376,7 +1378,7 @@ class UtangDetailsDialog extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'CREDIT TOTAL',
+                      'TOTAL UTANG',
                       style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                     Text(
@@ -1392,7 +1394,20 @@ class UtangDetailsDialog extends StatelessWidget {
                 _balance('Previous Balance', money(previousCentavos)),
                 _balance('Current/Resulting Balance', money(resultingCentavos)),
                 if (d['status'] == 'REVERSED')
-                  const Chip(label: Text('REVERSED')),
+                  Chip(label: Text(DisplayLabels.status('REVERSED'))),
+                if (d['status'] == 'REVERSED')
+                  FutureBuilder<Map<String, Object?>?>(
+                    future: reversals?.cancellation(
+                      utangTransactionId: transactionId,
+                    ),
+                    builder: (_, snapshot) {
+                      final cancellation = snapshot.data;
+                      if (cancellation == null) return const SizedBox.shrink();
+                      return Text(
+                        'Cancelled by: ${cancellation['actor_name'] ?? 'Not recorded'}\nCancelled at: ${cancellation['occurred_at']}\nReason: ${cancellation['reason']}',
+                      );
+                    },
+                  ),
                 if (reversals != null)
                   FutureBuilder<Map<String, Object?>?>(
                     future: CorrectionRepository(reversals!.db)
@@ -1402,8 +1417,8 @@ class UtangDetailsDialog extends StatelessWidget {
                       if (r == null) return const SizedBox.shrink();
                       return Text(
                         r['original_entity_id'] == transactionId
-                            ? 'CORRECTED by UTG-${(r['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${r['reason']}'
-                            : 'Correction of UTG-${(r['original_entity_id']! as int).toString().padLeft(6, '0')}',
+                            ? '${DisplayLabels.status('CORRECTED')} • Updated Record: UTG-${(r['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nRecorded by: ${r['actor_name'] ?? 'Not recorded'}\nFixed at: ${r['occurred_at']}\nReason: ${r['reason']}'
+                            : 'Fix for UTG-${(r['original_entity_id']! as int).toString().padLeft(6, '0')}',
                       );
                     },
                   ),
@@ -1417,7 +1432,7 @@ class UtangDetailsDialog extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: () => _correct(context, d),
                     icon: const Icon(Icons.edit_note),
-                    label: const Text('Correct Transaction'),
+                    label: const Text('Fix UTANG Sale Details'),
                   ),
                   const SizedBox(height: 10),
                   FilledButton.icon(
@@ -1432,7 +1447,7 @@ class UtangDetailsDialog extends StatelessWidget {
                         context: context,
                         builder: (x) => StatefulBuilder(
                           builder: (_, set) => AlertDialog(
-                            title: const Text('Reverse Only?'),
+                            title: const Text('Cancel UTANG Sale?'),
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1491,12 +1506,12 @@ class UtangDetailsDialog extends StatelessWidget {
                                       set(
                                         () => error = e is ReversalException
                                             ? e.message
-                                            : 'Could not reverse UTANG sale.',
+                                            : 'Could not cancel UTANG sale.',
                                       );
                                     }
                                   }
                                 },
-                                child: const Text('Confirm Reversal'),
+                                child: const Text('Confirm Cancellation'),
                               ),
                             ],
                           ),
@@ -1507,7 +1522,7 @@ class UtangDetailsDialog extends StatelessWidget {
                       }
                     },
                     icon: const Icon(Icons.undo),
-                    label: const Text('Reverse Only'),
+                    label: const Text('Cancel UTANG Sale'),
                   ),
                 ],
               ],
@@ -1554,7 +1569,7 @@ class UtangDetailsDialog extends StatelessWidget {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
-          title: const Text('Correct Transaction'),
+          title: const Text('Fix UTANG Sale Details'),
           content: SizedBox(
             width: 680,
             child: SingleChildScrollView(
@@ -1563,15 +1578,13 @@ class UtangDetailsDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ORIGINAL CREDIT SALE — ${details['reference']}\n${details['full_name']} • ${standardMoney(details['total_centavos']! as int)}',
+                    'ORIGINAL UTANG SALE — ${details['reference']}\n${details['full_name']} • ${standardMoney(details['total_centavos']! as int)}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const Divider(),
                   DropdownButtonFormField<int>(
                     initialValue: customerId,
-                    decoration: const InputDecoration(
-                      labelText: 'Correct Customer',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Customer'),
                     items: customers
                         .map(
                           (c) => DropdownMenuItem(
@@ -1614,7 +1627,7 @@ class UtangDetailsDialog extends StatelessWidget {
                           child: DropdownButtonFormField<int>(
                             initialValue: addId,
                             decoration: const InputDecoration(
-                              labelText: 'Add correct product',
+                              labelText: 'Add product',
                             ),
                             items: products
                                 .map(
@@ -1645,7 +1658,7 @@ class UtangDetailsDialog extends StatelessWidget {
                   TextField(
                     controller: reason,
                     decoration: InputDecoration(
-                      labelText: 'Correction reason',
+                      labelText: 'Reason for this fix',
                       border: const OutlineInputBorder(),
                       errorText: error,
                     ),
@@ -1708,12 +1721,12 @@ class UtangDetailsDialog extends StatelessWidget {
                             saving = false;
                             error = e is CorrectionException
                                 ? e.message
-                                : 'Could not correct UTANG sale.';
+                                : 'Could not save UTANG sale changes.';
                           });
                         }
                       }
                     },
-              child: const Text('Confirm Correction'),
+              child: const Text('Save Changes'),
             ),
           ],
         ),

@@ -38,7 +38,7 @@ class _State extends State<IntegrityScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Data Integrity')),
+    appBar: AppBar(title: const Text('Check Store Records')),
     body: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 700),
@@ -56,7 +56,7 @@ class _State extends State<IntegrityScreen> {
               FilledButton.icon(
                 onPressed: checking ? null : check,
                 icon: const Icon(Icons.fact_check),
-                label: const Text('Check Data Integrity'),
+                label: const Text('Check Store Records'),
               ),
               if (result != null) ...[
                 const SizedBox(height: 24),

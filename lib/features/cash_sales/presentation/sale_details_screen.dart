@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../core/formatters/number_format.dart';
 
 import '../../../repositories/cash_sale_repository.dart';
@@ -54,7 +56,24 @@ class SaleDetailsScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             if (d.sale.status == 'REVERSED')
-              const Chip(label: Text('REVERSED')),
+              Chip(label: Text(DisplayLabels.status(d.sale.status))),
+            if (d.sale.status == 'REVERSED')
+              FutureBuilder<Map<String, Object?>?>(
+                future: reversals?.cancellation(cashSaleId: saleId),
+                builder: (_, snapshot) {
+                  final cancellation = snapshot.data;
+                  if (cancellation == null) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: const Icon(Icons.cancel_outlined),
+                    title: Text(
+                      'Cancelled by: ${cancellation['actor_name'] ?? 'Not recorded'}',
+                    ),
+                    subtitle: Text(
+                      'Cancelled at: ${cancellation['occurred_at']}\nReason: ${cancellation['reason']}',
+                    ),
+                  );
+                },
+              ),
             FutureBuilder<Map<String, Object?>?>(
               future: CorrectionRepository(repository.db)
                   .relationship('CASH_SALE', saleId),
@@ -65,12 +84,14 @@ class SaleDetailsScreen extends StatelessWidget {
                 return ListTile(
                   leading: const Icon(Icons.rule),
                   title: Text(
-                    original ? 'CORRECTED' : 'COMPLETED — CORRECTION',
+                    original
+                        ? DisplayLabels.status('CORRECTED')
+                        : '${DisplayLabels.status('POSTED')} — Updated Record',
                   ),
                   subtitle: Text(
                     original
-                        ? 'Corrected by SALE-${(r['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${r['reason']}\n${r['occurred_at']}'
-                        : 'Correction of SALE-${(r['original_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${r['reason']}',
+                        ? 'Fixed by SALE-${(r['replacement_entity_id']! as int).toString().padLeft(6, '0')}\nRecorded by: ${r['actor_name'] ?? 'Not recorded'}\nFixed at: ${r['occurred_at']}\nReason: ${r['reason']}'
+                        : 'Fix for SALE-${(r['original_entity_id']! as int).toString().padLeft(6, '0')}\nReason: ${r['reason']}',
                   ),
                 );
               },
@@ -80,7 +101,7 @@ class SaleDetailsScreen extends StatelessWidget {
               FilledButton.icon(
                 onPressed: () => _correct(context, d),
                 icon: const Icon(Icons.edit_note),
-                label: const Text('Correct Transaction'),
+                label: const Text('Fix Sale Details'),
               ),
               const SizedBox(height: 10),
               FilledButton.icon(
@@ -89,7 +110,7 @@ class SaleDetailsScreen extends StatelessWidget {
                 ),
                 onPressed: () => _reverse(context),
                 icon: const Icon(Icons.undo),
-                label: const Text('Reverse Only'),
+                label: const Text('Cancel Sale'),
               ),
             ],
           ],
@@ -150,7 +171,7 @@ class SaleDetailsScreen extends StatelessWidget {
                             as int)),
           );
           return AlertDialog(
-            title: const Text('Correct Transaction'),
+            title: const Text('Fix Sale Details'),
             content: SizedBox(
               width: 680,
               child: SingleChildScrollView(
@@ -164,7 +185,7 @@ class SaleDetailsScreen extends StatelessWidget {
                     ),
                     const Divider(),
                     const Text(
-                      'CORRECTED',
+                      'UPDATED SALE',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     ...quantities.keys.toList().map(
@@ -233,13 +254,13 @@ class SaleDetailsScreen extends StatelessWidget {
                         ],
                       ),
                     Text(
-                      'Corrected total: ${standardMoney(total)}\nDifference: ${total - details.sale.totalCentavos >= 0 ? '+' : '-'}${standardMoney((total - details.sale.totalCentavos).abs())}',
+                      'Updated total: ${standardMoney(total)}\nDifference: ${total - details.sale.totalCentavos >= 0 ? '+' : '-'}${standardMoney((total - details.sale.totalCentavos).abs())}',
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: reason,
                       decoration: InputDecoration(
-                        labelText: 'Correction reason',
+                        labelText: 'Reason for this fix',
                         border: const OutlineInputBorder(),
                         errorText: error,
                       ),
@@ -301,12 +322,12 @@ class SaleDetailsScreen extends StatelessWidget {
                               saving = false;
                               error = e is CorrectionException
                                   ? e.message
-                                  : 'Could not correct this transaction.';
+                                  : 'Could not save these changes.';
                             });
                           }
                         }
                       },
-                child: Text(saving ? 'Saving…' : 'Confirm Correction'),
+                child: Text(saving ? 'Saving…' : 'Save Changes'),
               ),
             ],
           );
@@ -325,7 +346,7 @@ class SaleDetailsScreen extends StatelessWidget {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
-          title: const Text('Reverse Only?'),
+          title: const Text('Cancel Sale?'),
           content: SizedBox(
             width: 500,
             child: Column(
@@ -392,12 +413,12 @@ class SaleDetailsScreen extends StatelessWidget {
                             saving = false;
                             error = e is ReversalException
                                 ? e.message
-                                : 'Could not reverse this sale.';
+                                : 'Could not cancel this sale.';
                           });
                         }
                       }
                     },
-              child: const Text('Confirm Reversal'),
+              child: const Text('Confirm Cancellation'),
             ),
           ],
         ),

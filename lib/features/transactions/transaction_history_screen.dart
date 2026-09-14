@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/formatters/display_labels.dart';
+
 import '../../core/formatters/number_format.dart';
 
 import '../../repositories/transaction_history_repository.dart';
@@ -16,6 +18,7 @@ class TransactionHistoryScreen extends StatefulWidget {
 class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   String filter = 'ALL', search = '';
   int limit = 500;
+  DateTime? selectedDay;
   late Future<List<TransactionHistoryEntry>> data;
   @override
   void initState() {
@@ -27,11 +30,30 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     type: filter,
     search: search,
     limit: limit,
+    day: selectedDay,
   );
   final Set<String> expanded = {};
   String _key(DateTime value) {
     final d = value.toLocal();
     return '${d.year}-${d.month}-${d.day}';
+  }
+
+  String _displayStatus(String status) => DisplayLabels.status(status);
+
+  Future<void> _pickDay() async {
+    final day = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDate: selectedDay ?? DateTime.now(),
+    );
+    if (day != null && mounted) {
+      setState(() {
+        selectedDay = day;
+        expanded.clear();
+        reload();
+      });
+    }
   }
 
   @override
@@ -60,18 +82,47 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: TextField(
-                onChanged: (v) => setState(() {
-                  search = v;
-                  limit = 500;
-                  reload();
-                }),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search transactions...',
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) => setState(() {
+                        search = v;
+                        reload();
+                      }),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search transactions...',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    tooltip: 'Choose date',
+                    onPressed: _pickDay,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                  ),
+                ],
               ),
             ),
+            if (selectedDay != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    label: Text(
+                      MaterialLocalizations.of(context)
+                          .formatMediumDate(selectedDay!),
+                    ),
+                    onDeleted: () => setState(() {
+                      selectedDay = null;
+                      expanded.clear();
+                      reload();
+                    }),
+                  ),
+                ),
+              ),
             SizedBox(
               height: 44,
               child: ListView(
@@ -80,7 +131,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 children: [
                   for (final x in const [
                     ('ALL', 'All'),
-                    ('CASH', 'Cash'),
+                    ('CASH', 'Sales'),
                     ('UTANG', 'UTANG'),
                     ('PAYMENT', 'Payments'),
                     ('EXPENSE', 'Expenses'),
@@ -107,103 +158,102 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               child: groups.isEmpty
                   ? const AppStateView.empty(title: 'No transactions found')
                   : ListView(
-                      children: groups.entries.map((group) {
-                        final open = expanded.contains(group.key),
-                            day = group.value.first.occurredAt.toLocal();
-                        return Card(
-                          key: ValueKey('history-day-${group.key}'),
-                          margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                onTap: () => setState(
-                                  () => open
-                                      ? expanded.remove(group.key)
-                                      : expanded.add(group.key),
-                                ),
-                                title: Text(
-                                  MaterialLocalizations.of(context)
-                                      .formatFullDate(day),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
+                      children: groups.entries
+                          .take(selectedDay == null ? 5 : groups.length)
+                          .map((group) {
+                            final open = expanded.contains(group.key),
+                                day = group.value.first.occurredAt.toLocal();
+                            return Card(
+                              key: ValueKey('history-day-${group.key}'),
+                              margin: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+                              child: Column(
+                                children: [
+                                  ListTile(
+                                    onTap: () => setState(
+                                      () => open
+                                          ? expanded.remove(group.key)
+                                          : expanded.add(group.key),
+                                    ),
+                                    title: Text(
+                                      MaterialLocalizations.of(context)
+                                          .formatFullDate(day),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
+                                    ),
+                                    trailing: Icon(
+                                      open
+                                          ? Icons.expand_less
+                                          : Icons.expand_more,
+                                    ),
                                   ),
-                                ),
-                                subtitle: Text(
-                                  '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
-                                ),
-                                trailing: Icon(
-                                  open ? Icons.expand_less : Icons.expand_more,
-                                ),
-                              ),
-                              if (open)
-                                Column(
-                                  children: group.value
-                                      .map(
-                                        (entry) => ExpansionTile(
-                                          key: PageStorageKey(
-                                            'transaction-${entry.type}-${entry.id}',
-                                          ),
-                                          leading: Icon(_icon(entry.type)),
-                                          title: Text(entry.title),
-                                          subtitle: Text(
-                                            standardMoney(entry.amountCentavos),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          children: [
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.fromLTRB(
-                                                    20,
-                                                    0,
-                                                    20,
-                                                    12,
-                                                  ),
-                                              child: Wrap(
-                                                spacing: 16,
-                                                runSpacing: 8,
-                                                crossAxisAlignment:
-                                                    WrapCrossAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${entry.status}',
-                                                  ),
-                                                  Text('By ${entry.actor}'),
-                                                  TextButton.icon(
-                                                    onPressed: () =>
-                                                        _showDetails(entry),
-                                                    icon: const Icon(
-                                                      Icons
-                                                          .receipt_long_outlined,
-                                                    ),
-                                                    label: const Text(
-                                                      'Open full details',
-                                                    ),
-                                                  ),
-                                                ],
+                                  if (open)
+                                    Column(
+                                      children: group.value
+                                          .map(
+                                            (entry) => ExpansionTile(
+                                              key: PageStorageKey(
+                                                'transaction-${entry.type}-${entry.id}',
                                               ),
+                                              leading: Icon(_icon(entry.type)),
+                                              title: Text(entry.title),
+                                              subtitle: Text(
+                                                standardMoney(
+                                                  entry.amountCentavos,
+                                                ),
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                              children: [
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                        20,
+                                                        0,
+                                                        20,
+                                                        12,
+                                                      ),
+                                                  child: Wrap(
+                                                    spacing: 16,
+                                                    runSpacing: 8,
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    children: [
+                                                      Text(
+                                                        '${TimeOfDay.fromDateTime(entry.occurredAt.toLocal()).format(context)} • ${_displayStatus(entry.status)}',
+                                                      ),
+                                                      Text('By ${entry.actor}'),
+                                                      TextButton.icon(
+                                                        onPressed: () =>
+                                                            _showDetails(entry),
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .receipt_long_outlined,
+                                                        ),
+                                                        label: const Text(
+                                                          'Open full details',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
+                                          )
+                                          .toList(),
+                                    ),
+                                ],
+                              ),
+                            );
+                          })
+                          .toList(),
                     ),
             ),
-            if (snapshot.data!.length >= limit)
-              TextButton.icon(
-                onPressed: () => setState(() {
-                  limit += 500;
-                  reload();
-                }),
-                icon: const Icon(Icons.expand_more),
-                label: const Text('Load older transactions'),
-              ),
           ],
         );
       },
@@ -285,19 +335,22 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 if (entry.type == 'GCASH_SERVICE') ...[
                   Text('Reference: ${details['reference']}'),
                   Text(
-                    'Principal: ${standardMoney(details['principal_centavos']! as int)}',
+                    'Amount: ${standardMoney(details['principal_centavos']! as int)}',
                   ),
                   Text(
                     'Service fee: ${standardMoney(details['fee_centavos']! as int)}',
                   ),
                   Text(
-                    'Customer total: ${standardMoney(details['customer_total_centavos']! as int)}',
+                    'Fee Option: ${details['fee_option'] == 'ADDED' ? 'Fee Added' : 'Fee Deducted'}',
                   ),
                   Text(
-                    'Physical cash: ${standardMoney(details['physical_cash_change_centavos']! as int)}',
+                    '${entry.title.contains('Cash-In') ? 'Customer Pays Cash' : 'Customer Sends GCash'}: ${standardMoney(details['customer_total_centavos']! as int)}',
                   ),
                   Text(
-                    'GCash: ${standardMoney(details['gcash_change_centavos']! as int)}',
+                    'Cash Movement: ${standardMoney(details['physical_cash_change_centavos']! as int)}',
+                  ),
+                  Text(
+                    'GCash Movement: ${standardMoney(details['gcash_change_centavos']! as int)}',
                   ),
                   if (details['gcash_reference'] != null)
                     Text('GCash reference: ${details['gcash_reference']}'),

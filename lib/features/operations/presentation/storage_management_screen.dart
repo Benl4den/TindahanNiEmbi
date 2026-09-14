@@ -136,13 +136,13 @@ class _State extends State<StorageManagementScreen> {
                 subtitle: Text('Tablet Free Space: ${size(x.freeBytes)}'),
               ),
             ),
-            _row('SQLite Database', size(x.databaseBytes)),
+            _row('Store Records', size(x.databaseBytes)),
             _row('Product Images', size(x.imageBytes)),
             _row(
               'Local Backups',
               '${size(x.backupBytes)} • ${x.backupCount} file(s)',
             ),
-            _row('Unreferenced Images', '${x.orphanImageCount}'),
+            _row('Unused Product Images', '${x.orphanImageCount}'),
             const SizedBox(height: 18),
             Wrap(
               spacing: 12,

@@ -69,7 +69,7 @@ void main() {
       );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      expect(find.text('CREDIT SALE DETAILS'), findsOneWidget);
+      expect(find.text('UTANG SALE DETAILS'), findsOneWidget);
       expect(find.text('UTG-000009'), findsOneWidget);
       expect(find.text('Historical Coke'), findsOneWidget);
       expect(find.text('2 × ₱150.00'), findsOneWidget);
@@ -78,7 +78,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Close'));
       await tester.pumpAndSettle();
       expect(find.text('Open'), findsOneWidget);
-      expect(find.text('CREDIT SALE DETAILS'), findsNothing);
+      expect(find.text('UTANG SALE DETAILS'), findsNothing);
     },
   );
 }

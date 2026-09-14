@@ -14,9 +14,11 @@ class OwnedInventoryProductValue {
     required this.productId,
     required this.currentStockCostCentavos,
     required this.potentialSalesValueCentavos,
+    this.hasIncompletePurchaseHistory = false,
   });
 
   final int productId;
+  final bool hasIncompletePurchaseHistory;
   final int currentStockCostCentavos;
   final int potentialSalesValueCentavos;
   int get potentialGrossProfitCentavos =>
@@ -27,9 +29,11 @@ class OwnedInventorySummary {
   const OwnedInventorySummary({
     required this.inventoryCostCentavos,
     required this.potentialSalesValueCentavos,
+    this.incompleteHistoryProductCount = 0,
   });
 
   final int inventoryCostCentavos;
+  final int incompleteHistoryProductCount;
   final int potentialSalesValueCentavos;
   int get potentialGrossProfitCentavos =>
       potentialSalesValueCentavos - inventoryCostCentavos;
@@ -73,12 +77,18 @@ class InventoryRepository {
     return OwnedInventorySummary(
       inventoryCostCentavos: row['inventory_cost']! as int,
       potentialSalesValueCentavos: row['potential_sales']! as int,
+      incompleteHistoryProductCount: (await ownedProductValues()).values
+          .where((v) => v.hasIncompletePurchaseHistory)
+          .length,
     );
   }
 
   Future<Map<int, OwnedInventoryProductValue>> ownedProductValues() async {
     final rows = await _database.rawQuery(
       '''SELECT p.id,
+      EXISTS(SELECT 1 FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+        WHERE m.product_id=p.id AND t.type IN('INITIAL_STOCK','STOCK_IN')
+          AND m.quantity_change>0 AND m.unit_cost_centavos IS NULL) incomplete_history,
       (p.current_quantity * p.purchase_price_centavos +
         COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)/2) /
         COALESCE((SELECT k.base_quantity FROM product_purchase_packages k WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1) AS stock_cost,
@@ -91,6 +101,7 @@ class InventoryRepository {
       for (final row in rows)
         row['id']! as int: OwnedInventoryProductValue(
           productId: row['id']! as int,
+          hasIncompletePurchaseHistory: row['incomplete_history'] == 1,
           currentStockCostCentavos: row['stock_cost']! as int,
           potentialSalesValueCentavos: row['potential_sales']! as int,
         ),

@@ -5,6 +5,7 @@ import '../../../widgets/overview_banner.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/inventory_movement.dart';
+import '../../../core/formatters/display_labels.dart';
 import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../help/help_button.dart';
@@ -178,15 +179,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
-  String _type(String type) => switch (type) {
-    'INITIAL_STOCK' => 'Starting Stock',
-    'STOCK_IN' => 'Stock In',
-    'ADJUSTMENT_IN' => 'Adjustment In',
-    'ADJUSTMENT_OUT' => 'Adjustment Out',
-    'UTANG' => 'UTANG Sale',
-    _ => type,
-  };
-
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -297,38 +289,53 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _summaryCards(OwnedInventorySummary? summary) {
     final s = summary;
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        _summaryMetric(
-          'Inventory Cost',
-          s?.inventoryCostCentavos ?? 0,
-          Icons.inventory_2_outlined,
-        ),
-        _summaryMetric(
-          'Potential Sales Value',
-          s?.potentialSalesValueCentavos ?? 0,
-          Icons.sell_outlined,
-        ),
-        _summaryMetric(
-          'Potential Gross Profit',
-          s?.potentialGrossProfitCentavos ?? 0,
-          Icons.trending_up_outlined,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (_, box) {
+        final columns = box.maxWidth >= 900
+            ? 3
+            : box.maxWidth >= 560
+            ? 2
+            : 1;
+        final width = (box.maxWidth - (columns - 1) * 12) / columns;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _summaryMetric(
+              'Inventory Cost',
+              s?.inventoryCostCentavos ?? 0,
+              Icons.inventory_2_outlined,
+              width,
+            ),
+            _summaryMetric(
+              'Potential Sales Value',
+              s?.potentialSalesValueCentavos ?? 0,
+              Icons.sell_outlined,
+              width,
+            ),
+            _summaryMetric(
+              'Potential Gross Profit',
+              s?.potentialGrossProfitCentavos ?? 0,
+              Icons.trending_up_outlined,
+              width,
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _summaryMetric(String title, int value, IconData icon) => SizedBox(
-    width: 250,
-    child: OverviewBanner(
-      title: title,
-      value: standardMoney(value),
-      caption: 'Owned stock only',
-      icon: icon,
-    ),
-  );
+  Widget _summaryMetric(String title, int value, IconData icon, double width) =>
+      SizedBox(
+        width: width,
+        child: OverviewBanner(
+          title: title,
+          value: standardMoney(value),
+          caption: 'Owned stock only',
+          icon: icon,
+          valueFontSize: 22,
+        ),
+      );
 
   String _movementQuantity(InventoryMovement movement, int quantity) =>
       baseQuantityText(
@@ -496,7 +503,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           return ListTile(
                             title: Text(m.productName),
                             subtitle: Text(
-                              '${_type(m.type)} • ${_movementQuantity(m, m.quantityBefore)} → ${_movementQuantity(m, m.quantityAfter)}${m.notes == null || m.notes!.isEmpty ? '' : '\n${m.notes}'}',
+                              '${DisplayLabels.movement(m.type)} • ${_movementQuantity(m, m.quantityBefore)} → ${_movementQuantity(m, m.quantityAfter)}${m.notes == null || m.notes!.isEmpty ? '' : '\n${m.notes}'}',
                             ),
                             trailing: Text(
                               '${m.quantityChange > 0 ? '+' : ''}${_movementQuantity(m, m.quantityChange.abs())}',

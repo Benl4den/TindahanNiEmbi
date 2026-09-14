@@ -192,7 +192,7 @@ class _State extends State<RestockScreen> {
                       ? 'All products are sufficiently stocked'
                       : 'No products match this view',
                   message: stocked
-                      ? 'You’re ready for the next sale. Low-stock products appear here automatically when they reach their minimum stock level. Review minimum levels in Products as demand changes.'
+                      ? 'You’re ready for the next sale. Low-stock products appear here automatically when they reach their Low Stock Alert At setting. Review that setting in Products as demand changes.'
                       : 'Try another filter or search to find a product.',
                   actionLabel: 'View All Stock',
                   onAction: () => setState(() {

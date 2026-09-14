@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../models/product.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../core/theme/app_theme.dart';
@@ -1506,11 +1508,11 @@ class _State extends State<CashSaleScreen> {
                                   subtitle: Text(
                                     '${e.customerName == null ? '' : '${e.customerName} • '}${MaterialLocalizations.of(context).formatMediumDate(local)} • ${TimeOfDay.fromDateTime(local).format(context)}\n'
                                     '${e.itemCount} items • ${e.correctedById != null
-                                        ? 'CORRECTED'
+                                        ? DisplayLabels.status('CORRECTED')
                                         : e.status == 'REVERSED'
-                                        ? 'REVERSED'
-                                        : 'COMPLETED'}'
-                                    '${e.correctionOfId == null ? '' : '\nCorrection of #${e.correctionOfId}'}',
+                                        ? DisplayLabels.status('REVERSED')
+                                        : DisplayLabels.status('POSTED')}'
+                                    '${e.correctionOfId == null ? '' : '\nFix for #${e.correctionOfId}'}',
                                   ),
                                   trailing: Text(
                                     money(e.totalCentavos),
@@ -1582,16 +1584,16 @@ class _State extends State<CashSaleScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Status: ${entry.correctedById != null
-                      ? 'CORRECTED'
+                      ? DisplayLabels.status('CORRECTED')
                       : entry.status == 'REVERSED'
-                      ? 'REVERSED'
-                      : 'COMPLETED'}',
+                      ? DisplayLabels.status('REVERSED')
+                      : DisplayLabels.status('POSTED')}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 if (entry.correctedById != null)
-                  Text('Corrected by UTANG Sale #${entry.correctedById}'),
+                  Text('Fixed by UTANG Sale #${entry.correctedById}'),
                 if (entry.correctionOfId != null)
-                  Text('Correction of UTANG Sale #${entry.correctionOfId}'),
+                  Text('Fix for UTANG Sale #${entry.correctionOfId}'),
                 const Divider(),
                 ...items.map(
                   (x) => ListTile(

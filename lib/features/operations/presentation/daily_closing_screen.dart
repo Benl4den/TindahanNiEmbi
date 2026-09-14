@@ -80,13 +80,18 @@ class _State extends State<DailyClosingScreen> {
               future: widget.repository.snapshotFor(date),
               builder: (_, snapshot) => Text(
                 snapshot.data == null
-                    ? 'Live transaction summary — not a physical cash-drawer reconciliation.'
-                    : 'Closed snapshot — saved ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.data!.closedAt))}. Later corrections stay in transaction history.',
+                    ? 'Live transaction summary. It does not compare your actual cash count.'
+                    : 'Saved Daily Closing — ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.data!.closedAt))}. Later changes stay in transaction history.',
               ),
             ),
             const SizedBox(height: 16),
             OverviewBanner(
-              title: "Today's Earnings",
+              title:
+                  date.year == DateTime.now().year &&
+                      date.month == DateTime.now().month &&
+                      date.day == DateTime.now().day
+                  ? "Today's Earnings"
+                  : 'Earnings for Selected Date',
               value: m(x.totalEarnings),
               caption:
                   'Product sales ${m(x.totalSales)} • GCash fees ${m(x.serviceFeeIncome)} • ${x.transactionCount} transactions\nBefore product costs and expenses',
@@ -96,7 +101,11 @@ class _State extends State<DailyClosingScreen> {
             _section('PHYSICAL CASH', Icons.payments_outlined, [
               _metric('Cash Received', m(x.cashReceived), strong: true),
               _metric('Cash Paid Out', m(x.cashPaid), strong: true),
-              _metric('Difference', _signed(x.cashDifference), strong: true),
+              _metric(
+                'Difference (Received − Paid Out)',
+                _signed(x.cashDifference),
+                strong: true,
+              ),
               _metric('Cash Sales (${x.cashSaleCount})', '+${m(x.cashSales)}'),
               _metric('UTANG Payments in Cash', '+${m(x.cashPayments)}'),
               _metric(
@@ -106,7 +115,7 @@ class _State extends State<DailyClosingScreen> {
               _metric('GCash Cash-Out paid', '-${m(x.gcashServiceCashPaid)}'),
               _metric('Expenses paid in Cash', '-${m(x.cashExpenses)}'),
               _metric(
-                'Consignor remittances in Cash',
+                'Supplier Payments with Cash',
                 '-${m(x.cashRemittances)}',
               ),
             ]),
@@ -115,7 +124,11 @@ class _State extends State<DailyClosingScreen> {
               _metric('Starting GCash Balance', m(x.gcashOpeningBalance)),
               _metric('GCash Received', m(x.gcashMoneyIn), strong: true),
               _metric('GCash Sent', m(x.gcashMoneyOut), strong: true),
-              _metric('Difference', _signed(x.gcashDifference), strong: true),
+              _metric(
+                'Difference (Received − Sent)',
+                _signed(x.gcashDifference),
+                strong: true,
+              ),
               _metric(
                 'Expected GCash Balance',
                 m(x.gcashEndingBalance),
@@ -125,7 +138,7 @@ class _State extends State<DailyClosingScreen> {
                 'GCash Sales (${x.gcashSaleCount})',
                 '+${m(x.gcashSales)}',
               ),
-              _metric('UTANG Payments via GCash', '+${m(x.gcashPayments)}'),
+              _metric('UTANG Payments with GCash', '+${m(x.gcashPayments)}'),
               _metric(
                 'GCash Cash-Out received',
                 '+${m(x.gcashServiceWalletReceived)}',
@@ -133,7 +146,7 @@ class _State extends State<DailyClosingScreen> {
               _metric('GCash Cash-In sent', '-${m(x.gcashServiceWalletSent)}'),
               _metric('Expenses paid via GCash', '-${m(x.gcashExpenses)}'),
               _metric(
-                'Consignor remittances via GCash',
+                'Supplier Payments with GCash',
                 '-${m(x.gcashRemittances)}',
               ),
             ]),
@@ -154,14 +167,14 @@ class _State extends State<DailyClosingScreen> {
                 'Physical Cash Effect',
                 _signed(x.gcashServicePhysicalCashChange),
               ),
-              _metric('GCash Effect', _signed(x.gcashServiceWalletChange)),
+              _metric('GCash Movement', _signed(x.gcashServiceWalletChange)),
             ]),
             const SizedBox(height: 14),
             _section('NEW UTANG', Icons.people_alt_outlined, [
               _metric('New UTANG', m(x.newUtang), strong: true),
               _metric('UTANG Payments Collected', m(x.payments)),
               _metric('Paid in Cash', m(x.cashPayments)),
-              _metric('Paid via GCash', m(x.gcashPayments)),
+              _metric('Paid with GCash', m(x.gcashPayments)),
             ]),
             const SizedBox(height: 14),
             _section('EXPENSES', Icons.receipt_long_outlined, [
@@ -225,9 +238,20 @@ class _State extends State<DailyClosingScreen> {
               ),
             ),
             const Divider(height: 40),
-            Text(
-              'DAILY CLOSING HISTORY',
-              style: Theme.of(context).textTheme.headlineSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'DAILY CLOSING HISTORY',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: pick,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Choose date'),
+                ),
+              ],
             ),
             FutureBuilder<List<DateTime>>(
               future: history,
@@ -241,6 +265,7 @@ class _State extends State<DailyClosingScreen> {
                                     d.month == DateTime.now().month &&
                                     d.day == DateTime.now().day),
                           )
+                          .take(5)
                           .map(
                             (d) => Card(
                               child: ListTile(
@@ -331,7 +356,7 @@ class _State extends State<DailyClosingScreen> {
         icon: const Icon(Icons.lock_clock_outlined),
         title: const Text('Close this day?'),
         content: const Text(
-          'This saves the displayed Daily Closing summary as a read-only record. Later reversals or corrections remain visible in transaction history, but will not change this closed record.',
+          'This saves the displayed Daily Closing summary as a read-only record. Later cancellations or fixes remain visible in transaction history, but will not change this closed record.',
         ),
         actions: [
           TextButton(
@@ -428,12 +453,12 @@ class _State extends State<DailyClosingScreen> {
                 Text(
                   snapshot == null
                       ? 'Live transaction summary'
-                      : 'Closed snapshot • saved ${MaterialLocalizations.of(c).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.closedAt))}',
+                      : 'Saved Daily Closing • ${MaterialLocalizations.of(c).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.closedAt))}',
                   textAlign: TextAlign.center,
                   style: Theme.of(c).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
-                _hero("TODAY'S EARNINGS", m(summary.totalEarnings)),
+                _hero('EARNINGS FOR SELECTED DATE', m(summary.totalEarnings)),
                 const SizedBox(height: 12),
                 _section('PHYSICAL CASH', Icons.payments_outlined, [
                   _metric('Cash Received', m(summary.cashReceived)),

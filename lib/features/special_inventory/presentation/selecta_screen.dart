@@ -334,7 +334,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                 ),
                                 Text(standardMoney(p.sellingPriceCentavos)),
                                 Text(
-                                  'Stock ${productQuantityText(p, p.currentQuantity)}  •  Minimum ${productQuantityText(p, p.minimumStockLevel)}',
+                                  'Stock ${productQuantityText(p, p.currentQuantity)}',
                                 ),
                                 StatusBadge(
                                   label: out

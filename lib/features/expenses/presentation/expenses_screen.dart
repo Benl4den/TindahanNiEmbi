@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../widgets/overview_banner.dart';
 
 import '../../../core/formatters/number_format.dart';
@@ -289,11 +291,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 OverviewBanner(
                   title: expense.categoryName,
                   value: money(expense.amountCentavos),
-                  caption: '${expense.reference} • ${expense.status}',
+                  caption:
+                      '${expense.reference} • ${_displayStatus(expense.status)}',
                   icon: Icons.receipt_long_outlined,
                 ),
                 const SizedBox(height: 20),
-                _detail('Status', expense.status),
+                _detail('Status', _displayStatus(expense.status)),
                 _detail('Category', expense.categoryName),
                 _detail('Amount', money(expense.amountCentavos)),
                 _detail('Paid via', expense.paymentMethod.label),
@@ -309,10 +312,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   _detail('Reference No.', expense.referenceNo!),
                 _detail('Created', _when(expense.createdAt.toLocal())),
                 if (expense.correctedByReference != null)
-                  _detail('Corrected By', expense.correctedByReference!),
+                  _detail('Updated Record', expense.correctedByReference!),
                 if (expense.correctionOfReference != null)
-                  _detail('Correction Of', expense.correctionOfReference!),
+                  _detail('Original Record', expense.correctionOfReference!),
                 if (expense.reason != null) _detail('Reason', expense.reason!),
+                if (expense.changedByName != null)
+                  _detail(
+                    expense.status == 'REVERSED' ? 'Cancelled By' : 'Fixed By',
+                    expense.changedByName!,
+                  ),
                 if (expense.changedAt != null)
                   _detail('Changed', _when(expense.changedAt!.toLocal())),
               ],
@@ -323,12 +331,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           if (expense.status == 'POSTED')
             TextButton(
               onPressed: () => Navigator.pop(c, 'reverse'),
-              child: const Text('Reverse Only'),
+              child: const Text('Cancel Expense Record'),
             ),
           if (expense.status == 'POSTED')
             FilledButton(
               onPressed: () => Navigator.pop(c, 'correct'),
-              child: const Text('Correct Expense'),
+              child: const Text('Fix Expense Details'),
             ),
           TextButton(
             onPressed: () => Navigator.pop(c),
@@ -364,6 +372,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     ),
   );
 
+  String _displayStatus(String status) => DisplayLabels.status(status);
+
   Future<void> _reverse(Expense expense) async {
     final reason = TextEditingController(), pin = TextEditingController();
     var busy = false, error = '';
@@ -372,14 +382,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       barrierDismissible: false,
       builder: (outer) => StatefulBuilder(
         builder: (_, setLocal) => AlertDialog(
-          title: const Text('Reverse Only'),
+          title: const Text('Cancel Expense Record?'),
           content: SizedBox(
             width: 520,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'This will cancel this posted expense. The original record will remain in history.',
+                  'This will cancel this saved expense. The original record will remain in history.',
                 ),
                 TextField(
                   controller: reason,
@@ -430,12 +440,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         if (outer.mounted) {
                           setLocal(() {
                             busy = false;
-                            error = e is ExpenseException ? e.message : 'Expense could not be reversed. Please try again.';
+                            error = e is ExpenseException ? e.message : 'Expense could not be cancelled. Please try again.';
                           });
                         }
                       }
                     },
-              child: Text(busy ? 'Reversing…' : 'Confirm Reverse'),
+              child: Text(busy ? 'Cancelling…' : 'Confirm Cancellation'),
             ),
           ],
         ),
@@ -524,7 +534,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.original == null ? 'Add Expense' : 'Correct Expense'),
+    title: Text(
+      widget.original == null ? 'Add Expense' : 'Fix Expense Details',
+    ),
     content: SizedBox(
       width: 650,
       child: SingleChildScrollView(
@@ -610,7 +622,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             if (widget.original != null) ...[
               Card(
                 child: ListTile(
-                  title: const Text('CORRECTED'),
+                  title: const Text('FIXED'),
                   subtitle: Text(
                     'New amount: ${standardMoney(cents ?? 0)}\nDifference: ${_difference()}',
                   ),
@@ -619,7 +631,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               TextField(
                 controller: reason,
                 decoration: const InputDecoration(
-                  labelText: 'Correction reason',
+                  labelText: 'Reason for this fix',
                 ),
               ),
               TextField(

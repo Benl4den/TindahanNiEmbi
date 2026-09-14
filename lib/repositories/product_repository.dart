@@ -147,8 +147,14 @@ class SqliteProductRepository implements ProductRepository {
     }
     final row = (await _database.rawQuery(
       '''SELECT
-      COALESCE(SUM(CASE WHEN m.unit_cost_centavos IS NOT NULL THEN m.quantity_change ELSE 0 END),0) quantity,
-      COALESCE(SUM(m.unit_cost_centavos * COALESCE(m.entered_quantity,m.quantity_change)),0) cost,
+      COALESCE(SUM(m.quantity_change),0) quantity,
+      COALESCE(SUM(COALESCE(m.unit_cost_centavos,(
+        SELECT recent.unit_cost_centavos FROM inventory_movements recent
+        JOIN inventory_transactions recent_t ON recent_t.id=recent.inventory_transaction_id
+        WHERE recent.product_id=m.product_id AND recent_t.type IN('INITIAL_STOCK','STOCK_IN')
+          AND recent.quantity_change>0 AND recent.unit_cost_centavos IS NOT NULL
+        ORDER BY recent_t.occurred_at DESC,recent.id DESC LIMIT 1
+      )) * COALESCE(m.entered_quantity,m.quantity_change)),0) cost,
       COALESCE(SUM(CASE WHEN m.unit_cost_centavos IS NULL THEN m.quantity_change ELSE 0 END),0) unpriced_quantity
       FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
       WHERE m.product_id=? AND t.type IN('INITIAL_STOCK','STOCK_IN')

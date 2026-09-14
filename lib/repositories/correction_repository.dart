@@ -204,7 +204,7 @@ class CorrectionRepository {
 
   Future<Map<String, Object?>?> relationship(String type, int id) async {
     final rows = await db.rawQuery(
-      '''SELECT c.*,r.reference reversal_reference,r.occurred_at reversal_at
+      '''SELECT c.*,r.reference reversal_reference,r.occurred_at reversal_at,r.actor_name
       FROM transaction_corrections c JOIN transaction_reversals r ON r.id=c.transaction_reversal_id
       WHERE c.entity_type=? AND (c.original_entity_id=? OR c.replacement_entity_id=?) LIMIT 1''',
       [type, id, id],

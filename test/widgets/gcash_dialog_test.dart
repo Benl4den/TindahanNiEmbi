@@ -157,17 +157,17 @@ void main() {
       await tester.ensureVisible(serviceTile);
       await tester.tap(serviceTile);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Reverse service'));
-      await tester.tap(find.text('Reverse service'));
+      await tester.ensureVisible(find.text('Cancel service record'));
+      await tester.tap(find.text('Cancel service record'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Mistake');
       await tester.enterText(find.byType(TextField).last, '1234');
       tester.view.viewInsets = const FakeViewPadding(bottom: 220);
       addTearDown(tester.view.resetViewInsets);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reverse'));
+      await tester.tap(find.text('Confirm Cancellation'));
       await tester.pumpAndSettle();
-      expect(find.text('Reverse GCash Service'), findsNothing);
+      expect(find.text('Cancel GCash Service Record'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

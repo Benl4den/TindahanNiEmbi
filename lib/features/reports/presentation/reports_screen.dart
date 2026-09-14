@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../core/formatters/number_format.dart';
 import '../../../repositories/reports_repository.dart';
 import '../../../widgets/app_state_view.dart';
@@ -152,7 +154,7 @@ class ReportsScreen extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _open(c, 'UTANGAN Ledger', repository.customerLedger()),
+              _open(c, 'UTANG Sales & Payments', repository.customerLedger()),
               _open(c, 'UTANG History', repository.utangHistory()),
               _open(c, 'Payment History', repository.paymentHistory()),
             ],
@@ -205,7 +207,7 @@ class ReportsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'GCash Service Income',
+              'GCash Services • All Time',
               style: Theme.of(c).textTheme.titleLarge,
             ),
             FutureBuilder<Map<String, Object?>>(
@@ -233,10 +235,7 @@ class ReportsScreen extends StatelessWidget {
                         g['cash_out_principal']! as int,
                       ),
                     ),
-                    SizedBox(
-                      width: 280,
-                      child: _total('Service Fee Income', fees),
-                    ),
+                    SizedBox(width: 280, child: _total('Fees Earned', fees)),
                   ],
                 );
               },
@@ -379,7 +378,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
         children: [
           _expenseIntro(
             context,
-            'Operating Expenses',
+            'Expenses',
             standardMoney(total),
             '$count recorded ${count == 1 ? 'expense' : 'expenses'} for the selected period',
             Icons.receipt_long_outlined,
@@ -431,7 +430,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
             ],
           ),
           const SizedBox(height: 12),
-          _total('Total Operating Expenses', total),
+          _total('Total Expenses', total),
           _total('Largest Expense', summary['largest']! as int),
           ListTile(
             title: const Text('Expense Count'),
@@ -532,8 +531,9 @@ class _RowsScreen extends StatelessWidget {
                     title: Text(
                       (row['name'] ??
                               row['full_name'] ??
-                              row['type'] ??
-                              row['entry_type'])
+                              DisplayLabels.movement(
+                                row['type'] ?? row['entry_type'],
+                              ))
                           .toString(),
                     ),
                     subtitle: Text(
@@ -566,6 +566,9 @@ class _RowsScreen extends StatelessWidget {
     'balance' => 'Balance',
     'notes' => 'Notes',
     'type' || 'entry_type' => 'Type',
+    'payment_method' => 'Paid with',
+    'gcash_reference' => 'GCash Reference',
+    'status' => 'Status',
     _ => key.replaceAll('_', ' '),
   };
 
@@ -574,6 +577,18 @@ class _RowsScreen extends StatelessWidget {
       final value = entry.value! as int;
       final sign = value < 0 ? '-' : '';
       return '$sign${baseQuantityText(value.abs(), baseUnitCode: row['base_unit_code'] as String? ?? 'PIECE', baseUnitLabel: row['base_unit_label'] as String? ?? 'piece')}';
+    }
+    if (entry.key.endsWith('_centavos') && entry.value is int) {
+      return standardMoney(entry.value! as int);
+    }
+    if (entry.key == 'status') {
+      return DisplayLabels.status(entry.value);
+    }
+    if (entry.key == 'payment_method') {
+      return DisplayLabels.paymentMethod(entry.value);
+    }
+    if (entry.key == 'type' || entry.key == 'entry_type') {
+      return DisplayLabels.movement(entry.value);
     }
     return entry.value;
   }

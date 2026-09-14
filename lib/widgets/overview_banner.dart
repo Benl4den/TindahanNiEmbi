@@ -7,9 +7,11 @@ class OverviewBanner extends StatelessWidget {
     required this.value,
     required this.caption,
     required this.icon,
+    this.valueFontSize = 28,
   });
   final String title, value, caption;
   final IconData icon;
+  final double valueFontSize;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -45,7 +47,7 @@ class OverviewBanner extends StatelessWidget {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: valueFontSize,
                     fontWeight: FontWeight.w900,
                     color: colors.primary,
                   ),

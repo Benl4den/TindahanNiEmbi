@@ -28,6 +28,9 @@ class ReportsRepository {
   ''')).map((r) => r['product_id']! as int).toList();
   Future<List<Map<String, Object?>>> inventory() => db.rawQuery(
     '''SELECT p.name,p.current_quantity,p.base_unit_code,p.base_unit_label,
+      EXISTS(SELECT 1 FROM inventory_movements m JOIN inventory_transactions t ON t.id=m.inventory_transaction_id
+        WHERE m.product_id=p.id AND t.type IN('INITIAL_STOCK','STOCK_IN') AND m.quantity_change>0
+          AND m.unit_cost_centavos IS NULL) incomplete_history,
       p.purchase_price_centavos,p.selling_price_centavos,
       COALESCE(k.name,p.base_unit_label) purchase_package,
       COALESCE(k.base_quantity,1) purchase_package_quantity,

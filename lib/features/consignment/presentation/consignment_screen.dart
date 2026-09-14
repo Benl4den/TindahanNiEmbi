@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../help/help_button.dart';
+import '../../help/help_content.dart';
+
 import '../../../core/formatters/number_format.dart';
 
 import '../../../models/consignment.dart';
@@ -244,7 +247,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                 DropdownButtonFormField<int>(
                   initialValue: party,
                   decoration: const InputDecoration(
-                    labelText: 'Consignor',
+                    labelText: 'Supplier',
                     border: OutlineInputBorder(),
                   ),
                   items: widget.parties
@@ -263,7 +266,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Outstanding Payable: ${money(balance)}',
+                  'Amount Owed to Supplier: ${money(balance)}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 14),
@@ -303,7 +306,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                     decimal: true,
                   ),
                   decoration: InputDecoration(
-                    labelText: 'Remittance Amount',
+                    labelText: 'Supplier Payment Amount',
                     prefixText: '₱ ',
                     border: const OutlineInputBorder(),
                     errorText: error,
@@ -334,7 +337,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                   dimension: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Record Remittance'),
+              : const Text('Record Supplier Payment'),
         ),
       ],
     );
@@ -1401,6 +1404,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               }),
             ),
       title: const Text('Consignment'),
+      actions: const [HelpButton(topic: HelpTopicId.consignment)],
     ),
     body: FutureBuilder(
       future: _data,
@@ -1433,7 +1437,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     icon: Icons.inventory_2_outlined,
                   ),
                   SummaryCard(
-                    label: 'Outstanding payable',
+                    label: 'Amount Owed to Suppliers',
                     value: money(
                       companies.fold<int>(
                         0,
@@ -1455,13 +1459,13 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   OutlinedButton.icon(
                     onPressed: _addConsignor,
                     icon: const Icon(Icons.business),
-                    label: const Text('Add Consignor'),
+                    label: const Text('Add Supplier'),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
               Text(
-                'Companies / Consignors',
+                'Consignment Suppliers',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
@@ -1469,7 +1473,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 const Padding(
                   padding: EdgeInsets.all(40),
                   child: Center(
-                    child: Text('No consignors yet. Add a consignor to begin.'),
+                    child: Text('No suppliers yet. Add a supplier to begin.'),
                   ),
                 ),
               ...companies.map(
@@ -1482,9 +1486,9 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     subtitle: Text(
-                      '${x['product_count']} products • ${money(x['payable_centavos']! as int)} payable'
+                      '${x['product_count']} products • ${money(x['payable_centavos']! as int)} owed'
                       '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'}\n'
-                      'Last receipt: ${_shortDate(x['last_receipt_at'])} • Last remittance: ${_shortDate(x['last_remittance_at'])}',
+                      'Last delivery: ${_shortDate(x['last_receipt_at'])} • Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
                     ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
@@ -1542,12 +1546,12 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 OutlinedButton.icon(
                   onPressed: _remit,
                   icon: const Icon(Icons.payments),
-                  label: const Text('Record Remittance'),
+                  label: const Text('Record Supplier Payment'),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => _editConsignor(company),
                   icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit Consignor'),
+                  label: const Text('Edit Supplier'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
@@ -1556,7 +1560,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   onPressed: () =>
                       _archiveConsignor(company['name']! as String),
                   icon: const Icon(Icons.archive_outlined),
-                  label: const Text('Archive Consignor'),
+                  label: const Text('Archive Supplier'),
                 ),
               ],
             ),
@@ -1566,7 +1570,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               runSpacing: 14,
               children: [
                 SummaryCard(
-                  label: 'Outstanding Supplier Payable',
+                  label: 'Amount Owed to Supplier',
                   value: money(summary.payableCentavos),
                 ),
                 SummaryCard(
@@ -1579,7 +1583,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                   value: money(summary.inventoryValueCentavos),
                 ),
                 SummaryCard(
-                  label: 'Store Margin Earned',
+                  label: 'Consignment Earnings',
                   value: money(summary.marginCentavos),
                 ),
               ],
@@ -1589,7 +1593,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               segments: const [
                 ButtonSegment(value: 0, label: Text('Products')),
                 ButtonSegment(value: 1, label: Text('Deliveries')),
-                ButtonSegment(value: 2, label: Text('Payable')),
+                ButtonSegment(value: 2, label: Text('Supplier Payments')),
                 ButtonSegment(value: 3, label: Text('Returns')),
                 ButtonSegment(value: 4, label: Text('Archived')),
               ],
@@ -1619,7 +1623,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount to Remit: ${money(x['payable_centavos']! as int)}',
+                            '${x['consignor_name']}\nReceived: ${_quantity(x['received']! as int, x['base_unit_label'] as String?)}   Remaining: ${_quantity(x['remaining']! as int, x['base_unit_label'] as String?)}   Sold: ${_quantity(x['sold']! as int, x['base_unit_label'] as String?)}\nSelling: ${money(x['selling_price_centavos']! as int)}   Amount Owed: ${money(x['payable_centavos']! as int)}',
                           ),
                           const SizedBox(height: 12),
                           Align(
@@ -1713,7 +1717,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text('Outstanding Supplier Payable'),
+              title: const Text('Amount Owed to Supplier'),
               trailing: Text(
                 money(payable),
                 style: Theme.of(context).textTheme.titleLarge,
@@ -1722,13 +1726,13 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Remittance History',
+            'Supplier Payment History',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           if (rows.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Text('No remittances recorded.'),
+              child: Text('No supplier payments recorded.'),
             ),
           ...rows.map(
             (row) => ListTile(

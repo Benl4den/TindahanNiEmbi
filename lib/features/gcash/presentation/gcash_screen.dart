@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
+
 import '../../../widgets/day_history.dart';
 
 import '../../../core/formatters/number_format.dart';
@@ -405,7 +407,15 @@ class _GCashScreenState extends State<GCashScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Status: ${service.status}'),
+        Text('Status: ${DisplayLabels.status(service.status)}'),
+        if (service.status != 'POSTED') ...[
+          const SizedBox(height: 8),
+          Text('Cancelled by: ${service.cancelledBy ?? 'Not recorded'}'),
+          if (service.cancelledAt != null)
+            Text('Cancelled at: ${_when(service.cancelledAt!.toLocal())}'),
+          if (service.cancellationReason != null)
+            Text('Reason: ${service.cancellationReason}'),
+        ],
         Text(
           'Amount: ${standardMoney(service.principalCentavos)} • Fee: ${standardMoney(service.feeCentavos)} (${service.feeOption == 'ADDED' ? 'Fee Added' : 'Fee Deducted'})',
         ),
@@ -418,7 +428,7 @@ class _GCashScreenState extends State<GCashScreen> {
           TextButton.icon(
             onPressed: () => _reverseService(service),
             icon: const Icon(Icons.undo),
-            label: const Text('Reverse service'),
+            label: const Text('Cancel service record'),
           ),
       ],
     ),
@@ -427,15 +437,15 @@ class _GCashScreenState extends State<GCashScreen> {
   String _label(String type) => switch (type) {
     'CASH_IN_SERVICE' => 'Cash-In',
     'CASH_OUT_SERVICE' => 'Cash-Out',
-    'SERVICE_REVERSAL' => 'Service Reversal',
+    'SERVICE_REVERSAL' => 'Cancelled Service',
     'SALE' => 'Sale',
     'UTANG_PAYMENT' => 'UTANG Payment',
     'EXPENSE' => 'Expense',
-    'CONSIGNOR_REMITTANCE' => 'Consignor Remittance',
+    'CONSIGNOR_REMITTANCE' => 'Supplier Payment',
     'OPENING_BALANCE' => 'Opening Balance',
     'ADJUSTMENT_IN' => 'Adjustment In',
     'ADJUSTMENT_OUT' => 'Adjustment Out',
-    'REVERSAL' => 'Reversal',
+    'REVERSAL' => 'Cancelled Record',
     _ => type,
   };
 
@@ -887,7 +897,7 @@ class _GCashScreenState extends State<GCashScreen> {
         builder: (_, setDialog) => PopScope(
           canPop: !busy,
           child: AlertDialog(
-            title: const Text('Reverse GCash Service'),
+            title: const Text('Cancel GCash Service Record'),
             content: SizedBox(
               width: 460,
               child: SingleChildScrollView(
@@ -896,6 +906,10 @@ class _GCashScreenState extends State<GCashScreen> {
                   children: [
                     Text(
                       '${service.reference} • ${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'}',
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'This cancels the record in TindaSari PH. It does not send, receive, or refund actual GCash money.',
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -956,7 +970,7 @@ class _GCashScreenState extends State<GCashScreen> {
                           }
                         }
                       },
-                child: Text(busy ? 'Saving…' : 'Reverse'),
+                child: Text(busy ? 'Saving…' : 'Confirm Cancellation'),
               ),
             ],
           ),

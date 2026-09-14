@@ -4,6 +4,7 @@ enum HelpTopicId {
   gettingStarted,
   dashboard,
   products,
+  brands,
   inventory,
   stockMovement,
   cashSale,
@@ -101,9 +102,10 @@ const helpArticles = <HelpArticle>[
   HelpArticle(
     id: HelpTopicId.cashSale,
     group: 'Sales & UTANG',
-    title: 'Cash Sale',
+    title: 'Sales',
     icon: Icons.point_of_sale_outlined,
-    description: 'Use Cash Sale when the customer pays immediately.',
+    description:
+        'Use Sales when the customer pays immediately with Cash or GCash.',
     steps: [
       'Select products.',
       'Choose the quantity or selling unit.',
@@ -119,8 +121,7 @@ const helpArticles = <HelpArticle>[
     group: 'Sales & UTANG',
     title: 'MGA UTANGAN',
     icon: Icons.people_alt_outlined,
-    description:
-        'Keep customer credit sales and remaining balances in one place.',
+    description: 'Keep UTANG sales and remaining balances in one place.',
     steps: [
       'Choose an existing customer or add a new one.',
       'Create the UTANG sale.',
@@ -173,6 +174,25 @@ const helpArticles = <HelpArticle>[
     keywords: ['item price archive low stock alert'],
   ),
   HelpArticle(
+    id: HelpTopicId.brands,
+    group: 'Inventory',
+    title: 'Brands',
+    icon: Icons.sell_outlined,
+    description:
+        'Use Brands to keep supplier or branded product collections together.',
+    steps: [
+      'Open Brands and tap Add Brand.',
+      'Enter a clear brand name.',
+      'Open the brand to add existing products to it.',
+      'Use the brand page to review connected products and stock needs.',
+    ],
+    notes: [
+      'Adding a product to a brand does not create another copy of its stock.',
+      'Removing a product from a brand keeps the product, its sales, and its history in the app.',
+    ],
+    keywords: ['brand managed supplier selecta assign remove'],
+  ),
+  HelpArticle(
     id: HelpTopicId.inventory,
     group: 'Inventory',
     title: 'Inventory',
@@ -196,12 +216,12 @@ const helpArticles = <HelpArticle>[
     steps: [
       'Open Restock when products need replenishing.',
       'Use product movement history to review stock changes.',
-      'Check the current quantity after a sale, restock, or correction.',
+      'Check the current quantity after a sale, restock, cancellation, or fix.',
     ],
     notes: [
       'Use an adjustment only when the actual count differs from the saved count.',
     ],
-    keywords: ['restock adjust movement stock in correction'],
+    keywords: ['restock adjust movement stock in cancellation fix'],
   ),
   HelpArticle(
     id: HelpTopicId.selecta,
@@ -210,7 +230,7 @@ const helpArticles = <HelpArticle>[
     icon: Icons.sell_outlined,
     description: 'Manage products that belong to the SELECTA supplier group.',
     steps: [
-      'Open Managed Brands.',
+      'Open Brands.',
       'Choose SELECTA.',
       'Add or manage the connected products.',
     ],
@@ -226,9 +246,13 @@ const helpArticles = <HelpArticle>[
       'Open the company.',
       'Receive the delivered products.',
       'Sell products normally.',
-      'Review remittance when it is time to pay the supplier.',
+      'Review supplier payments when it is time to pay the supplier.',
     ],
-    notes: ['Consignment stock is not included in owned inventory cost.'],
+    notes: [
+      'Enter the supplier cost for the same company and product. Use the previous cost reminder when it is shown.',
+      'A supplier payment records money paid to the supplier. Returns reduce available consignment stock without creating a supplier payment.',
+      'Consignment stock is not included in owned inventory cost.',
+    ],
     keywords: ['supplier company receive remittance payable'],
   ),
   HelpArticle(
@@ -250,6 +274,7 @@ const helpArticles = <HelpArticle>[
       'Adjustment Out: subtract money from the saved GCash balance. Example: taking out ₱200 lowers the balance by ₱200.',
       'Add Adjustment updates the balance shown in this app. It does not send or receive money through GCash, and it does not add service fee income.',
       'Only the owner can save an adjustment. Check the reason and amount so the same money is not recorded twice.',
+      'Cancel Service Record only cancels the record in TindaSari PH. It does not send, receive, or refund actual GCash money.',
     ],
     keywords: ['wallet balance gcash service adjustment opening add subtract'],
   ),
@@ -268,6 +293,7 @@ const helpArticles = <HelpArticle>[
     ],
     notes: [
       'Fee Added: the customer pays the amount plus the fee. Fee Deducted: the fee is taken from the amount sent through GCash.',
+      'If you need to cancel a saved service, it cancels the app record only. Handle any actual GCash refund or transfer separately.',
     ],
     keywords: ['cash in fee added deducted send gcash'],
   ),
@@ -285,6 +311,7 @@ const helpArticles = <HelpArticle>[
     ],
     notes: [
       'Fee Added: the customer sends the amount plus the fee. Fee Deducted: the fee is taken from the cash the customer receives.',
+      'If you need to cancel a saved service, it cancels the app record only. Handle any actual GCash refund or transfer separately.',
     ],
     keywords: ['cash out fee added deducted receive gcash'],
   ),
@@ -355,10 +382,14 @@ const helpArticles = <HelpArticle>[
         'Keep a safe copy of your store records and restore one when needed.',
     steps: [
       'Open Backup & Restore in Settings.',
-      'Create a backup regularly.',
-      'Choose a backup carefully before restoring it.',
+      'Tap Backup Now and save the created backup file somewhere you can find later.',
+      'To restore, choose Restore Backup and select a TindaSari backup file.',
+      'Read the confirmation, then restore only when you are sure.',
     ],
-    notes: ['Restoring replaces current app data with the selected backup.'],
+    notes: [
+      'A backup includes your store records and saved product images. The screen checks that a created backup is valid.',
+      'Restoring replaces the current app data with the selected backup. Create a fresh backup first if you may need the current records later.',
+    ],
     keywords: ['backup restore data save'],
   ),
   HelpArticle(

@@ -15,7 +15,9 @@ Future<bool> showPackageStockInDialog({
   if (!context.mounted) return false;
   if (packages.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No purchase package is configured.')),
+      const SnackBar(
+        content: Text('Set how you buy this product in Edit Product first.'),
+      ),
     );
     return false;
   }
@@ -96,7 +98,7 @@ Future<bool> showPackageStockInDialog({
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: 'Purchase cost per package (optional)',
+                      labelText: 'Purchase cost per package',
                       prefixText: '₱ ',
                       border: const OutlineInputBorder(),
                       helperText: previousCosts[selected.id] == null
@@ -165,12 +167,13 @@ Future<bool> showPackageStockInDialog({
                           : double.tryParse(numericInput(costText));
                       if (packageCount == null ||
                           packageCount <= 0 ||
-                          (costText.isNotEmpty &&
-                              (pesos == null ||
-                                  !pesos.isFinite ||
-                                  pesos < 0))) {
+                          costText.isEmpty ||
+                          pesos == null ||
+                          !pesos.isFinite ||
+                          pesos < 0) {
                         set(
-                          () => error = 'Enter a valid package count and cost.',
+                          () => error =
+                              'Enter a package count and purchase cost.',
                         );
                         return;
                       }
@@ -183,9 +186,7 @@ Future<bool> showPackageStockInDialog({
                           productId: product.id,
                           packageId: selected.id,
                           packageCount: packageCount,
-                          packageCostCentavos: pesos == null
-                              ? null
-                              : (pesos * 100).round(),
+                          packageCostCentavos: (pesos * 100).round(),
                           notes: notes.text,
                         );
                         if (dialog.mounted) {

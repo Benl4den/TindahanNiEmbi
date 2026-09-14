@@ -246,6 +246,7 @@ class ExpenseRepository {
       'reason': reason.trim(),
       'occurred_at': now,
       'actor_role': actorRole,
+      'actor_name': CurrentActor.labelFor(actorRole),
     });
     await PaymentAccountingRepository.reverseSource(
       tx,
@@ -291,6 +292,7 @@ class ExpenseRepository {
     '''SELECT e.*,ep.payment_method,ep.gcash_reference,
       replacement.expense_ref corrected_by_ref,original.expense_ref correction_of_ref,
       COALESCE(c1.reason,c2.reason,r.reason) change_reason,
+      r.actor_name change_actor_name,
       COALESCE(c1.occurred_at,c2.occurred_at,r.occurred_at) changed_at
       FROM expenses e
       LEFT JOIN expense_corrections c1 ON c1.original_expense_id=e.id

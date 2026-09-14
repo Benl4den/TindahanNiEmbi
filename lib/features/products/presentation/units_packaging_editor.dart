@@ -92,13 +92,13 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Set how you buy, store, and sell this product. Quantities are always kept in the base unit.',
+            'Set how you buy, store, and sell this product. The app converts package quantities automatically.',
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<BaseUnit>(
             initialValue: value.baseUnit,
             decoration: const InputDecoration(
-              labelText: 'Base inventory unit',
+              labelText: 'Stock Counting Unit',
               border: OutlineInputBorder(),
             ),
             items: BaseUnit.values

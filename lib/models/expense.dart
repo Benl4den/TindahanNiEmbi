@@ -33,6 +33,7 @@ class Expense {
     this.correctionOfReference,
     this.reason,
     this.changedAt,
+    this.changedByName,
     this.paymentMethod = PaymentMethod.cash,
     this.gcashReference,
   });
@@ -43,6 +44,7 @@ class Expense {
       correctedByReference,
       correctionOfReference,
       reason;
+  final String? changedByName;
   final PaymentMethod paymentMethod;
   final String? gcashReference;
   final DateTime expenseDateTime, createdAt;
@@ -65,6 +67,7 @@ class Expense {
     changedAt: m['changed_at'] == null
         ? null
         : DateTime.parse(m['changed_at']! as String),
+    changedByName: m['change_actor_name'] as String?,
     paymentMethod: PaymentMethod.fromDatabase(m['payment_method']),
     gcashReference: m['gcash_reference'] as String?,
   );

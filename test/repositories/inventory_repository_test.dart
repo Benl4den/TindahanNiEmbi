@@ -34,6 +34,36 @@ void main() {
   });
   tearDown(() => app.close());
 
+  test(
+    'missing purchase costs are flagged but recorded zero costs are valid',
+    () async {
+      expect(
+        (await inventory.ownedProductValues())[product.id]!
+            .hasIncompletePurchaseHistory,
+        isFalse,
+      );
+      await inventory.stockIn(
+        productId: product.id,
+        quantity: 1,
+        unitCostCentavos: 0,
+      );
+      expect((await inventory.ownedSummary()).incompleteHistoryProductCount, 0);
+      await inventory.stockIn(productId: product.id, quantity: 1);
+      expect(
+        (await inventory.ownedProductValues())[product.id]!
+            .hasIncompletePurchaseHistory,
+        isTrue,
+      );
+      expect((await inventory.ownedSummary()).incompleteHistoryProductCount, 1);
+      final current = (await inventory.current()).single;
+      final history = await SqliteProductRepository(db)
+          .purchasingSummary(current);
+      expect(history.hasIncompletePurchaseHistory, isTrue);
+      expect(history.unpricedPurchaseQuantity, 1);
+      expect((await inventory.ownedSummary()).inventoryCostCentavos, 3500);
+    },
+  );
+
   test('stock-in and adjustments use ledger and cached stock', () async {
     await inventory.stockIn(
       productId: product.id,

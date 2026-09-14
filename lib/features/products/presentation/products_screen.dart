@@ -76,9 +76,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
+          icon: const Icon(Icons.tune),
           title: const Text('Filter & Sort'),
           content: SizedBox(
-            width: 420,
+            width: 460,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -125,10 +126,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     decoration: const InputDecoration(labelText: 'Group'),
                     hint: const Text('All groups'),
                     items: const [
-                      DropdownMenuItem(
-                        value: 'SELECTA',
-                        child: Text('Managed Brand'),
-                      ),
+                      DropdownMenuItem(value: 'SELECTA', child: Text('Brand')),
                       DropdownMenuItem(
                         value: 'CONSIGNMENT',
                         child: Text('Consignment'),
@@ -203,6 +201,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => setDialog(() {
+                nextArchive = 'ACTIVE';
+                nextCategory = null;
+                nextGroup = null;
+                nextOwnership = null;
+                nextStatus = null;
+                nextSort = 'Name';
+              }),
+              child: const Text('Reset'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
@@ -314,37 +323,37 @@ class _ProductsScreenState extends State<ProductsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: TextField(
-              controller: _search,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: AppStrings.searchProducts,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear search',
-                        onPressed: _clearSearch,
-                        icon: const Icon(Icons.close),
-                      ),
-              ),
-              onChanged: _searchNow,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _filterSort,
-                icon: const Icon(Icons.tune),
-                label: Text(
-                  'Filter & Sort${_activeFilters == 0 ? '' : ' ($_activeFilters)'}',
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: AppStrings.searchProducts,
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _search.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.close),
+                            ),
+                    ),
+                    onChanged: _searchNow,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _filterSort,
+                  icon: const Icon(Icons.tune),
+                  label: Text(
+                    'Filter & Sort${_activeFilters == 0 ? '' : ' ($_activeFilters)'}',
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
           Expanded(
             child: FutureBuilder<List<Product>>(
               key: ValueKey('$archiveFilter|$categoryId|$groupCode'),

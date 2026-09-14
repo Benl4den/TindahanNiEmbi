@@ -191,7 +191,7 @@ void main() {
     'Add Consignor persists, closes, refreshes, and enables receipt',
     (t) async {
       await pump(t);
-      await t.tap(find.text('Add Consignor'));
+      await t.tap(find.text('Add Supplier'));
       await t.pumpAndSettle();
       await t.enterText(
         find.widgetWithText(TextField, 'Company / Name'),
@@ -213,7 +213,7 @@ void main() {
   );
   testWidgets('Add Consignor can save a default product category', (t) async {
     await pump(t);
-    await t.tap(find.text('Add Consignor'));
+    await t.tap(find.text('Add Supplier'));
     await t.pumpAndSettle();
     await t.enterText(find.widgetWithText(TextField, 'Company / Name'), 'ABC');
     await t.tap(find.text('Default product category (optional)'));
@@ -231,10 +231,10 @@ void main() {
       repo.payable = 420000;
       await pump(t);
       expect(find.byKey(const Key('consignor-company-list')), findsOneWidget);
-      expect(find.text('Outstanding Supplier Payable'), findsNothing);
+      expect(find.text('Amount Owed to Supplier'), findsNothing);
       await t.tap(find.text('ABC'));
       await t.pumpAndSettle();
-      expect(find.text('Outstanding Supplier Payable'), findsOneWidget);
+      expect(find.text('Amount Owed to Supplier'), findsOneWidget);
       expect(find.text('₱4,200.00'), findsWidgets);
     },
   );
@@ -264,15 +264,21 @@ void main() {
     expect(repo.receipts, 1);
     expect(repo.lastReceipt!.unitsPerBox, 1);
     repo.payable = 300;
-    await t.tap(find.text('Record Remittance'));
+    await t.tap(find.text('Record Supplier Payment'));
     await t.pumpAndSettle();
-    expect(find.text('Outstanding Payable: ₱3.00'), findsOneWidget);
-    await t.enterText(find.widgetWithText(TextField, 'Remittance Amount'), '4');
-    await t.tap(find.text('Record Remittance').last);
+    expect(find.text('Amount Owed to Supplier: ₱3.00'), findsOneWidget);
+    await t.enterText(
+      find.widgetWithText(TextField, 'Supplier Payment Amount'),
+      '4',
+    );
+    await t.tap(find.text('Record Supplier Payment').last);
     await t.pump();
     expect(find.textContaining('cannot exceed'), findsOneWidget);
-    await t.enterText(find.widgetWithText(TextField, 'Remittance Amount'), '2');
-    await t.tap(find.text('Record Remittance').last);
+    await t.enterText(
+      find.widgetWithText(TextField, 'Supplier Payment Amount'),
+      '2',
+    );
+    await t.tap(find.text('Record Supplier Payment').last);
     await t.pumpAndSettle();
     expect(repo.payable, 100);
   });
@@ -281,14 +287,14 @@ void main() {
   ) async {
     repo.failCreate = true;
     await pump(t);
-    await t.tap(find.text('Add Consignor'));
+    await t.tap(find.text('Add Supplier'));
     await t.pumpAndSettle();
     await t.enterText(find.widgetWithText(TextField, 'Company / Name'), 'ABC');
     await t.pump();
     await t.tap(find.text('Save'));
     await t.pumpAndSettle();
     expect(find.text('Could not save consignor.'), findsOneWidget);
-    expect(find.text('Add Consignor'), findsWidgets);
+    expect(find.text('Add Supplier'), findsWidgets);
   });
 
   testWidgets('empty company cannot receive another company products', (
@@ -375,7 +381,7 @@ void main() {
     await pump(t);
     await t.tap(find.text('ABC'));
     await t.pumpAndSettle();
-    await t.tap(find.text('Record Remittance'));
+    await t.tap(find.text('Record Supplier Payment'));
     await t.pumpAndSettle();
     expect(
       find.text('There is no outstanding supplier payable to remit.'),

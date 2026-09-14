@@ -223,7 +223,7 @@ class _State extends State<ActivityLogsScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  x.description,
+                                  _displayDescription(x.description),
                                   style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
@@ -299,16 +299,32 @@ class _State extends State<ActivityLogsScreen> {
     return Colors.blueGrey.shade700;
   }
 
-  String _eventLabel(String type) => type
-      .replaceAll('_', ' ')
-      .toLowerCase()
-      .split(' ')
-      .map(
-        (word) => word.isEmpty
-            ? word
-            : '${word[0].toUpperCase()}${word.substring(1)}',
-      )
-      .join(' ');
+  String _eventLabel(String type) => switch (type) {
+    'TRANSACTION_REVERSED' => 'Transaction Cancelled',
+    'TRANSACTION_CORRECTED' => 'Transaction Fixed',
+    'EXPENSE_REVERSED' => 'Expense Cancelled',
+    'EXPENSE_CORRECTED' => 'Expense Fixed',
+    'GCASH_SERVICE_REVERSAL' => 'GCash Service Cancelled',
+    _ =>
+      type
+          .replaceAll('_', ' ')
+          .toLowerCase()
+          .split(' ')
+          .map(
+            (word) => word.isEmpty
+                ? word
+                : '${word[0].toUpperCase()}${word.substring(1)}',
+          )
+          .join(' '),
+  };
+
+  String _displayDescription(String description) => description
+      .replaceAll(RegExp(r'\bReversal\b'), 'Cancellation')
+      .replaceAll(RegExp(r'\breversal\b'), 'cancellation')
+      .replaceAll(RegExp(r'\bReversed\b'), 'Cancelled')
+      .replaceAll(RegExp(r'\breversed\b'), 'cancelled')
+      .replaceAll(RegExp(r'\bCorrected\b'), 'Fixed')
+      .replaceAll(RegExp(r'\bcorrected\b'), 'fixed');
 
   String _role(String role) => role == 'OWNER' ? 'Owner' : 'Staff';
 }

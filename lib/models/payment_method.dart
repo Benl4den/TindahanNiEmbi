@@ -1,10 +1,12 @@
-enum PaymentMethod {
-  cash('CASH', 'Cash'),
-  gcash('GCASH', 'GCash');
+import '../core/formatters/display_labels.dart';
 
-  const PaymentMethod(this.dbValue, this.label);
+enum PaymentMethod {
+  cash('CASH'),
+  gcash('GCASH');
+
+  const PaymentMethod(this.dbValue);
   final String dbValue;
-  final String label;
+  String get label => DisplayLabels.paymentMethod(dbValue);
 
   static PaymentMethod fromDatabase(Object? value) =>
       value == 'GCASH' ? PaymentMethod.gcash : PaymentMethod.cash;

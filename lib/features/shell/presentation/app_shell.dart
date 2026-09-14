@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../../core/formatters/number_format.dart';
 
 import '../../../repositories/activity_log_repository.dart';
+import '../../../repositories/staff_activity_repository.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/customer_repository.dart';
@@ -36,6 +37,7 @@ import '../../../services/app_refresh_controller.dart';
 import '../../../services/settings_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../activity_logs/presentation/activity_logs_screen.dart';
+import '../../activity_logs/presentation/staff_activity_screen.dart';
 import '../../backup/presentation/backup_screen.dart';
 import '../../cash_sales/presentation/cash_sale_screen.dart';
 import '../../categories/presentation/categories_screen.dart';
@@ -253,7 +255,7 @@ class _State extends State<AppShell> {
       ),
       const NavigationDestination(
         icon: Icon(Icons.sell_outlined),
-        label: 'Managed Brands',
+        label: 'Brands',
       ),
       const NavigationDestination(
         icon: Icon(Icons.handshake_outlined),
@@ -766,7 +768,7 @@ class _State extends State<AppShell> {
             ),
           if (owner)
             (
-              label: 'Managed Brands',
+              label: 'Brands',
               icon: Icons.sell_outlined,
               page: ManagedBrandsScreen(
                 special: SpecialInventoryRepository(
@@ -892,6 +894,15 @@ class _State extends State<AppShell> {
             ),
           if (owner)
             (
+              label: 'Staff Activity Summary',
+              icon: Icons.groups_2_outlined,
+              page: StaffActivityScreen(
+                repository: StaffActivityRepository(widget.database),
+              ),
+              action: null,
+            ),
+          if (owner)
+            (
               label: 'Backup & Restore',
               icon: Icons.backup,
               page: BackupScreen(
@@ -930,7 +941,7 @@ class _State extends State<AppShell> {
     final management = items
         .where(
           (x) => const {
-            'Managed Brands',
+            'Brands',
             'Consignment',
             'Restock',
             'Products',
@@ -946,6 +957,7 @@ class _State extends State<AppShell> {
             'Storage Management',
             'Reports',
             'Activity Logs',
+            'Staff Activity Summary',
           }.contains(x.label),
         )
         .toList();
@@ -1080,14 +1092,13 @@ class _State extends State<AppShell> {
   Widget _ownerAlerts() => FutureBuilder<List<Object?>>(
     future: Future.wait<Object?>([
       DashboardRepository(widget.database).summary(),
-      BackupService(widget.appDatabase).lastSuccessfulBackup(),
+      BackupService(widget.appDatabase).health(),
     ]),
     builder: (_, snapshot) {
       if (!snapshot.hasData) return const SizedBox(height: 8);
       final s = snapshot.data![0] as DashboardSummary,
-          backup = snapshot.data![1] as DateTime?;
-      final old =
-          backup == null || DateTime.now().difference(backup).inDays > 7;
+          backup = snapshot.data![1] as BackupHealth;
+      final old = backup.status != 'Recent';
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -1118,9 +1129,13 @@ class _State extends State<AppShell> {
             ),
             if (old) ...[
               const SizedBox(width: 8),
-              const Chip(
+              Chip(
                 avatar: Icon(Icons.backup_outlined),
-                label: Text('Backup Recommended'),
+                label: Text(
+                  backup.status == 'Backup Overdue'
+                      ? 'Backup Overdue'
+                      : 'Backup Recommended',
+                ),
               ),
             ],
           ],
