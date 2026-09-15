@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import 'product_sales_ranking.dart';
+
 class SalesPeriodSummary {
   const SalesPeriodSummary(
     this.daily,
@@ -90,9 +92,8 @@ class ReportsRepository {
     );
   }
 
-  Future<List<Map<String, Object?>>> frequentProducts() => db.rawQuery(
-    "SELECT i.product_name_snapshot name,SUM(COALESCE(i.total_base_quantity,i.quantity)) quantity,p.base_unit_code,p.base_unit_label FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id JOIN products p ON p.id=i.product_id WHERE s.status='POSTED' GROUP BY i.product_id,i.product_name_snapshot ORDER BY quantity DESC",
-  );
+  Future<List<Map<String, Object?>>> frequentProducts() =>
+      productSalesRanking(db);
   Future<int> outstandingTotal() async =>
       (await db.rawQuery(
             'SELECT COALESCE(SUM(amount_change_centavos),0) value FROM customer_ledger_entries',

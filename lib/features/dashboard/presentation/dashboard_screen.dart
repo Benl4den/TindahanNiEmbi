@@ -336,6 +336,9 @@ class _DashboardState extends State<DashboardScreen> {
                           icon: Icons.bar_chart,
                           action: viewAll(9),
                           children: [
+                            const Text(
+                              'Ranked by number of sales containing each product.',
+                            ),
                             if (x.topProducts.isEmpty)
                               const Text(
                                 'No completed product sales in this period.',

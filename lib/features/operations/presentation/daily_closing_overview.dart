@@ -214,6 +214,7 @@ class DailyClosingOverview extends StatelessWidget {
             ),
           ]),
           panel('Top 5 Sold Products', Icons.emoji_events_outlined, green, [
+            const Text('Ranked by number of sales containing each product.'),
             if (x.topProducts.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),

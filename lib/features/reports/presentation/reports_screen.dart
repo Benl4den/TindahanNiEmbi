@@ -260,6 +260,9 @@ class ReportsScreen extends StatelessWidget {
               'Frequently Sold Products',
               style: Theme.of(c).textTheme.titleLarge,
             ),
+            const Text(
+              'Ranked by number of sales containing each product. Includes Cash, GCash and UTANG sales.',
+            ),
             ...?(f.data?.map(
               (r) => ListTile(
                 title: Text(r['name']! as String),
