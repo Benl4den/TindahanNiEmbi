@@ -48,6 +48,12 @@ class ReportsScreen extends StatelessWidget {
   ) => FutureBuilder<List<Map<String, Object?>>>(
     future: repository.inventory(),
     builder: (_, s) {
+      if (s.hasError) {
+        return const AppStateView.error(
+          title: 'Could not load inventory report',
+          message: 'Go back and open Reports again.',
+        );
+      }
       if (!s.hasData) {
         return const AppLoadingView(label: 'Loading inventory report…');
       }
@@ -123,6 +129,12 @@ class ReportsScreen extends StatelessWidget {
   Widget _utang(BuildContext c) => FutureBuilder<List<Map<String, Object?>>>(
     future: repository.outstanding(),
     builder: (_, s) {
+      if (s.hasError) {
+        return const AppStateView.error(
+          title: 'Could not load UTANG report',
+          message: 'Go back and open Reports again.',
+        );
+      }
       if (!s.hasData) {
         return const AppLoadingView(label: 'Loading UTANG report…');
       }
@@ -174,6 +186,12 @@ class ReportsScreen extends StatelessWidget {
   Widget _sales(BuildContext c) => FutureBuilder<SalesPeriodSummary>(
     future: repository.salesPeriods(),
     builder: (_, s) {
+      if (s.hasError) {
+        return const AppStateView.error(
+          title: 'Could not load sales report',
+          message: 'Go back and open Reports again.',
+        );
+      }
       if (!s.hasData) return const AppLoadingView(label: 'Loading report…');
       final x = s.data!;
       return FutureBuilder<List<Map<String, Object?>>>(
@@ -205,6 +223,11 @@ class ReportsScreen extends StatelessWidget {
             FutureBuilder<Map<String, Object?>>(
               future: repository.gcashServiceSummary(),
               builder: (_, services) {
+                if (services.hasError) {
+                  return const Text(
+                    'Could not load GCash service totals. Reopen Reports to try again.',
+                  );
+                }
                 if (!services.hasData) return const LinearProgressIndicator();
                 final g = services.data!;
                 final fees =
@@ -511,7 +534,16 @@ class _RowsScreen extends StatelessWidget {
     appBar: AppBar(title: Text(title)),
     body: FutureBuilder<List<Map<String, Object?>>>(
       future: rows,
-      builder: (_, snapshot) => snapshot.hasData
+      builder: (_, snapshot) => snapshot.hasError
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Could not load this report. Go back and try again.',
+                ),
+              ),
+            )
+          : snapshot.hasData
           ? ListView.separated(
               padding: const EdgeInsets.all(20),
               itemCount: snapshot.data!.length,

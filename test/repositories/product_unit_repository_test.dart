@@ -143,6 +143,13 @@ void main() {
     expect(oil.purchasePackages.single.baseQuantity, 3785);
     expect(oil.sellingOptions.map((x) => x.baseQuantity), [250, 125]);
     expect(oil.sellingOptions.first.isDefault, isTrue);
+    final standardOil = ProductUnitPreset.forCategory(
+      'Cooking Oil (Standard Measurements)',
+      2000,
+    );
+    expect(standardOil.baseUnit, BaseUnit.piece);
+    expect(standardOil.purchasePackages.single.name, 'Piece');
+    expect(standardOil.sellingOptions.single.name, 'Piece');
     final cigarettes = ProductUnitPreset.forCategory('Cigarettes', 800);
     expect(cigarettes.baseUnit, BaseUnit.stick);
     expect(cigarettes.sellingOptions.map((x) => x.priceCentavos), [800, 800]);

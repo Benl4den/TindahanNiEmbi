@@ -183,6 +183,12 @@ class _SelectaScreenState extends State<SelectaScreen> {
           child: FutureBuilder<List<Map<String, Object?>>>(
             future: widget.special.productSalesHistory(product.id),
             builder: (_, snapshot) {
+              if (snapshot.hasError) {
+                return const AppStateView.error(
+                  title: 'Could not load product sales history',
+                  message: 'Close this window and try again.',
+                );
+              }
               if (!snapshot.hasData) {
                 return const SizedBox(
                   height: 100,

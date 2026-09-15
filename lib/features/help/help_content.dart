@@ -93,9 +93,11 @@ const helpArticles = <HelpArticle>[
     description:
         'Use the dashboard to see important store information at a glance.',
     steps: [
-      'Check sales and stock reminders.',
-      'Open a card when you need more details.',
-      'Use it as a quick starting point for your day.',
+      'Choose Today, This Week, or This Month. Weeks begin on Monday and the overview includes activity through today.',
+      'Total Sales includes Cash, GCash and new UTANG sales. UTANG payments are collections and are shown separately.',
+      'Current GCash balance, supplier amounts owed, and stock alerts show the store position now, regardless of the selected period.',
+      'Use View All for detailed records, or a Quick Action to start a sale, add an expense, receive consignment or open Reports.',
+      'Sales remains the first screen after login. The owner can open Dashboard from navigation.',
     ],
     keywords: ['overview home summary'],
   ),

@@ -497,9 +497,11 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: buttonStyle(outlined: true),
       ),
+      textButtonTheme: light.textButtonTheme,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: input,
+        // Match light mode's style inheritance during animated theme changes.
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,

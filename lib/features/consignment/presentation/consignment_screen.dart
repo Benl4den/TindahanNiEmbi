@@ -1464,7 +1464,12 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       future: _data,
       builder: (_, s) {
         if (s.hasError) {
-          return Center(child: Text('Could not load Consignment: ${s.error}'));
+          return Center(
+            child: TextButton(
+              onPressed: () => setState(_reload),
+              child: const Text('Could not load Consignment. Try again'),
+            ),
+          );
         }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final summary = s.data!.summary,
@@ -1810,6 +1815,14 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   ) => FutureBuilder<List<Map<String, Object?>>>(
     future: widget.repository.deliveriesForConsignor(consignorId),
     builder: (_, snapshot) {
+      if (snapshot.hasError) {
+        return const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Could not load deliveries. Reopen this supplier to try again.',
+          ),
+        );
+      }
       if (!snapshot.hasData) {
         return const Padding(
           padding: EdgeInsets.all(32),
@@ -1856,6 +1869,14 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   ) => FutureBuilder<List<Map<String, Object?>>>(
     future: widget.repository.remittancesForConsignor(consignorId),
     builder: (_, snapshot) {
+      if (snapshot.hasError) {
+        return const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Could not load supplier payments. Reopen this supplier to try again.',
+          ),
+        );
+      }
       if (!snapshot.hasData) {
         return const Padding(
           padding: EdgeInsets.all(32),
@@ -1936,6 +1957,14 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   ) => FutureBuilder<List<Map<String, Object?>>>(
     future: widget.repository.archivedProductCardsForConsignor(consignorId),
     builder: (_, snapshot) {
+      if (snapshot.hasError) {
+        return const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Could not load archived products. Reopen this supplier to try again.',
+          ),
+        );
+      }
       if (!snapshot.hasData) {
         return const Padding(
           padding: EdgeInsets.all(32),

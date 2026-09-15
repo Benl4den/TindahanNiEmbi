@@ -145,6 +145,22 @@ class ProductUnitPreset {
         ],
       );
     }
+    if (name == 'cooking oil (standard measurements)') {
+      return ProductUnitConfiguration(
+        baseUnit: BaseUnit.piece,
+        purchasePackages: const [
+          PurchasePackageDraft(name: 'Piece', baseQuantity: 1, isDefault: true),
+        ],
+        sellingOptions: [
+          SellingOptionDraft(
+            name: 'Piece',
+            baseQuantity: 1,
+            priceCentavos: defaultSellingPriceCentavos,
+            isDefault: true,
+          ),
+        ],
+      );
+    }
     return ProductUnitConfiguration(
       baseUnit: BaseUnit.piece,
       purchasePackages: const [

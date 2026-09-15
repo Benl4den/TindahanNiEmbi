@@ -23,6 +23,16 @@ class ProductDetailsScreen extends StatelessWidget {
     body: FutureBuilder<ProductPurchasingSummary>(
       future: repository.purchasingSummary(product),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Could not load purchasing information. Close this window and try again.',
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

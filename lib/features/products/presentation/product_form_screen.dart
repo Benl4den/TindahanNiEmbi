@@ -322,7 +322,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 horizontal: 16,
                               ),
                               shape: RoundedRectangleBorder(
-                                side: const BorderSide(color: Colors.black26),
+                                side: BorderSide(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               title: const Text('Category'),

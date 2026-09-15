@@ -54,10 +54,12 @@ class DailyClosingSummary {
     required this.supplierPayable,
     required this.consignmentMargin,
     required this.transactionCount,
+    this.expenseCount,
     required this.lowStock,
     required this.outOfStock,
     required this.topProducts,
   });
+  final int? expenseCount;
   final int cashSales,
       gcashSales,
       cashSaleCount,
@@ -140,6 +142,7 @@ class DailyClosingSummary {
     'supplierPayable': supplierPayable,
     'consignmentMargin': consignmentMargin,
     'transactionCount': transactionCount,
+    'expenseCount': expenseCount,
     'lowStock': lowStock,
     'outOfStock': outOfStock,
     'topProducts': topProducts,
@@ -188,6 +191,7 @@ class DailyClosingSummary {
       supplierPayable: value('supplierPayable'),
       consignmentMargin: value('consignmentMargin'),
       transactionCount: value('transactionCount'),
+      expenseCount: json['expenseCount'] as int?,
       lowStock: value('lowStock'),
       outOfStock: value('outOfStock'),
       topProducts: products,
@@ -301,10 +305,12 @@ class OperationsRepository {
     return result;
   }
 
-  Future<DailyClosingSummary> daily(DateTime date) async {
+  Future<DailyClosingSummary> daily(DateTime date, {DateTime? endDate}) async {
     final local = DateTime(date.year, date.month, date.day),
         start = local.toUtc().toIso8601String(),
-        end = local.add(const Duration(days: 1)).toUtc().toIso8601String();
+        end = (endDate ?? DateTime(local.year, local.month, local.day + 1))
+            .toUtc()
+            .toIso8601String();
     Future<Map<String, Object?>> one(String sql) =>
         db.rawQuery(sql, [start, end]).then((x) => x.single);
     final cash = await one('''SELECT
@@ -364,11 +370,11 @@ class OperationsRepository {
       '''SELECT SUM(CASE WHEN current_quantity>0 AND current_quantity<=minimum_stock_level THEN 1 ELSE 0 END) low,SUM(CASE WHEN current_quantity=0 THEN 1 ELSE 0 END) out FROM products WHERE is_archived=0''',
     )).single;
     final top = await db.rawQuery(
-      '''SELECT sold.name,SUM(sold.quantity) quantity,p.base_unit_code,p.base_unit_label
-      FROM(SELECT i.product_id,i.product_name_snapshot name,COALESCE(i.total_base_quantity,i.quantity) quantity
+      '''SELECT sold.name,SUM(sold.quantity) quantity,SUM(sold.amount) sales_amount,p.photo_path,p.base_unit_code,p.base_unit_label
+      FROM(SELECT i.product_id,i.product_name_snapshot name,COALESCE(i.total_base_quantity,i.quantity) quantity,i.line_total_centavos amount
       FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
       WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?
-      UNION ALL SELECT i.product_id,i.product_name_snapshot,COALESCE(i.total_base_quantity,i.quantity)
+      UNION ALL SELECT i.product_id,i.product_name_snapshot,COALESCE(i.total_base_quantity,i.quantity),i.line_total_centavos
       FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id
       WHERE u.status='POSTED' AND u.occurred_at>=? AND u.occurred_at<?) sold
       JOIN products p ON p.id=sold.product_id GROUP BY sold.product_id,sold.name
@@ -385,6 +391,7 @@ class OperationsRepository {
       cashPayments: pay['cash_total']! as int,
       gcashPayments: pay['gcash_total']! as int,
       operatingExpenses: expenses['total']! as int,
+      expenseCount: expenses['count']! as int,
       cashExpenses: expenses['cash_total']! as int,
       gcashExpenses: expenses['gcash_total']! as int,
       cashRemittances: remittances['cash_total']! as int,

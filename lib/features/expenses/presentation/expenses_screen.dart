@@ -19,9 +19,11 @@ class ExpensesScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.auth,
+    this.openAdd = false,
   });
   final ExpenseRepository repository;
   final AuthService auth;
+  final bool openAdd;
   @override
   State<ExpensesScreen> createState() => _ExpensesScreenState();
 }
@@ -38,6 +40,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   void initState() {
     super.initState();
     _reload();
+    if (widget.openAdd) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _edit();
+      });
+    }
   }
 
   @override
@@ -93,6 +100,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           FutureBuilder<ExpenseSummary>(
             future: summary,
             builder: (_, s) {
+              if (s.hasError) {
+                return TextButton(
+                  onPressed: () => setState(_reload),
+                  child: const Text('Could not load expense totals. Try again'),
+                );
+              }
               if (s.hasError) return _error(s.error);
               if (!s.hasData) return const LinearProgressIndicator();
               final x = s.data!;

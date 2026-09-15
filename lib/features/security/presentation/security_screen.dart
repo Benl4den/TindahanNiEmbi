@@ -54,6 +54,14 @@ class _State extends State<SecurityScreen> {
         FutureBuilder<List<StaffAccount>>(
           future: staff,
           builder: (_, snapshot) {
+            if (snapshot.hasError) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Could not load staff accounts. Reopen Settings to try again.',
+                ),
+              );
+            }
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }

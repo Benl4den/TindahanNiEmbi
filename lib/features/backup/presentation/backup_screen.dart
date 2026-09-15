@@ -30,9 +30,11 @@ class _State extends State<BackupScreen> {
   }
 
   Future<void> backup() async {
+    if (busy) return;
     setState(() => busy = true);
     try {
       final generated = await widget.service.create();
+      if (!mounted) return;
       final save = await FilePicker.saveFile(
         dialogTitle: 'Create Backup',
         fileName: 'TindahanNiEmbi.tnebackup.zip',
@@ -56,45 +58,48 @@ class _State extends State<BackupScreen> {
   }
 
   Future<void> restore() async {
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
-    if (picked?.path == null) return;
-    if (!mounted) return;
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        icon: Icon(
-          Icons.warning_amber_rounded,
-          color: Theme.of(c).colorScheme.error,
-        ),
-        title: const Text('Restore this backup?'),
-        content: const Text(
-          'This replaces the current store records and product images with the selected backup. Create a new backup first if you may need the current data later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Restore'),
-          ),
-        ],
-      ),
-    );
-    if (yes != true) return;
+    if (busy) return;
     setState(() => busy = true);
     try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (picked?.path == null) return;
+      if (!mounted) return;
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            color: Theme.of(c).colorScheme.error,
+          ),
+          title: const Text('Restore this backup?'),
+          content: const Text(
+            'This replaces the current store records and product images with the selected backup. Create a new backup first if you may need the current data later.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (yes != true || !mounted) return;
       await widget.service.restore(picked!.path!);
       if (!mounted) return;
       widget.onRestored();
-      setState(() => status = 'Backup restored.');
+      if (mounted) setState(() => status = 'Backup restored.');
     } catch (_) {
       if (mounted) {
-        setState(() => status = 'The backup is invalid or damaged.');
+        setState(
+          () => status = 'Restore could not be completed. Check the backup file and try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -110,7 +115,7 @@ class _State extends State<BackupScreen> {
     body: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -119,6 +124,16 @@ class _State extends State<BackupScreen> {
               FutureBuilder<BackupHealth>(
                 future: backupHealth,
                 builder: (_, snapshot) {
+                  if (snapshot.hasError) {
+                    return TextButton(
+                      onPressed: () => setState(
+                        () => backupHealth = widget.service.health(),
+                      ),
+                      child: const Text(
+                        'Could not check backup health. Try again',
+                      ),
+                    );
+                  }
                   final value = snapshot.data;
                   return Card(
                     child: Padding(

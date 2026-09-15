@@ -26,6 +26,16 @@ class SaleDetailsScreen extends StatelessWidget {
     body: FutureBuilder<CashSaleDetails>(
       future: repository.details(saleId),
       builder: (_, s) {
+        if (s.hasError) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Could not load this sale. Go back and open it again.',
+              ),
+            ),
+          );
+        }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final d = s.data!, local = d.sale.occurredAt.toLocal();
         return ListView(

@@ -42,6 +42,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../activity_logs/presentation/activity_logs_screen.dart';
 import '../../activity_logs/presentation/staff_activity_screen.dart';
 import '../../backup/presentation/backup_screen.dart';
+import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../cash_sales/presentation/cash_sale_screen.dart';
 import '../../categories/presentation/categories_screen.dart';
 import '../../consignment/presentation/consignment_screen.dart';
@@ -87,6 +88,7 @@ class _State extends State<AppShell> {
   final _backController = SectionBackController();
   bool _handlingBack = false;
   int selected = 0;
+  bool dashboardAddExpense = false;
   int salesRevision = 0;
   int restockCount = 0;
   int productCount = 0;
@@ -246,6 +248,8 @@ class _State extends State<AppShell> {
       pendingConsignorId = null;
       pendingConsignmentProductId = null;
       selected = destination;
+      if (destination == 13) dashboardRevision++;
+      if (destination != 7) dashboardAddExpense = false;
       if (destination == 0) salesRevision++;
     });
   }
@@ -330,7 +334,13 @@ class _State extends State<AppShell> {
       ),
       const NavigationDestination(icon: GCashIcon(), label: 'GCash'),
     ];
-    const navTargets = [0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
+    bodyDestinations.add(
+      const NavigationDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        label: 'Dashboard',
+      ),
+    );
+    const navTargets = [13, 0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
     final allowedTargets = widget.role == UserRole.owner
         ? navTargets
         : navTargets
@@ -376,7 +386,20 @@ class _State extends State<AppShell> {
     );
   }
 
+  int dashboardRevision = 0;
+
   Widget _body() => switch (selected) {
+    13 =>
+      widget.role == UserRole.owner
+          ? DashboardScreen(
+              refreshRevision: dashboardRevision,
+              database: widget.database,
+              navigate: (target) {
+                dashboardAddExpense = target == 7;
+                _select(target);
+              },
+            )
+          : _denied(),
     0 => FutureBuilder<List<Object>>(
       future: Future.wait<Object>([
         SqliteProductRepository(widget.database).searchActive(),
@@ -497,6 +520,7 @@ class _State extends State<AppShell> {
           : null,
     ),
     7 => ExpensesScreen(
+      openAdd: dashboardAddExpense,
       repository: ExpenseRepository(widget.database, actorRole: role),
       auth: AuthService(widget.database),
     ),
@@ -756,7 +780,7 @@ class _State extends State<AppShell> {
   }
 
   String _navSection(int target) => switch (target) {
-    0 || 6 || 12 => 'Daily Selling',
+    13 || 0 || 6 || 12 => 'Daily Selling',
     5 || 3 || 4 => 'Stock & Products',
     1 || 2 => 'Supplier Products',
     11 || 7 || 8 || 9 => 'Store Records',

@@ -43,6 +43,41 @@ void main() {
   });
   tearDown(() => app.close());
   test(
+    'period aggregates use local inclusive start and exclusive end',
+    () async {
+      final start = DateTime(2026, 3, 2);
+      final end = DateTime(2026, 3, 9);
+      final dates = [
+        DateTime(2026, 3, 1, 23, 59),
+        start,
+        DateTime(2026, 3, 8, 23, 59),
+        end,
+      ];
+      for (var i = 0; i < dates.length; i++) {
+        final stamp = dates[i].toUtc().toIso8601String();
+        await db.insert('cash_sales', {
+          'reference': 'BOUNDARY-$i',
+          'total_centavos': (i + 1) * 100,
+          'status': 'POSTED',
+          'occurred_at': stamp,
+          'created_at': stamp,
+        });
+      }
+      final repo = OperationsRepository(db);
+      final week = await repo.daily(start, endDate: end);
+      expect(week.cashSales, 500);
+      expect(week.cashSaleCount, 2);
+      final today = await repo.daily(start);
+      expect(today.cashSales, 200);
+      final month = await repo.daily(
+        DateTime(2026, 3),
+        endDate: DateTime(2026, 4),
+      );
+      expect(month.cashSales, 1000);
+      expect(month.cashSaleCount, 4);
+    },
+  );
+  test(
     'restock suggestion and daily totals keep cash UTANG and payable separate',
     () async {
       final customer = await SqliteCustomerRepository(db)

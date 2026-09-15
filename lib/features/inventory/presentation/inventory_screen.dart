@@ -478,7 +478,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
           height: 480,
           child: FutureBuilder<List<InventoryMovement>>(
             future: _history,
-            builder: (_, s) => !s.hasData
+            builder: (_, s) => s.hasError
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load stock history. Close this window and try again.',
+                      ),
+                    ),
+                  )
+                : !s.hasData
                 ? const Center(child: CircularProgressIndicator())
                 : Builder(
                     builder: (_) {

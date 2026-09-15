@@ -34,12 +34,23 @@ class _State extends State<CustomerDetailScreen> {
 
   void reload() => data = widget.repository.details(widget.customerId);
   Future<void> refreshDetailsNow() async {
-    final refreshed = await widget.repository.details(widget.customerId);
-    if (!mounted) return;
-    setState(() {
-      data = Future.value(refreshed);
-      visibleBalanceCentavos = null;
-    });
+    try {
+      final refreshed = await widget.repository.details(widget.customerId);
+      if (!mounted) return;
+      setState(() {
+        data = Future.value(refreshed);
+        visibleBalanceCentavos = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not refresh this account. The recorded payment is saved. Reopen the account to check its latest balance.',
+          ),
+        ),
+      );
+    }
   }
 
   void applyCommittedPayment(int previousBalance, int amountCentavos) {
@@ -60,6 +71,14 @@ class _State extends State<CustomerDetailScreen> {
     body: FutureBuilder<CustomerDetails>(
       future: data,
       builder: (context, s) {
+        if (s.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: () => setState(reload),
+              child: const Text('Could not load this account. Try again'),
+            ),
+          );
+        }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final d = s.data!;
         final currentBalance =
