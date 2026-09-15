@@ -166,9 +166,20 @@ class _SelectaScreenState extends State<SelectaScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${product.name} Sales History'),
+        title: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: ProductImage(path: product.photoPath, borderRadius: 10),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('${product.name} Sales History')),
+          ],
+        ),
         content: SizedBox(
-          width: 520,
+          width: 620,
+          height: 500,
           child: FutureBuilder<List<Map<String, Object?>>>(
             future: widget.special.productSalesHistory(product.id),
             builder: (_, snapshot) {
@@ -193,31 +204,68 @@ class _SelectaScreenState extends State<SelectaScreen> {
                 (sum, row) => sum + (row['line_total_centavos']! as int),
               );
               return Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$quantity sold • ${standardMoney(total)} from ${rows.length} transaction${rows.length == 1 ? '' : 's'}',
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Wrap(
+                      spacing: 24,
+                      runSpacing: 6,
+                      children: [
+                        _historyMetric(
+                          'Quantity sold',
+                          productQuantityText(product, quantity),
+                        ),
+                        _historyMetric('Sales value', standardMoney(total)),
+                        _historyMetric('Completed sales', '${rows.length}'),
+                      ],
+                    ),
                   ),
-                  const Divider(),
-                  Flexible(
-                    child: ListView(
-                      children: rows
-                          .map(
-                            (row) => ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                '${row['source']} • ${row['quantity']} sold',
-                              ),
-                              subtitle: Text('${row['occurred_at']}'),
-                              trailing: Text(
-                                standardMoney(
-                                  row['line_total_centavos']! as int,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Completed sales only. Cancelled and corrected sales are excluded.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: rows.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final row = rows[index];
+                        final occurredAt = DateTime.parse(
+                          row['occurred_at']! as String,
+                        ).toLocal();
+                        final source = row['source']! as String;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 5,
+                          ),
+                          leading: Icon(
+                            source == 'UTANG sale'
+                                ? Icons.people_outline
+                                : source == 'GCash sale'
+                                ? Icons.account_balance_wallet_outlined
+                                : Icons.payments_outlined,
+                          ),
+                          title: Text(
+                            '$source • ${productQuantityText(product, row['quantity']! as int)}',
+                          ),
+                          subtitle: Text(
+                            '${MaterialLocalizations.of(context).formatMediumDate(occurredAt)} • ${TimeOfDay.fromDateTime(occurredAt).format(context)}\nRecorded by ${row['actor_name']! as String}',
+                          ),
+                          isThreeLine: true,
+                          trailing: Text(
+                            standardMoney(row['line_total_centavos']! as int),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -234,6 +282,15 @@ class _SelectaScreenState extends State<SelectaScreen> {
       ),
     );
   }
+
+  Widget _historyMetric(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      Text(value, style: Theme.of(context).textTheme.titleMedium),
+    ],
+  );
 
   Future<void> _remove(Product product) async {
     final yes = await showDialog<bool>(
@@ -368,7 +425,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                 padding: const EdgeInsets.all(20),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 440,
-                  mainAxisExtent: 248,
+                  mainAxisExtent: 276,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                 ),
@@ -434,11 +491,10 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                         label: const Text('Stock In'),
                                       ),
                                     ),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Wrap(
-                                        children: [
-                                          TextButton.icon(
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextButton.icon(
                                             onPressed: () => _saleHistory(p),
                                             icon: const Icon(
                                               Icons.bar_chart_outlined,
@@ -446,20 +502,20 @@ class _SelectaScreenState extends State<SelectaScreen> {
                                             ),
                                             label: const Text('Sale History'),
                                           ),
-                                          TextButton(
-                                            onPressed: () => _remove(p),
-                                            child: const Text('Remove'),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Edit product',
+                                          onPressed: () => _edit(p),
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Remove from brand',
+                                          onPressed: () => _remove(p),
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
                                           ),
-                                          TextButton.icon(
-                                            onPressed: () => _edit(p),
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              size: 18,
-                                            ),
-                                            label: const Text('Edit'),
-                                          ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),

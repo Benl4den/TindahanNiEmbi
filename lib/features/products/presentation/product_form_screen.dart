@@ -347,10 +347,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 border: OutlineInputBorder(),
                                 contentPadding: EdgeInsets.all(20),
                               ),
-                              style: const TextStyle(
-                                fontSize: 20,
-                                color: Colors.black,
-                              ),
+                              style: Theme.of(context).textTheme.titleMedium,
                               items: widget.categories
                                   .map(
                                     (c) => DropdownMenuItem(

@@ -33,6 +33,7 @@ class SqliteCategoryRepository implements CategoryRepository {
     'Coffee & Powdered Drinks',
     'Rice',
     'Cooking Oil',
+    'Cooking Oil (Standard Measurements)',
     'Canned Goods',
     'Instant Noodles',
     'Snacks & Chips',

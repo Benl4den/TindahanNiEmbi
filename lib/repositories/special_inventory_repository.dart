@@ -53,11 +53,20 @@ class SpecialInventoryRepository {
       args.add(productId);
     }
     return db.rawQuery('''
-      SELECT occurred_at,quantity,line_total_centavos,'Cash sale' source
+      SELECT s.occurred_at,i.quantity,i.line_total_centavos,
+        CASE COALESCE(sp.payment_method,'CASH')
+          WHEN 'GCASH' THEN 'GCash sale' ELSE 'Cash sale' END source,
+        COALESCE((SELECT l.actor_name FROM activity_logs l
+          WHERE l.related_entity_type='CASH_SALE' AND l.related_entity_id=s.id
+          ORDER BY l.id DESC LIMIT 1),'Owner') actor_name
       FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
+      LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
       WHERE i.product_id=? AND s.status='POSTED'$whereDay
       UNION ALL
-      SELECT occurred_at,quantity,line_total_centavos,'UTANG sale' source
+      SELECT u.occurred_at,i.quantity,i.line_total_centavos,'UTANG sale' source,
+        COALESCE((SELECT l.actor_name FROM activity_logs l
+          WHERE l.related_entity_type='UTANG' AND l.related_entity_id=u.id
+          ORDER BY l.id DESC LIMIT 1),'Owner') actor_name
       FROM utang_transaction_items i JOIN utang_transactions u ON u.id=i.utang_transaction_id
       WHERE i.product_id=? AND u.status='POSTED'$whereDay
       ORDER BY occurred_at DESC

@@ -114,6 +114,7 @@ void main() {
       containsAll([
         'Rice',
         'Cooking Oil',
+        'Cooking Oil (Standard Measurements)',
         'Soft Drinks',
         'Cigarettes & Tobacco',
       ]),
