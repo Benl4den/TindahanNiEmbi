@@ -159,7 +159,7 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
       children: [
         Text(label),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
       ],
     ),
   );

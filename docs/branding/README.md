@@ -30,3 +30,16 @@ when collapsed. Login, startup, and About use the TS icon and TindaSari PH name.
 The Android launch background also uses the TS mark. Internal database, package,
 and backup identifiers remain unchanged for compatibility.
 Retain the original sheet as the master reference.
+
+## Transparent light navbar mark
+
+`assets/branding/tindasari_ts_light_clear.png` is rendered directly from the
+approved TS SVG paths, retaining transparent canvas pixels. Regenerate with:
+
+```sh
+swift docs/branding/render_ts.swift assets/branding/source/tindasari_ts_review.svg assets/branding/tindasari_ts_light_clear.png
+```
+
+The renderer checks that all four corner pixels have zero alpha. Quick Look
+thumbnail exports must not be used for transparent app assets: they flatten
+the canvas onto white even when the PNG contains an alpha channel.

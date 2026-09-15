@@ -300,7 +300,7 @@ class _State extends State<DailyClosingScreen> {
       leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
       ),
       subtitle: const Text('Tap to view breakdown'),
       childrenPadding: const EdgeInsets.all(18),
@@ -329,7 +329,7 @@ class _State extends State<DailyClosingScreen> {
           value,
           style: TextStyle(
             fontSize: strong ? 25 : 21,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: color,
           ),
         ),
@@ -411,7 +411,7 @@ class _State extends State<DailyClosingScreen> {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 34,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],

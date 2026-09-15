@@ -93,7 +93,7 @@ class ReportsScreen extends StatelessWidget {
                 ),
                 title: Text(
                   r['name']! as String,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
                   'Stock: ${_quantity(r, 'current_quantity')}\nPurchase: ${standardMoney(r['purchase_price_centavos']! as int)} per ${r['purchase_package']} • Selling: ${standardMoney(r['selling_price_centavos']! as int)}',
@@ -107,7 +107,7 @@ class ReportsScreen extends StatelessWidget {
                       standardMoney(r['stock_value']! as int),
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -162,7 +162,7 @@ class ReportsScreen extends StatelessWidget {
                 subtitle: const Text('Outstanding UTANG'),
                 trailing: Text(
                   standardMoney(r['balance']! as int),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -278,7 +278,7 @@ class ReportsScreen extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 30,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(detail, style: const TextStyle(color: Colors.white70)),
@@ -481,7 +481,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 30,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(detail, style: const TextStyle(color: Colors.white70)),
@@ -590,7 +590,7 @@ class _RowsScreen extends StatelessWidget {
         trailing: Text(
           '${isAdded ? '+' : '−'}$unit',
           style: TextStyle(
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: isAdded
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.error,

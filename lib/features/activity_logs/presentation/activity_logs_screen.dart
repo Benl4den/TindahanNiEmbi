@@ -141,7 +141,7 @@ class _State extends State<ActivityLogsScreen> {
                     Text(
                       MaterialLocalizations.of(context).formatFullDate(date),
                       style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       category == 'All'
@@ -202,7 +202,7 @@ class _State extends State<ActivityLogsScreen> {
                                         _eventLabel(x.eventType),
                                         style: TextStyle(
                                           color: color,
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.w700,
                                           fontSize: 12,
                                         ),
                                       ),

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/formatters/display_labels.dart';
 
 import '../../../models/product.dart';
@@ -493,7 +495,7 @@ class _State extends State<CashSaleScreen> {
                           ),
                           Text(
                             money(line.lineTotalCentavos),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ],
                       );
@@ -578,14 +580,14 @@ class _State extends State<CashSaleScreen> {
                       'TOTAL',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
                       money(c.totalCentavos),
                       style: TextStyle(
                         fontSize: 25,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
@@ -693,7 +695,7 @@ class _State extends State<CashSaleScreen> {
                         money(amountReceived - result.totalCentavos),
                         style: const TextStyle(
                           fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -743,6 +745,22 @@ class _State extends State<CashSaleScreen> {
     }
   }
 
+  Future<bool> _handleDeviceBack() async {
+    if (saving) return true;
+    if (c.lines.isEmpty) return false;
+    final leave = await confirmLeavingPage(
+      context,
+      title: 'Leave TindaSari PH?',
+      message: widget.drafts == null
+          ? 'The current sale has not been completed. Leave the app?'
+          : 'The current sale has not been completed. Your cart is saved for recovery. Leave the app?',
+      actionLabel: 'Leave App',
+    );
+    if (!mounted || !leave || saving) return true;
+    await _draftWrite;
+    return false;
+  }
+
   Future<void> clearCart() async {
     if (c.selectedProducts.isEmpty) return;
     final yes = await showDialog<bool>(
@@ -781,27 +799,37 @@ class _State extends State<CashSaleScreen> {
         if (landscape) SizedBox(width: 360, child: _cart()),
       ],
     );
-    if (widget.embedded) return content;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sales'),
-        actions: const [HelpButton(topic: HelpTopicId.cashSale)],
-      ),
-      body: content,
-      floatingActionButton: landscape
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => SizedBox(
-                  height: MediaQuery.sizeOf(context).height * .8,
-                  child: _cart(),
+    if (widget.embedded) {
+      return SectionBackHandler(onBack: _handleDeviceBack, child: content);
+    }
+    return PageBackGuard(
+      busy: saving,
+      hasUnsavedChanges: c.lines.isNotEmpty,
+      title: 'Leave current sale?',
+      message: 'The current sale has not been completed.',
+      actionLabel: 'Leave Sale',
+      beforeLeave: () async => await _draftWrite,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Sales'),
+          actions: const [HelpButton(topic: HelpTopicId.cashSale)],
+        ),
+        body: content,
+        floatingActionButton: landscape
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => SizedBox(
+                    height: MediaQuery.sizeOf(context).height * .8,
+                    child: _cart(),
+                  ),
                 ),
+                icon: const Icon(Icons.shopping_cart),
+                label: Text('Cart (${c.selectedProducts.length})'),
               ),
-              icon: const Icon(Icons.shopping_cart),
-              label: Text('Cart (${c.selectedProducts.length})'),
-            ),
+      ),
     );
   }
 
@@ -948,7 +976,7 @@ class _State extends State<CashSaleScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -958,7 +986,7 @@ class _State extends State<CashSaleScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
@@ -1047,7 +1075,7 @@ class _State extends State<CashSaleScreen> {
                 const Expanded(
                   child: Text(
                     'Current Sale',
-                    style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
                   ),
                 ),
                 OutlinedButton.icon(
@@ -1174,7 +1202,7 @@ class _State extends State<CashSaleScreen> {
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
+                                                fontWeight: FontWeight.w700,
                                                 fontSize: 16,
                                               ),
                                             ),
@@ -1220,7 +1248,7 @@ class _State extends State<CashSaleScreen> {
                                             child: Text(
                                               line.quantityText,
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                           ),
@@ -1250,7 +1278,7 @@ class _State extends State<CashSaleScreen> {
                                         child: Text(
                                           money(line.lineTotalCentavos),
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
                                       ),
@@ -1288,7 +1316,7 @@ class _State extends State<CashSaleScreen> {
                           money(c.totalCentavos),
                           style: const TextStyle(
                             fontSize: 26,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -1336,7 +1364,7 @@ class _State extends State<CashSaleScreen> {
                               const Expanded(
                                 child: Text(
                                   "TODAY'S SALES",
-                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                  style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ),
                               Column(
@@ -1345,7 +1373,7 @@ class _State extends State<CashSaleScreen> {
                                   Text(
                                     money(todaySalesTotal),
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   Text(
@@ -1394,7 +1422,7 @@ class _State extends State<CashSaleScreen> {
                   children: [
                     Text(
                       'LAST TRANSACTION',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     SizedBox(height: 10),
                     Text('No sales recorded yet.'),
@@ -1408,7 +1436,7 @@ class _State extends State<CashSaleScreen> {
                         const Expanded(
                           child: Text(
                             'LAST TRANSACTION',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
                         Flexible(
@@ -1428,7 +1456,7 @@ class _State extends State<CashSaleScreen> {
                             money(sale.totalCentavos),
                             style: TextStyle(
                               fontSize: 21,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w700,
                               color: accent,
                             ),
                           ),
@@ -1564,7 +1592,7 @@ class _State extends State<CashSaleScreen> {
                                     money(e.totalCentavos),
                                     style: TextStyle(
                                       fontSize: 17,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w700,
                                       color: e.isUtang
                                           ? Colors.orange.shade800
                                           : Theme.of(context)

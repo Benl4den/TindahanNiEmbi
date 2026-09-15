@@ -110,7 +110,7 @@ class UtangCustomerCard extends StatelessWidget {
                       standardMoney(customer.balanceCentavos),
                       style: TextStyle(
                         fontSize: 25,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: amountColor,
                       ),
                     ),

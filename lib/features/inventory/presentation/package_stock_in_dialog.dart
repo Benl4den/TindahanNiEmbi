@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../models/product.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/product_unit.dart';
@@ -49,7 +51,7 @@ Future<bool> showPackageStockInDialog({
       builder: (_, set) {
         final packagesCount = int.tryParse(numericInput(count.text)) ?? 0;
         final total = packagesCount * selected.baseQuantity;
-        return AlertDialog(
+        final content = AlertDialog(
           title: Text('Stock In — ${product.name}'),
           content: SizedBox(
             width: 500,
@@ -151,7 +153,7 @@ Future<bool> showPackageStockInDialog({
           ),
           actions: [
             TextButton(
-              onPressed: submitting ? null : () => Navigator.pop(dialog, false),
+              onPressed: submitting ? null : () => Navigator.maybePop(dialog),
               child: const Text('Cancel'),
             ),
             FilledButton(
@@ -211,6 +213,12 @@ Future<bool> showPackageStockInDialog({
               child: const Text('Stock In'),
             ),
           ],
+        );
+        return PageBackGuard(
+          controllers: [count, cost, notes],
+          changeToken: selected.id,
+          busy: submitting,
+          child: content,
         );
       },
     ),

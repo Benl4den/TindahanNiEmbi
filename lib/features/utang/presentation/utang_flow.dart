@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/formatters/display_labels.dart';
 
 import '../../../core/constants/app_strings.dart';
@@ -281,7 +283,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
           value,
           style: TextStyle(
             fontSize: 24,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
             color: color,
           ),
         ),
@@ -456,122 +458,124 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
     final shown = c.products
         .where((p) => p.name.toLowerCase().contains(q.toLowerCase()))
         .toList();
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('New UTANG Sale — ${widget.customer.fullName}'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: const InputDecoration(
-                labelText: AppStrings.searchProducts,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (v) => setState(() => q = v),
-            ),
-          ),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: .72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: shown.length,
-              itemBuilder: (_, i) {
-                final p = shown[i], qty = c.quantityFor(p);
-                return Card(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Image.file(
-                          File(p.photoPath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) =>
-                              const Icon(Icons.inventory_2, size: 60),
-                        ),
-                      ),
-                      Text(
-                        p.name,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      Text(
-                        '${standardMoney(p.sellingPriceCentavos)} • Stock: ${productQuantityText(p, p.currentQuantity)}',
-                      ),
-                      if (p.currentQuantity == 0)
-                        const Text(AppStrings.outOfStock)
-                      else
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            IconButton.filled(
-                              onPressed: () => setState(() => c.decrease(p)),
-                              icon: const Icon(Icons.remove),
-                              iconSize: 30,
-                            ),
-                            Text(
-                              '$qty',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            IconButton.filled(
-                              onPressed: () => _addProduct(p),
-                              icon: const Icon(Icons.add),
-                              iconSize: 30,
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Total: ${standardMoney(c.totalCentavos)}',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: c.totalCentavos == 0
-                        ? null
-                        : () async {
-                            final saved = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => UtangReviewScreen(
-                                  customer: widget.customer,
-                                  selection: c,
-                                  customers: widget.customers,
-                                  utang: widget.utang,
-                                ),
-                              ),
-                            );
-                            if (saved == true && context.mounted) {
-                              Navigator.pop(context, true);
-                            }
-                          },
-                    child: const Text('Review UTANG Sale'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return PageBackGuard(
+      hasUnsavedChanges: c.lines.isNotEmpty,
+      title: 'Discard current UTANG sale?',
+      message: 'This UTANG sale has not been saved.',
+      child: _buildSelection(context, shown),
     );
   }
+
+  Widget _buildSelection(BuildContext context, List<Product> shown) => Scaffold(
+    appBar: AppBar(title: Text('New UTANG Sale — ${widget.customer.fullName}')),
+    body: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: const InputDecoration(
+              labelText: AppStrings.searchProducts,
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (v) => setState(() => q = v),
+          ),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: .72,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: shown.length,
+            itemBuilder: (_, i) {
+              final p = shown[i], qty = c.quantityFor(p);
+              return Card(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Image.file(
+                        File(p.photoPath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.inventory_2, size: 60),
+                      ),
+                    ),
+                    Text(p.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      '${standardMoney(p.sellingPriceCentavos)} • Stock: ${productQuantityText(p, p.currentQuantity)}',
+                    ),
+                    if (p.currentQuantity == 0)
+                      const Text(AppStrings.outOfStock)
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          IconButton.filled(
+                            onPressed: () => setState(() => c.decrease(p)),
+                            icon: const Icon(Icons.remove),
+                            iconSize: 30,
+                          ),
+                          Text(
+                            '$qty',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          IconButton.filled(
+                            onPressed: () => _addProduct(p),
+                            icon: const Icon(Icons.add),
+                            iconSize: 30,
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Total: ${standardMoney(c.totalCentavos)}',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                FilledButton(
+                  onPressed: c.totalCentavos == 0
+                      ? null
+                      : () async {
+                          final saved = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => UtangReviewScreen(
+                                customer: widget.customer,
+                                selection: c,
+                                customers: widget.customers,
+                                utang: widget.utang,
+                              ),
+                            ),
+                          );
+                          if (saved == true && context.mounted) {
+                            Navigator.pop(context, true);
+                          }
+                        },
+                  child: const Text('Review UTANG Sale'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class UtangReviewScreen extends StatefulWidget {
@@ -622,7 +626,10 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<CustomerDetails>(
+  Widget build(BuildContext context) =>
+      PopScope<Object?>(canPop: !saving, child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) => FutureBuilder<CustomerDetails>(
     future: widget.customers.details(widget.customer.id),
     builder: (_, s) {
       if (!s.hasData) {
@@ -660,7 +667,7 @@ class _UtangReviewScreenState extends State<UtangReviewScreen> {
               child: const Text('Save UTANG Sale'),
             ),
             OutlinedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: saving ? null : () => Navigator.maybePop(context),
               child: const Text(AppStrings.back),
             ),
           ],
@@ -791,7 +798,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                             _money(currentBalance),
                             style: TextStyle(
                               fontSize: 34,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w700,
                               color: currentBalance > 0
                                   ? Colors.orange.shade800
                                   : Theme.of(context)
@@ -880,7 +887,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                     ),
                     trailing: Text(
                       _money(item.lineTotalCentavos),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -894,7 +901,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                       MaterialLocalizations.of(context).formatMediumDate(
                         group.value.first.occurredAt.toLocal(),
                       ),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
                       '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
@@ -1166,7 +1173,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       builder: (dialog) => StatefulBuilder(
         builder: (_, set) {
           final cents = ((double.tryParse(amount.text) ?? 0) * 100).round();
-          return AlertDialog(
+          final content = AlertDialog(
             title: const Text('Fix Payment Details'),
             content: SizedBox(
               width: 520,
@@ -1253,6 +1260,11 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
               ),
             ],
           );
+          return PageBackGuard(
+            controllers: [amount, reason, pin],
+            busy: saving,
+            child: content,
+          );
         },
       ),
     );
@@ -1325,7 +1337,7 @@ class UtangDetailsDialog extends StatelessWidget {
                         children: [
                           const Text(
                             'UTANG SALE DETAILS',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                           Text(
                             d['reference']! as String,
@@ -1351,7 +1363,7 @@ class UtangDetailsDialog extends StatelessWidget {
                 const Divider(height: 28),
                 const Text(
                   'PRODUCTS',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 Expanded(
                   child: ListView(
@@ -1378,13 +1390,13 @@ class UtangDetailsDialog extends StatelessWidget {
                   children: [
                     const Text(
                       'TOTAL UTANG',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       money(d['total_centavos']! as int),
                       style: TextStyle(
                         fontSize: 28,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: Colors.orange.shade800,
                       ),
                     ),

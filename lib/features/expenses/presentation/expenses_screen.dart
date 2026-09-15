@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/formatters/display_labels.dart';
 
 import '../../../widgets/overview_banner.dart';
@@ -533,7 +535,22 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [
+      amount,
+      description,
+      notes,
+      reference,
+      gcashReference,
+      reason,
+      pin,
+    ],
+    changeToken: (categoryId, when, paymentMethod),
+    busy: busy,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => AlertDialog(
     title: Text(
       widget.original == null ? 'Add Expense' : 'Fix Expense Details',
     ),
@@ -652,7 +669,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
     ),
     actions: [
       TextButton(
-        onPressed: busy ? null : () => Navigator.pop(context, false),
+        onPressed: busy ? null : () => Navigator.maybePop(context),
         child: const Text('Cancel'),
       ),
       FilledButton(

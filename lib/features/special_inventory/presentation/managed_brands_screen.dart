@@ -93,7 +93,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         children: [
           Text('Brands'),
           Text(
-            'Organize supplier and branded product groups',
+            'Track each brand’s products, stock, and sales in one place',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
           ),
         ],
@@ -141,15 +141,26 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${snapshot.data!.length} brands',
+                          '${snapshot.data!.length} ${snapshot.data!.length == 1 ? 'brand' : 'brands'}',
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          '${snapshot.data!.fold<int>(0, (n, x) => n + x.productCount)} products across brands • ${snapshot.data!.fold<int>(0, (n, x) => n + x.lowStockCount + x.outOfStockCount)} need restock',
-                        ),
-                        const Text(
-                          'Keep each brand’s products and stock needs together. Open a brand to manage its catalog or add a new brand as your store grows.',
+                        Builder(
+                          builder: (context) {
+                            final products = snapshot.data!.fold<int>(
+                              0,
+                              (n, x) => n + x.productCount,
+                            );
+                            final needsRestock = snapshot.data!.fold<int>(
+                              0,
+                              (n, x) => n + x.lowStockCount + x.outOfStockCount,
+                            );
+                            return Text(
+                              needsRestock == 0
+                                  ? '$products ${products == 1 ? 'product' : 'products'} across brands • Stock healthy'
+                                  : '$products ${products == 1 ? 'product' : 'products'} across brands • $needsRestock need restock',
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -171,17 +182,33 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                     itemBuilder: (_, index) {
                       if (index == snapshot.data!.length) {
                         return Card(
+                          color: Theme.of(context).colorScheme.primaryContainer
+                              .withValues(alpha: .32),
                           child: InkWell(
                             onTap: _add,
                             borderRadius: BorderRadius.circular(12),
-                            child: const Column(
+                            child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.add_circle_outline, size: 36),
-                                SizedBox(height: 12),
-                                Text('Add Brand'),
-                                SizedBox(height: 6),
-                                Text('Build your next product collection'),
+                                Icon(
+                                  Icons.add_circle_outline,
+                                  size: 36,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Add Brand',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Build your next product collection',
+                                ),
                               ],
                             ),
                           ),
@@ -216,7 +243,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                                 .textTheme
                                                 .titleLarge
                                                 ?.copyWith(
-                                                  fontWeight: FontWeight.w800,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                           ),
                                           Text(
@@ -229,22 +256,32 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                   ],
                                 ),
                                 const Spacer(),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  children: [
-                                    _status(
-                                      '${summary.lowStockCount} low stock',
-                                      Icons.warning_amber_rounded,
-                                      Colors.orange,
-                                    ),
-                                    _status(
-                                      '${summary.outOfStockCount} out',
-                                      Icons.error_outline,
-                                      Colors.red,
-                                    ),
-                                  ],
-                                ),
+                                if (summary.lowStockCount == 0 &&
+                                    summary.outOfStockCount == 0)
+                                  _status(
+                                    'Stock healthy',
+                                    Icons.verified_outlined,
+                                    Theme.of(context).colorScheme.primary,
+                                  )
+                                else
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: [
+                                      if (summary.lowStockCount > 0)
+                                        _status(
+                                          '${summary.lowStockCount} low stock',
+                                          Icons.warning_amber_rounded,
+                                          Colors.orange,
+                                        ),
+                                      if (summary.outOfStockCount > 0)
+                                        _status(
+                                          '${summary.outOfStockCount} out',
+                                          Icons.error_outline,
+                                          Colors.red,
+                                        ),
+                                    ],
+                                  ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Open brand products',

@@ -220,7 +220,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         .first
                                         .toUpperCase(),
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 22,
                               ),
                             ),
@@ -229,7 +229,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             customer.fullName,
                             style: const TextStyle(
                               fontSize: 19,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           subtitle: Padding(
@@ -245,7 +245,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   standardMoney(customer.balanceCentavos),
                                   style: TextStyle(
                                     fontSize: 24,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w700,
                                     color: customer.balanceCentavos > 0
                                         ? const Color(0xFFA65314)
                                         : const Color(0xFF17683E),

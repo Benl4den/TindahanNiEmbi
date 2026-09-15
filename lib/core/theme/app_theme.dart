@@ -84,6 +84,68 @@ abstract final class AppTheme {
     textDisabled: Color(0xFF7A847D),
   );
 
+  /// Shared typography for light and dark themes. Colours are supplied by
+  /// each theme; hierarchy and Inter weights stay identical everywhere.
+  static TextTheme _typography(
+    TextTheme base, {
+    required Color primaryText,
+    required Color secondaryText,
+  }) => base
+      .apply(
+        fontFamily: 'Inter',
+        bodyColor: primaryText,
+        displayColor: primaryText,
+      )
+      .copyWith(
+        displaySmall: TextStyle(
+          fontSize: 28,
+          height: 1.15,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -.45,
+          color: primaryText,
+        ),
+        headlineSmall: TextStyle(
+          fontSize: 26,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -.3,
+          color: primaryText,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 20,
+          height: 1.3,
+          fontWeight: FontWeight.w600,
+          color: primaryText,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 18,
+          height: 1.35,
+          fontWeight: FontWeight.w600,
+          color: primaryText,
+        ),
+        bodyLarge: TextStyle(fontSize: 16, height: 1.45, color: primaryText),
+        bodyMedium: TextStyle(fontSize: 15, height: 1.45, color: secondaryText),
+        bodySmall: TextStyle(fontSize: 14, height: 1.4, color: secondaryText),
+        labelLarge: TextStyle(
+          fontSize: 16,
+          height: 1.25,
+          fontWeight: FontWeight.w600,
+          color: primaryText,
+        ),
+        labelMedium: TextStyle(
+          fontSize: 14,
+          height: 1.25,
+          fontWeight: FontWeight.w500,
+          color: secondaryText,
+        ),
+        labelSmall: TextStyle(
+          fontSize: 12,
+          height: 1.25,
+          fontWeight: FontWeight.w500,
+          color: secondaryText,
+        ),
+      );
+
   static ThemeData get light {
     final colors = ColorScheme.fromSeed(seedColor: primary).copyWith(
       primary: primary,
@@ -92,41 +154,15 @@ abstract final class AppTheme {
       outlineVariant: const Color(0xFFE8ECE8),
       error: const Color(0xFFBA1A1A),
     );
-    final base = ThemeData(useMaterial3: true, colorScheme: colors);
-    final textTheme = base.textTheme.copyWith(
-      displaySmall: const TextStyle(
-        fontSize: 36,
-        height: 1.12,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.8,
-        color: text,
-      ),
-      headlineSmall: const TextStyle(
-        fontSize: 27,
-        height: 1.2,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.35,
-        color: text,
-      ),
-      titleLarge: const TextStyle(
-        fontSize: 21,
-        height: 1.25,
-        fontWeight: FontWeight.w700,
-        color: text,
-      ),
-      titleMedium: const TextStyle(
-        fontSize: 17,
-        height: 1.3,
-        fontWeight: FontWeight.w700,
-        color: text,
-      ),
-      bodyLarge: const TextStyle(fontSize: 17, height: 1.45, color: text),
-      bodyMedium: const TextStyle(fontSize: 15, height: 1.4, color: mutedText),
-      labelLarge: const TextStyle(
-        fontSize: 16,
-        height: 1.2,
-        fontWeight: FontWeight.w700,
-      ),
+    final base = ThemeData(
+      useMaterial3: true,
+      colorScheme: colors,
+      fontFamily: 'Inter',
+    );
+    final textTheme = _typography(
+      base.textTheme,
+      primaryText: text,
+      secondaryText: mutedText,
     );
 
     ButtonStyle buttonStyle({required bool outlined}) => ButtonStyle(
@@ -180,7 +216,7 @@ abstract final class AppTheme {
         titleTextStyle: TextStyle(
           fontSize: 23,
           height: 1.2,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: text,
         ),
       ),
@@ -277,7 +313,7 @@ abstract final class AppTheme {
         ),
         secondaryLabelStyle: const TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: primary,
         ),
       ),
@@ -293,7 +329,7 @@ abstract final class AppTheme {
         headingRowColor: WidgetStatePropertyAll(Color(0xFFF0F4F0)),
         headingTextStyle: TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: text,
         ),
         dataTextStyle: TextStyle(fontSize: 15, color: text),
@@ -315,7 +351,7 @@ abstract final class AppTheme {
           (states) => TextStyle(
             fontSize: 12,
             fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w800
+                ? FontWeight.w700
                 : FontWeight.w600,
           ),
         ),
@@ -326,7 +362,7 @@ abstract final class AppTheme {
         indicatorColor: primary,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
-        labelStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        labelStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         unselectedLabelStyle: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
@@ -367,47 +403,16 @@ abstract final class AppTheme {
           outlineVariant: border,
           error: const Color(0xFFD9534F),
         );
-    final base = ThemeData(useMaterial3: true, colorScheme: colors);
-    final textTheme = base.textTheme
-        .apply(bodyColor: onSurface, displayColor: onSurface)
-        .copyWith(
-          displaySmall: const TextStyle(
-            fontSize: 36,
-            height: 1.12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -.8,
-            color: onSurface,
-          ),
-          headlineSmall: const TextStyle(
-            fontSize: 27,
-            height: 1.2,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -.35,
-            color: onSurface,
-          ),
-          titleLarge: const TextStyle(
-            fontSize: 21,
-            height: 1.25,
-            fontWeight: FontWeight.w700,
-            color: onSurface,
-          ),
-          titleMedium: const TextStyle(
-            fontSize: 17,
-            height: 1.3,
-            fontWeight: FontWeight.w700,
-            color: onSurface,
-          ),
-          bodyLarge: const TextStyle(
-            fontSize: 17,
-            height: 1.45,
-            color: onSurface,
-          ),
-          bodyMedium: const TextStyle(
-            fontSize: 15,
-            height: 1.4,
-            color: secondary,
-          ),
-        );
+    final base = ThemeData(
+      useMaterial3: true,
+      colorScheme: colors,
+      fontFamily: 'Inter',
+    );
+    final textTheme = _typography(
+      base.textTheme,
+      primaryText: onSurface,
+      secondaryText: secondary,
+    );
     ButtonStyle buttonStyle({required bool outlined}) => ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(Size(64, 48)),
       padding: const WidgetStatePropertyAll(
@@ -531,7 +536,7 @@ abstract final class AppTheme {
         ),
         secondaryLabelStyle: const TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: bright,
         ),
       ),
@@ -547,7 +552,7 @@ abstract final class AppTheme {
         headingRowColor: WidgetStatePropertyAll(container),
         headingTextStyle: TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: onSurface,
         ),
         dataTextStyle: TextStyle(fontSize: 15, color: onSurface),

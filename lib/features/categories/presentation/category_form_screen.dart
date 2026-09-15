@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../models/category.dart';
 import '../../../repositories/category_repository.dart';
@@ -66,14 +68,20 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [_nameController],
+    busy: _saving,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final editing = widget.category != null;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           tooltip: AppStrings.back,
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.maybePop(context),
         ),
         title: Text(editing ? AppStrings.editCategory : AppStrings.addCategory),
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 
@@ -91,7 +93,14 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [name, contact],
+    changeToken: categoryId,
+    busy: saving,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => AlertDialog(
     scrollable: true,
     title: const Text('Add Consignor'),
     content: SizedBox(
@@ -134,7 +143,7 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
     ),
     actions: [
       TextButton(
-        onPressed: saving ? null : () => Navigator.pop(context, false),
+        onPressed: saving ? null : () => Navigator.maybePop(context),
         child: const Text('Cancel'),
       ),
       FilledButton(
@@ -225,7 +234,14 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [amount, notes, gcashReference],
+    changeToken: (party, paymentMethod),
+    busy: saving,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final balance = widget.balances[party] ?? 0;
     return AlertDialog(
       title: const Text('Record Remittance'),
@@ -327,7 +343,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: saving ? null : () => Navigator.pop(context, false),
+          onPressed: saving ? null : () => Navigator.maybePop(context),
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -501,7 +517,14 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [name, count, cost, price, minimum],
+    changeToken: (categoryId, photoPath),
+    busy: saving || choosingPhoto,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final quantity = int.tryParse(numericInput(count.text)) ?? 0;
     final supplier = double.tryParse(numericInput(cost.text)) ?? 0;
     final selling = double.tryParse(numericInput(price.text)) ?? 0;
@@ -880,183 +903,193 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       context: context,
       barrierDismissible: false,
       builder: (x) => StatefulBuilder(
-        builder: (_, set) => AlertDialog(
-          title: const Text('Receive Consignment'),
-          content: SizedBox(
-            width: 560,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      parties.single.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  if (!createNew)
-                    DropdownButtonFormField<int>(
-                      initialValue: product,
-                      decoration: const InputDecoration(
-                        labelText: 'Existing Product',
+        builder: (_, set) => PageBackGuard(
+          controllers: [boxes, units, cost, sell, notes],
+          changeToken: (product, party),
+          busy: saving,
+          child: AlertDialog(
+            title: const Text('Receive Consignment'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        parties.single.name,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      items: products
-                          .map(
-                            (v) => DropdownMenuItem(
-                              value: v.id,
-                              child: Text(v.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => set(() {
-                        product = v!;
-                        units.text = '1';
-                        sell.text = (sellingOption().priceCentavos / 100)
-                            .toStringAsFixed(2);
-                        cost.clear();
-                        boxes.clear();
-                      }),
                     ),
-                  const SizedBox(height: 12),
-                  ...[
-                    (boxes, 'Quantity received (${unitLabel()})'),
-                    (cost, 'Supplier cost per ${sellingOption().name}'),
-                    (sell, 'Selling price per ${sellingOption().name}'),
-                    (notes, 'Notes (optional)'),
-                  ].map(
-                    (f) => Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: TextField(
-                        controller: f.$1,
-                        readOnly: f.$1 == units,
-                        onChanged: (_) => set(() {}),
-                        keyboardType: f.$1 == notes
-                            ? TextInputType.text
-                            : TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: f.$2,
-                          helperText:
-                              f.$1 == cost && previousCosts[product] == null
-                              ? 'No previous cost recorded'
-                              : null,
-                          suffixIcon:
-                              f.$1 == cost && previousCosts[product] != null
-                              ? TextButton(
-                                  onPressed: () => set(
-                                    () => cost.text =
-                                        (previousCosts[product]! / 100)
-                                            .toStringAsFixed(2),
-                                  ),
-                                  child: Text(
-                                    'Previous: ${standardMoney(previousCosts[product]!)}',
-                                  ),
-                                )
-                              : null,
-                          border: const OutlineInputBorder(),
+                    if (!createNew)
+                      DropdownButtonFormField<int>(
+                        initialValue: product,
+                        decoration: const InputDecoration(
+                          labelText: 'Existing Product',
                         ),
+                        items: products
+                            .map(
+                              (v) => DropdownMenuItem(
+                                value: v.id,
+                                child: Text(v.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => set(() {
+                          product = v!;
+                          units.text = '1';
+                          sell.text = (sellingOption().priceCentavos / 100)
+                              .toStringAsFixed(2);
+                          cost.clear();
+                          boxes.clear();
+                        }),
                       ),
-                    ),
-                  ),
-                  Builder(
-                    builder: (_) {
-                      final boxCount =
-                          int.tryParse(numericInput(boxes.text)) ?? 0;
-                      final perBox = int.tryParse(units.text) ?? 0;
-                      final unitCost = double.tryParse(cost.text) ?? 0;
-                      final total = boxCount * perBox;
-                      final costBasis = sellingOption().baseQuantity;
-                      final totalCost =
-                          (total * (unitCost * 100)).round() / costBasis / 100;
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${quantityLabel(total)} received\nSupplier cost: ${standardMoney((unitCost * 100).round())} per ${sellingOption().name}\nTotal Consigned Value: ${standardMoney((totalCost * 100).round())}',
-                            style: Theme.of(context).textTheme.titleMedium,
+                    const SizedBox(height: 12),
+                    ...[
+                      (boxes, 'Quantity received (${unitLabel()})'),
+                      (cost, 'Supplier cost per ${sellingOption().name}'),
+                      (sell, 'Selling price per ${sellingOption().name}'),
+                      (notes, 'Notes (optional)'),
+                    ].map(
+                      (f) => Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: TextField(
+                          controller: f.$1,
+                          readOnly: f.$1 == units,
+                          onChanged: (_) => set(() {}),
+                          keyboardType: f.$1 == notes
+                              ? TextInputType.text
+                              : TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: f.$2,
+                            helperText:
+                                f.$1 == cost && previousCosts[product] == null
+                                ? 'No previous cost recorded'
+                                : null,
+                            suffixIcon:
+                                f.$1 == cost && previousCosts[product] != null
+                                ? TextButton(
+                                    onPressed: () => set(
+                                      () => cost.text =
+                                          (previousCosts[product]! / 100)
+                                              .toStringAsFixed(2),
+                                    ),
+                                    child: Text(
+                                      'Previous: ${standardMoney(previousCosts[product]!)}',
+                                    ),
+                                  )
+                                : null,
+                            border: const OutlineInputBorder(),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(top: 12),
-                    child: Text(
-                      'Selling price updates the current Sales price. Previous transactions keep their original prices.',
-                    ),
-                  ),
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
                       ),
                     ),
-                ],
+                    Builder(
+                      builder: (_) {
+                        final boxCount =
+                            int.tryParse(numericInput(boxes.text)) ?? 0;
+                        final perBox = int.tryParse(units.text) ?? 0;
+                        final unitCost = double.tryParse(cost.text) ?? 0;
+                        final total = boxCount * perBox;
+                        final costBasis = sellingOption().baseQuantity;
+                        final totalCost =
+                            (total * (unitCost * 100)).round() /
+                            costBasis /
+                            100;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${quantityLabel(total)} received\nSupplier cost: ${standardMoney((unitCost * 100).round())} per ${sellingOption().name}\nTotal Consigned Value: ${standardMoney((totalCost * 100).round())}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                        'Selling price updates the current Sales price. Previous transactions keep their original prices.',
+                      ),
+                    ),
+                    if (error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(x, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      final receipt = ConsignmentReceiptDraft(
-                        consignorId: party,
-                        productId: product,
-                        boxes: int.tryParse(numericInput(boxes.text)) ?? 0,
-                        unitsPerBox: int.tryParse(units.text) ?? 0,
-                        unitCostCentavos:
-                            ((double.tryParse(cost.text) ?? -1) * 100).round(),
-                        sellingPriceCentavos:
-                            ((double.tryParse(sell.text) ?? -1) * 100).round(),
-                        supplierCostBasisQuantity: sellingOption().baseQuantity,
-                        packageName: 'Direct ${unitLabel()}',
-                        baseUnitLabel: unitLabel(),
-                        priceUnitName: sellingOption().name,
-                        notes: notes.text,
-                      );
-                      if (receipt.boxes <= 0 ||
-                          receipt.unitsPerBox <= 0 ||
-                          receipt.unitCostCentavos < 0 ||
-                          receipt.sellingPriceCentavos <= 0) {
-                        set(
-                          () => error = 'Enter valid quantities, cost, and a selling price greater than zero.',
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.maybePop(x),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final receipt = ConsignmentReceiptDraft(
+                          consignorId: party,
+                          productId: product,
+                          boxes: int.tryParse(numericInput(boxes.text)) ?? 0,
+                          unitsPerBox: int.tryParse(units.text) ?? 0,
+                          unitCostCentavos:
+                              ((double.tryParse(cost.text) ?? -1) * 100)
+                                  .round(),
+                          sellingPriceCentavos:
+                              ((double.tryParse(sell.text) ?? -1) * 100)
+                                  .round(),
+                          supplierCostBasisQuantity:
+                              sellingOption().baseQuantity,
+                          packageName: 'Direct ${unitLabel()}',
+                          baseUnitLabel: unitLabel(),
+                          priceUnitName: sellingOption().name,
+                          notes: notes.text,
                         );
-                        return;
-                      }
-                      set(() {
-                        saving = true;
-                        error = null;
-                      });
-                      try {
-                        await widget.repository.receive(receipt);
-                        if (x.mounted) Navigator.pop(x, true);
-                      } catch (e) {
-                        if (x.mounted) {
-                          set(() {
-                            saving = false;
-                            error = _friendly(e);
-                          });
+                        if (receipt.boxes <= 0 ||
+                            receipt.unitsPerBox <= 0 ||
+                            receipt.unitCostCentavos < 0 ||
+                            receipt.sellingPriceCentavos <= 0) {
+                          set(
+                            () => error = 'Enter valid quantities, cost, and a selling price greater than zero.',
+                          );
+                          return;
                         }
-                      }
-                    },
-              child: saving
-                  ? const SizedBox.square(
-                      dimension: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Receive'),
-            ),
-          ],
+                        set(() {
+                          saving = true;
+                          error = null;
+                        });
+                        try {
+                          await widget.repository.receive(receipt);
+                          if (x.mounted) Navigator.pop(x, true);
+                        } catch (e) {
+                          if (x.mounted) {
+                            set(() {
+                              saving = false;
+                              error = _friendly(e);
+                            });
+                          }
+                        }
+                      },
+                child: saving
+                    ? const SizedBox.square(
+                        dimension: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Receive'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1391,7 +1424,19 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => SectionBackHandler(
+    onBack: () async {
+      if (selectedConsignorId == null) return false;
+      setState(() {
+        selectedConsignorId = null;
+        _reload();
+      });
+      return true;
+    },
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => Scaffold(
     appBar: AppBar(
       leading: selectedConsignorId == null
           ? null
@@ -1403,7 +1448,16 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 _reload();
               }),
             ),
-      title: const Text('Consignment'),
+      title: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Consignment'),
+          Text(
+            'Track supplier-owned products separately from your inventory',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+          ),
+        ],
+      ),
       actions: const [HelpButton(topic: HelpTopicId.consignment)],
     ),
     body: FutureBuilder(
@@ -1425,48 +1479,93 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  SummaryCard(
-                    label: 'Consignment companies',
-                    value: '${companies.length}',
-                    icon: Icons.business_outlined,
-                  ),
-                  SummaryCard(
-                    label: 'Active products',
-                    value:
-                        '${companies.fold<int>(0, (n, x) => n + (x['product_count']! as int))}',
-                    icon: Icons.inventory_2_outlined,
-                  ),
-                  SummaryCard(
-                    label: 'Amount Owed to Suppliers',
-                    value: money(
-                      companies.fold<int>(
-                        0,
-                        (n, x) => n + (x['payable_centavos']! as int),
-                      ),
+                  SizedBox(
+                    width: 270,
+                    child: SummaryCard(
+                      label: 'Consignment companies',
+                      value: '${companies.length}',
+                      icon: Icons.business_outlined,
                     ),
-                    icon: Icons.payments_outlined,
+                  ),
+                  SizedBox(
+                    width: 270,
+                    child: SummaryCard(
+                      label: 'Active products',
+                      value:
+                          '${companies.fold<int>(0, (n, x) => n + (x['product_count']! as int))}',
+                      icon: Icons.inventory_2_outlined,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 270,
+                    child: SummaryCard(
+                      label: 'Supplier payables',
+                      value: money(
+                        companies.fold<int>(
+                          0,
+                          (n, x) => n + (x['payable_centavos']! as int),
+                        ),
+                      ),
+                      icon: Icons.payments_outlined,
+                      accentColor: const Color(0xFFF39C4A),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              Text(
-                '${companies.fold<int>(0, (n, x) => n + ((x['restock_count'] as int?) ?? 0))} consigned products need replenishment',
+              Builder(
+                builder: (context) {
+                  final restockCount = companies.fold<int>(
+                    0,
+                    (n, x) => n + ((x['restock_count'] as int?) ?? 0),
+                  );
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer
+                          .withValues(alpha: .36),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          restockCount == 0
+                              ? Icons.verified_outlined
+                              : Icons.warning_amber_rounded,
+                          color: restockCount == 0
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          restockCount == 0
+                              ? 'All consigned products are sufficiently stocked'
+                              : '$restockCount consigned products need replenishment',
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              const SizedBox(height: 24),
+              Row(
                 children: [
+                  Expanded(
+                    child: Text(
+                      'Consignment Suppliers',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
                   OutlinedButton.icon(
                     onPressed: _addConsignor,
-                    icon: const Icon(Icons.business),
+                    icon: const Icon(Icons.business_outlined),
                     label: const Text('Add Supplier'),
                   ),
                 ],
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Consignment Suppliers',
-                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
               if (companies.isEmpty)
@@ -1486,12 +1585,37 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     subtitle: Text(
-                      '${x['product_count']} products • ${money(x['payable_centavos']! as int)} owed'
+                      '${x['product_count']} ${(x['product_count']! as int) == 1 ? 'product' : 'products'}'
                       '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'}\n'
                       'Last delivery: ${_shortDate(x['last_receipt_at'])} • Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
                     ),
                     isThreeLine: true,
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'SUPPLIER PAYABLE',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              money(x['payable_centavos']! as int),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: const Color(0xFFF39C4A),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () => setState(() {
                       selectedConsignorId = x['id']! as int;
                       _companyTab = 0;

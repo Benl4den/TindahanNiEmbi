@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/formatters/display_labels.dart';
 
 import '../../../widgets/day_history.dart';
@@ -76,7 +78,7 @@ class _GCashScreenState extends State<GCashScreen> {
         children: [
           Text('GCash'),
           Text(
-            'Digital wallet activity and balance',
+            'Manage Cash-In, Cash-Out, and service fees in one place',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
           ),
         ],
@@ -139,7 +141,7 @@ class _GCashScreenState extends State<GCashScreen> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 30,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -167,7 +169,7 @@ class _GCashScreenState extends State<GCashScreen> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 24,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
@@ -176,7 +178,7 @@ class _GCashScreenState extends State<GCashScreen> {
                                 : 'Transactions today',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -316,7 +318,7 @@ class _GCashScreenState extends State<GCashScreen> {
                             '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: entry.amountChangeCentavos > 0
                                   ? Colors.green.shade800
                                   : Colors.red.shade800,
@@ -391,7 +393,7 @@ class _GCashScreenState extends State<GCashScreen> {
                 standardMoney(amount),
                 style: TextStyle(
                   fontSize: 20,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: color,
                 ),
               ),
@@ -481,8 +483,10 @@ class _GCashScreenState extends State<GCashScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialog) => StatefulBuilder(
-        builder: (_, setDialog) => PopScope(
-          canPop: !busy,
+        builder: (_, setDialog) => PageBackGuard(
+          controllers: [amount, reason, reference, pin],
+          changeToken: type,
+          busy: busy,
           child: AlertDialog(
             title: const Text('GCash Adjustment'),
             content: SizedBox(
@@ -646,8 +650,18 @@ class _GCashScreenState extends State<GCashScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialog) => StatefulBuilder(
-        builder: (_, setDialog) => PopScope(
-          canPop: !saving,
+        builder: (_, setDialog) => PageBackGuard(
+          controllers: [principal, fee, reference, notes],
+          changeToken: (feeOption, reviewing),
+          busy: saving,
+          onBack: () async {
+            if (!reviewing) return false;
+            setDialog(() {
+              reviewing = false;
+              error = null;
+            });
+            return true;
+          },
           child: AlertDialog(
             title: Column(
               mainAxisSize: MainAxisSize.min,

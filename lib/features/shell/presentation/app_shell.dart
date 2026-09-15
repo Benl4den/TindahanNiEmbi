@@ -1,6 +1,9 @@
 import '../../../widgets/brand_logo.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../../widgets/app_back_navigation.dart';
 
 import '../../../widgets/gcash_icon.dart';
 
@@ -81,6 +84,8 @@ class AppShell extends StatefulWidget {
 }
 
 class _State extends State<AppShell> {
+  final _backController = SectionBackController();
+  bool _handlingBack = false;
   int selected = 0;
   int salesRevision = 0;
   int restockCount = 0;
@@ -245,6 +250,25 @@ class _State extends State<AppShell> {
     });
   }
 
+  Future<void> _handleDeviceBack() async {
+    if (_handlingBack) return;
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) {
+      FocusScope.of(context).unfocus();
+      return;
+    }
+    _handlingBack = true;
+    try {
+      if (await _backController.handleBack() || !mounted) return;
+      if (selected != 0) {
+        _select(0);
+      } else {
+        await SystemNavigator.pop();
+      }
+    } finally {
+      _handlingBack = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -316,7 +340,7 @@ class _State extends State<AppShell> {
       for (final target in allowedTargets) bodyDestinations[target],
     ];
     final body = _body();
-    return Scaffold(
+    final scaffold = Scaffold(
       body: Row(
         children: [
           if (wide)
@@ -342,6 +366,13 @@ class _State extends State<AppShell> {
                 bodyDestinations[10],
               ],
             ),
+    );
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleDeviceBack();
+      },
+      child: SectionBackScope(controller: _backController, child: scaffold),
     );
   }
 
@@ -573,9 +604,9 @@ class _State extends State<AppShell> {
                                 child: Text(
                                   _navSection(target).toUpperCase(),
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     letterSpacing: 1,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                     color: colors.onSurfaceVariant,
                                   ),
                                 ),
@@ -628,7 +659,7 @@ class _State extends State<AppShell> {
                                               style: TextStyle(
                                                 fontSize: 15,
                                                 fontWeight: active
-                                                    ? FontWeight.w800
+                                                    ? FontWeight.w700
                                                     : FontWeight.w600,
                                                 color: colors.onSurface,
                                               ),
@@ -689,14 +720,14 @@ class _State extends State<AppShell> {
                                         'Lock App',
                                         style: TextStyle(
                                           fontSize: 16,
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.w700,
                                           color: colors.onSurface,
                                         ),
                                       ),
                                       Text(
                                         'Keep your store secure',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 12,
                                           color: colors.onSurfaceVariant,
                                         ),
                                       ),

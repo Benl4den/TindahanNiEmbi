@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../core/constants/app_strings.dart';
 import '../../../models/customer.dart';
 import '../../../repositories/customer_repository.dart';
@@ -77,7 +79,13 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: _c,
+    busy: _saving,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final form = Form(
       key: _key,
       child: Column(
@@ -95,7 +103,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _saving ? null : () => Navigator.pop(context),
+                  onPressed: _saving ? null : () => Navigator.maybePop(context),
                   child: const Text('Cancel'),
                 ),
               ),

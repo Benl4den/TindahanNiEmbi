@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../widgets/overview_banner.dart';
+import '../../../widgets/product_image.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
@@ -378,20 +379,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 26,
-                          backgroundColor: out
-                              ? Colors.red.shade50
-                              : low
-                              ? Colors.orange.shade50
-                              : Theme.of(context).colorScheme.primaryContainer,
-                          child: Icon(
-                            Icons.inventory_2_outlined,
-                            color: out
-                                ? Colors.red.shade700
-                                : low
-                                ? Colors.orange.shade800
-                                : Theme.of(context).colorScheme.primary,
+                        Semantics(
+                          image: true,
+                          label: '${p.name} product image',
+                          child: SizedBox(
+                            width: 64,
+                            height: 64,
+                            child: ProductImage(
+                              path: p.photoPath,
+                              borderRadius: 14,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),

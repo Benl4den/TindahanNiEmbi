@@ -178,7 +178,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                   MaterialLocalizations.of(context)
                                       .formatFullDate(day),
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -224,7 +224,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                                 entry.amountCentavos,
                                               ),
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                             children: [
@@ -388,7 +388,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   const Divider(height: 26),
                   const Text(
                     'PRODUCTS',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   ...items.map(
                     (item) => ListTile(
@@ -407,13 +407,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   children: [
                     const Text(
                       'TOTAL',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       _money(entry.amountCentavos),
                       style: const TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],

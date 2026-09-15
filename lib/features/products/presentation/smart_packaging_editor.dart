@@ -141,7 +141,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
             Text(
               'Stock, Package & Pricing',
               style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800),
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             const Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+
 import '../../../core/formatters/number_format.dart';
 
 import '../../../widgets/app_alerts.dart';
@@ -178,6 +179,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
         ),
   );
   Future<void> confirm() async {
+    if (saving) return;
     setState(() => saving = true);
     try {
       await widget.utang.save(
@@ -196,7 +198,10 @@ class _ReviewState extends State<UtangCheckoutReview> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<CustomerDetails>(
+  Widget build(BuildContext context) =>
+      PopScope<Object?>(canPop: !saving, child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) => FutureBuilder<CustomerDetails>(
     future: widget.customers.details(widget.customer.id),
     builder: (_, s) {
       if (!s.hasData) {
@@ -264,7 +269,7 @@ class _ReviewState extends State<UtangCheckoutReview> {
           standardMoney(cents),
           style: TextStyle(
             fontSize: important ? 24 : 18,
-            fontWeight: important ? FontWeight.w800 : FontWeight.w600,
+            fontWeight: important ? FontWeight.w700 : FontWeight.w600,
           ),
         ),
       ],

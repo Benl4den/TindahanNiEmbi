@@ -194,7 +194,7 @@ class ProductDetailsScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
             ),
           ],
         ),

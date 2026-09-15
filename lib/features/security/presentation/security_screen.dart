@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/app_back_navigation.dart';
+
 import '../../../services/auth_service.dart';
 import '../../../services/settings_service.dart';
 
@@ -42,7 +44,7 @@ class _State extends State<SecurityScreen> {
         Text(
           'Staff Accounts',
           style: Theme.of(context).textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w800),
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         const Text(
@@ -75,7 +77,7 @@ class _State extends State<SecurityScreen> {
                         ),
                         title: Text(
                           x.name,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         subtitle: Text(
                           '${x.active ? 'Active' : 'Disabled'}${x.lastLoginAt == null ? ' • Never logged in' : ' • Last login recorded'}',
@@ -108,7 +110,7 @@ class _State extends State<SecurityScreen> {
         Text(
           'Automatic Lock',
           style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w800),
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
         FutureBuilder<int>(
@@ -201,7 +203,13 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [name, pin, confirm],
+    busy: saving,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => AlertDialog(
     title: Text(widget.account == null ? 'Add Staff' : 'Reset Staff PIN'),
     content: SizedBox(
       width: 460,
@@ -270,7 +278,7 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
     ),
     actions: [
       TextButton(
-        onPressed: saving ? null : () => Navigator.pop(context, false),
+        onPressed: saving ? null : () => Navigator.maybePop(context),
         child: const Text('Cancel'),
       ),
       FilledButton(

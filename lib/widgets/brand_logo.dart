@@ -15,7 +15,7 @@ class BrandLogo extends StatelessWidget {
     final icon = Image.asset(
       isDark
           ? 'assets/branding/tindasari_ts_transparent.png'
-          : 'assets/branding/tindasari_icon.png',
+          : 'assets/branding/tindasari_ts_light_clear.png',
       width: size,
       height: size,
       fit: BoxFit.contain,
@@ -35,7 +35,7 @@ class BrandLogo extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 color: isDark
                     ? const Color(0xFFF4F6F5)
                     : const Color(0xFF0F6B46),

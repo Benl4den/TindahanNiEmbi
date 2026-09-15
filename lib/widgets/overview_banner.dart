@@ -48,7 +48,7 @@ class OverviewBanner extends StatelessWidget {
                   value,
                   style: TextStyle(
                     fontSize: valueFontSize,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     color: colors.primary,
                   ),
                 ),

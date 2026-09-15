@@ -39,7 +39,7 @@ class DayHistory<T> extends StatelessWidget {
               leading: const Icon(Icons.calendar_today_outlined),
               title: Text(
                 MaterialLocalizations.of(context).formatMediumDate(day),
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               subtitle: Text(
                 '${groups[day]!.length} ${groups[day]!.length == 1 ? 'transaction' : 'transactions'} • Tap to expand or collapse',

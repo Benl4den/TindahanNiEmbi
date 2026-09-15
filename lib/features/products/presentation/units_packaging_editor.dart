@@ -88,7 +88,7 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
           Text(
             'Units & Packaging',
             style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           const Text(

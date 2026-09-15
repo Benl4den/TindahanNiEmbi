@@ -65,6 +65,19 @@ flutter:
     - assets/branding/tindasari_icon.png
     - assets/branding/tindasari_icon_dark.png
     - assets/branding/tindasari_ts_transparent.png
+    - assets/branding/tindasari_ts_light_clear.png
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-VariableFont_opsz,wght.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-VariableFont_opsz,wght.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-VariableFont_opsz,wght.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-VariableFont_opsz,wght.ttf
+          weight: 700
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

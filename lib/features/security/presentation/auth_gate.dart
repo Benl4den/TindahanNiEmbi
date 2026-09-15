@@ -142,15 +142,18 @@ class _State extends State<AuthGate> {
     );
   }
 
-  void _lock() => setState(() {
-    CurrentActor.staffName = null;
-    role = null;
-    configured = widget.auth.hasOwner;
-    selectedStaff = null;
-    failedAttempts = 0;
-    error = null;
-    staff = widget.auth.staffAccounts(activeOnly: true);
-  });
+  void _lock() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      CurrentActor.staffName = null;
+      role = null;
+      configured = widget.auth.hasOwner;
+      selectedStaff = null;
+      failedAttempts = 0;
+      error = null;
+      staff = widget.auth.staffAccounts(activeOnly: true);
+    });
+  }
 
   Widget _login() => Scaffold(
     body: KeyboardListener(
@@ -252,7 +255,7 @@ class _State extends State<AuthGate> {
             'Welcome back!',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontSize: 30, fontWeight: FontWeight.w900),
+                ?.copyWith(fontSize: 30, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 7),
           const Text(
@@ -410,7 +413,7 @@ class _State extends State<AuthGate> {
               minimumSize: const Size.fromHeight(64),
               textStyle: const TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -436,7 +439,7 @@ class _State extends State<AuthGate> {
         foregroundColor: Colors.white,
         child: Text(
           initial,
-          style: const TextStyle(fontWeight: FontWeight.w800),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       const SizedBox(width: 11),
@@ -448,7 +451,7 @@ class _State extends State<AuthGate> {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(height: 1.05, fontWeight: FontWeight.w800),
+            style: const TextStyle(height: 1.05, fontWeight: FontWeight.w700),
           ),
           Text(
             roleName,
@@ -607,7 +610,7 @@ class _LoginBrand extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 40,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

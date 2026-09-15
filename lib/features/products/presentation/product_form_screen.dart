@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../../widgets/app_back_navigation.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/formatters/number_format.dart';
@@ -54,6 +57,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late bool _unitsLoading;
   late bool _categoryLocked;
   bool _processingPhoto = false;
+  String? _initialUnitsFingerprint, _unitsFingerprint;
 
   @override
   void initState() {
@@ -227,7 +231,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [_name, _purchase, _selling, _starting, _minimum],
+    changeToken: (_categoryId, _photoPath),
+    busy: _saving || _processingPhoto,
+    hasUnsavedChanges: _unitsFingerprint != _initialUnitsFingerprint,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final creatingWithoutPhoto = widget.product == null && _photoPath == null;
     return Scaffold(
       appBar: AppBar(
@@ -404,7 +416,31 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                       _usesSmartPackaging
                                   ? _starting
                                   : null,
-                              onChanged: (value) => _units = value,
+                              onChanged: (value) {
+                                final fingerprint = jsonEncode([
+                                  value.baseUnit.code,
+                                  for (final package in value.purchasePackages)
+                                    [
+                                      package.name,
+                                      package.baseQuantity,
+                                      package.isDefault,
+                                    ],
+                                  for (final option in value.sellingOptions)
+                                    [
+                                      option.name,
+                                      option.baseQuantity,
+                                      option.priceCentavos,
+                                      option.isDefault,
+                                    ],
+                                ]);
+                                _initialUnitsFingerprint ??= fingerprint;
+                                final changed =
+                                    _unitsFingerprint != null &&
+                                    _unitsFingerprint != fingerprint;
+                                _units = value;
+                                _unitsFingerprint = fingerprint;
+                                if (changed) setState(() {});
+                              },
                               onPricesChanged: (purchase, selling) {
                                 _purchase.text = (purchase / 100)
                                     .toStringAsFixed(2);

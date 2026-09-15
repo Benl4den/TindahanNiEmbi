@@ -240,7 +240,7 @@ class _State extends State<RestockScreen> {
                                 out ? 'OUT OF STOCK' : 'LOW STOCK',
                                 style: TextStyle(
                                   color: Theme.of(context).colorScheme.error,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w700,
                                   shadows: low
                                       ? [
                                           Shadow(
@@ -310,7 +310,7 @@ class _State extends State<RestockScreen> {
                         '$value',
                         style: const TextStyle(
                           fontSize: 28,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],

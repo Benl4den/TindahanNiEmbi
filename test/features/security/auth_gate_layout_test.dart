@@ -73,6 +73,57 @@ void main() {
     expect(find.text('Welcome back!'), findsOneWidget);
     expect(find.text('Set Owner PIN'), findsNothing);
   });
+
+  testWidgets('locking from a pushed screen removes it above the PIN screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final database = await tester.runAsync(() => app.database);
+    final auth = _FirstSetupAuth(database!);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthGate(
+          auth: auth,
+          builder: (_, lock) => Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: TextButton(
+                      onPressed: lock,
+                      child: const Text('Lock From Details'),
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('Open Details'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), '1234');
+    await tester.enterText(find.byType(TextField).at(1), '1234');
+    await tester.tap(find.text('Save Owner PIN'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lock From Details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome back!'), findsOneWidget);
+    expect(find.text('Lock From Details'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _LayoutAuth extends AuthService {
