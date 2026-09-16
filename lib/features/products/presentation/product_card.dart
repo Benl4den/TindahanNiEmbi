@@ -13,6 +13,7 @@ class ProductCard extends StatelessWidget {
     required this.onDetails,
     required this.onEdit,
     required this.onArchive,
+    this.onRestore,
     this.categoryName,
     this.inventoryGroups = const [],
   });
@@ -20,6 +21,7 @@ class ProductCard extends StatelessWidget {
   final VoidCallback onDetails;
   final VoidCallback onEdit;
   final VoidCallback onArchive;
+  final VoidCallback? onRestore;
   final String? categoryName;
   final List<String> inventoryGroups;
 
@@ -91,22 +93,29 @@ class ProductCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: onEdit,
-                          child: const Text(AppStrings.edit),
+                  if (product.isArchived)
+                    OutlinedButton.icon(
+                      onPressed: onRestore,
+                      icon: const Icon(Icons.unarchive_outlined),
+                      label: const Text('Restore Product'),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: onEdit,
+                            child: const Text(AppStrings.edit),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.outlined(
-                        tooltip: AppStrings.archive,
-                        onPressed: onArchive,
-                        icon: const Icon(Icons.archive_outlined),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 8),
+                        IconButton.outlined(
+                          tooltip: AppStrings.archive,
+                          onPressed: onArchive,
+                          icon: const Icon(Icons.archive_outlined),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

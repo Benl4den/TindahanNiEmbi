@@ -158,6 +158,14 @@ class _State extends State<ActivityLogsScreen> {
           child: FutureBuilder<List<ActivityLog>>(
             future: logs,
             builder: (_, s) {
+              if (s.hasError) {
+                return Center(
+                  child: TextButton(
+                    onPressed: () => setState(reload),
+                    child: const Text('Could not load activity. Try again'),
+                  ),
+                );
+              }
               if (!s.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }

@@ -110,7 +110,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
           child: FutureBuilder<List<Customer>>(
             future: _items,
             builder: (_, snapshot) {
-              if (snapshot.hasError) return const SizedBox.shrink();
+              if (snapshot.hasError) {
+                return TextButton(
+                  onPressed: () => setState(_reload),
+                  child: const Text('Could not load account totals. Try again'),
+                );
+              }
               if (!snapshot.hasData) return const LinearProgressIndicator();
               final customers = snapshot.data ?? <Customer>[];
               return OverviewBanner(

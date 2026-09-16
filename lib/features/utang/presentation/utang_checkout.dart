@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import '../../../core/formatters/number_format.dart';
 
 import '../../../widgets/app_alerts.dart';
@@ -69,14 +68,8 @@ class _State extends State<UtangCheckoutPicker> {
     if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 700, maxHeight: 820),
-          child: CustomerFormScreen(repository: widget.customers),
-        ),
-      ),
+      builder: (_) =>
+          CustomerFormScreen(repository: widget.customers, compact: true),
     );
     if (ok == true) {
       final all = await widget.customers.searchActive();

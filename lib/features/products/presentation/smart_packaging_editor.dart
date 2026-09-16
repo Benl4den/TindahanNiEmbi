@@ -56,8 +56,10 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     smallPrice = TextEditingController(text: _money(small.priceCentavos));
     largePrice = TextEditingController(
       text: _money(
-        large?.priceCentavos ??
-            _suggestLarge(small.priceCentavos, package.baseQuantity),
+        kind == 'cigarettes'
+            ? small.priceCentavos * package.baseQuantity
+            : large?.priceCentavos ??
+                  _suggestLarge(small.priceCentavos, package.baseQuantity),
       ),
     );
     if (kind == 'oil') {
@@ -72,7 +74,11 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         text: _money(half?.priceCentavos ?? 0),
       );
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _emit());
+    if (kind != 'other') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _emit();
+      });
+    }
   }
 
   @override
@@ -92,6 +98,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         categoryName: widget.categoryName,
         defaultSellingPriceCentavos: widget.sellingPriceCentavos,
         initial: widget.initial,
+        initiallyExpanded: false,
         onChanged: widget.onChanged,
       );
     }
@@ -110,25 +117,17 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         'Selling Price per Gallon',
         'Selling Price per Lapad',
       ),
-      'drinks' => (
-        'Bottles per Case',
-        'bottles',
-        'Purchase Price per Case',
-        'Selling Price per Case',
-        'Selling Price per Bottle',
-      ),
       _ => (
         'Sticks per Pack',
         'sticks',
         'Purchase Price per Pack',
-        'Selling Price per Pack',
         'Selling Price per Stick',
+        'Selling Price per Pack',
       ),
     };
     final startingLabel = switch (kind) {
       'rice' => 'Number of Sacks Purchased',
       'oil' => 'Number of Gallons Purchased',
-      'drinks' => 'Number of Cases Purchased',
       _ => 'Number of Packs Purchased',
     };
     return Card(
@@ -162,14 +161,30 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
               labels.$1,
               suffix: labels.$2,
               money: false,
+              whole: kind == 'cigarettes',
               onChanged: (_) => _sizeChanged(),
             ),
             const SizedBox(height: 14),
             _field(purchase, labels.$3, onChanged: (_) => _emit()),
             const SizedBox(height: 14),
-            _field(largePrice, labels.$4, onChanged: (_) => _largeChanged()),
-            const SizedBox(height: 14),
-            _field(smallPrice, labels.$5, onChanged: (_) => _smallChanged()),
+            if (kind == 'cigarettes') ...[
+              _field(smallPrice, labels.$4, onChanged: (_) => _smallChanged()),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: largePrice,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Selling Price per Pack',
+                  prefixText: '₱ ',
+                  helperText: 'Calculated from stick price × sticks per pack.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ] else ...[
+              _field(largePrice, labels.$4, onChanged: (_) => _largeChanged()),
+              const SizedBox(height: 14),
+              _field(smallPrice, labels.$5, onChanged: (_) => _smallChanged()),
+            ],
             if (kind == 'oil') ...[
               const SizedBox(height: 14),
               _field(
@@ -182,20 +197,22 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
                 'Lapad prices are suggestions. You may set practical retail prices.',
               ),
             ],
-            const SizedBox(height: 8),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: const Text('Advanced Units & Packaging'),
-              subtitle: const Text('For unusual or additional package sizes'),
-              children: [
-                UnitsPackagingEditor(
-                  categoryName: widget.categoryName,
-                  defaultSellingPriceCentavos: _cents(smallPrice.text) ?? 0,
-                  initial: _configuration(),
-                  onChanged: widget.onChanged,
-                ),
-              ],
-            ),
+            if (kind != 'cigarettes') ...[
+              const SizedBox(height: 8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Advanced Units & Packaging'),
+                subtitle: const Text('For unusual or additional package sizes'),
+                children: [
+                  UnitsPackagingEditor(
+                    categoryName: widget.categoryName,
+                    defaultSellingPriceCentavos: _cents(smallPrice.text) ?? 0,
+                    initial: _configuration(),
+                    onChanged: widget.onChanged,
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -207,6 +224,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     String label, {
     String? suffix,
     bool money = true,
+    bool whole = false,
     required ValueChanged<String> onChanged,
   }) => TextFormField(
     controller: controller,
@@ -232,6 +250,12 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
             ? 'Enter a valid whole number.'
             : null;
       }
+      if (whole) {
+        final count = int.tryParse(numericInput(text ?? ''));
+        return count == null || count <= 0
+            ? 'Enter a whole number of sticks.'
+            : null;
+      }
       final n = double.tryParse(numericInput(text ?? ''));
       return n == null || !n.isFinite || (money ? n < 0 : n <= 0)
           ? money
@@ -254,15 +278,16 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         smallPrice.text = _money((large * 250 / base).round());
         secondSmallPrice!.text = _money((large * 125 / base).round());
       }
-      if (kind == 'drinks' || kind == 'cigarettes') {
-        smallPrice.text = _money((large / base).round());
-      }
       changing = false;
     }
     _emit();
   }
 
   void _smallChanged() {
+    if (!changing && kind == 'cigarettes') {
+      final small = _cents(smallPrice.text), base = _baseQuantity();
+      largePrice.text = small == null || base <= 0 ? '' : _money(small * base);
+    }
     if (!changing && kind == 'rice') {
       final small = _cents(smallPrice.text), base = _baseQuantity();
       if (small != null && base > 0) {
@@ -275,7 +300,11 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
   }
 
   void _sizeChanged() {
-    _largeChanged();
+    if (kind == 'cigarettes') {
+      _smallChanged();
+    } else {
+      _largeChanged();
+    }
   }
 
   void _emit() {
@@ -346,25 +375,20 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         ],
       );
     }
-    final isDrink = kind == 'drinks';
     return ProductUnitConfiguration(
-      baseUnit: isDrink ? BaseUnit.bottle : BaseUnit.stick,
+      baseUnit: BaseUnit.stick,
       purchasePackages: [
-        PurchasePackageDraft(
-          name: isDrink ? 'Case' : 'Pack',
-          baseQuantity: base,
-          isDefault: true,
-        ),
+        PurchasePackageDraft(name: 'Pack', baseQuantity: base, isDefault: true),
       ],
       sellingOptions: [
         SellingOptionDraft(
-          name: isDrink ? 'Bottle' : 'Stick',
+          name: 'Stick',
           baseQuantity: 1,
           priceCentavos: small,
           isDefault: true,
         ),
         SellingOptionDraft(
-          name: isDrink ? 'Case' : 'Pack',
+          name: 'Pack',
           baseQuantity: base,
           priceCentavos: large,
         ),
@@ -374,6 +398,9 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
 
   int _baseQuantity() {
     final n = double.tryParse(numericInput(size.text)) ?? 0;
+    if (kind == 'cigarettes') {
+      return int.tryParse(numericInput(size.text)) ?? 0;
+    }
     return kind == 'rice' || kind == 'oil' ? (n * 1000).round() : n.round();
   }
 
@@ -392,7 +419,6 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     final n = name.trim().toLowerCase().replaceAll(RegExp(r'[- ]+'), ' ');
     if (n == 'rice') return 'rice';
     if (n == 'cooking oil') return 'oil';
-    if (n == 'soft drinks' || n == 'softdrinks') return 'drinks';
     if (n == 'cigarettes' || n == 'cigarettes & tobacco') return 'cigarettes';
     return 'other';
   }

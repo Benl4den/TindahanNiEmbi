@@ -65,6 +65,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _searchNow('');
   }
 
+  void _setArchiveFilter(String value) {
+    if (archiveFilter == value) return;
+    setState(() {
+      archiveFilter = value;
+      _reload();
+    });
+  }
+
   Future<void> _filterSort() async {
     var nextArchive = archiveFilter;
     var nextCategory = categoryId;
@@ -309,6 +317,39 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
+  Future<void> _restore(Product product) async {
+    if (widget.repository is! SqliteProductRepository) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore Product'),
+        content: Text('Restore ${product.name} to your active products?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    try {
+      await (widget.repository as SqliteProductRepository).restore(product.id);
+      if (mounted) {
+        setState(_reload);
+        _message('Product restored.');
+      }
+    } on InvalidProductException catch (error) {
+      if (mounted) _message(error.message);
+    } catch (_) {
+      if (mounted) _message('Product could not be restored.');
+    }
+  }
+
   void _message(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
@@ -342,6 +383,27 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                     onChanged: _searchNow,
                   ),
+                ),
+                const SizedBox(width: 10),
+                ToggleButtons(
+                  isSelected: [
+                    archiveFilter == 'ACTIVE',
+                    archiveFilter == 'ARCHIVED',
+                  ],
+                  onPressed: (index) =>
+                      _setArchiveFilter(index == 0 ? 'ACTIVE' : 'ARCHIVED'),
+                  borderRadius: BorderRadius.circular(10),
+                  constraints: const BoxConstraints(minHeight: 48),
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('Active'),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('Archived'),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 10),
                 OutlinedButton.icon(
@@ -433,6 +495,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     onDetails: () => _details(products[index]),
                     onEdit: () => _form(products[index]),
                     onArchive: () => _archive(products[index]),
+                    onRestore: () => _restore(products[index]),
                   ),
                 );
               },

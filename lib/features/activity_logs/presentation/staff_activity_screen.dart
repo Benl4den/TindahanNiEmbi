@@ -56,6 +56,14 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
     body: FutureBuilder<List<StaffActivitySummary>>(
       future: data,
       builder: (_, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: () => setState(_reload),
+              child: const Text('Could not load staff activity. Try again'),
+            ),
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

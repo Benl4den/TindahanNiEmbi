@@ -51,6 +51,8 @@ Future<bool> showPackageStockInDialog({
       builder: (_, set) {
         final packagesCount = int.tryParse(numericInput(count.text)) ?? 0;
         final total = packagesCount * selected.baseQuantity;
+        final packageName = selected.name.trim();
+        final shortName = packageName.length <= 16;
         final content = AlertDialog(
           title: Text('Stock In — ${product.name}'),
           content: SizedBox(
@@ -61,9 +63,12 @@ Future<bool> showPackageStockInDialog({
                 children: [
                   DropdownButtonFormField<PurchasePackage>(
                     initialValue: selected,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Purchase package',
                       border: OutlineInputBorder(),
+                      helperText:
+                          'Each $packageName adds ${_friendly(selected.baseQuantity, product)}.',
+                      helperMaxLines: 2,
                     ),
                     items: packages
                         .map(
@@ -83,7 +88,11 @@ Future<bool> showPackageStockInDialog({
                     enabled: !submitting,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      labelText: 'Number of ${selected.name} packages',
+                      labelText: shortName
+                          ? 'Number of ${_pluralPackage(packageName)}'
+                          : 'Packages received',
+                      helperText: shortName ? null : 'Count of $packageName',
+                      helperMaxLines: 2,
                       border: const OutlineInputBorder(),
                     ),
                     onChanged: (_) => set(() => error = null),
@@ -100,7 +109,9 @@ Future<bool> showPackageStockInDialog({
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: 'Purchase cost per package',
+                      labelText: shortName
+                          ? 'Purchase cost per $packageName'
+                          : 'Purchase cost per package',
                       prefixText: '₱ ',
                       border: const OutlineInputBorder(),
                       helperText: previousCosts[selected.id] == null
@@ -228,4 +239,12 @@ Future<bool> showPackageStockInDialog({
 
 String _friendly(int quantity, Product product) {
   return productQuantityText(product, quantity);
+}
+
+String _pluralPackage(String name) {
+  if (name.toLowerCase() == 'piece') return 'Pieces';
+  if (name.toLowerCase().endsWith('ch')) return '${name}es';
+  if (name.toLowerCase().endsWith('x')) return '${name}es';
+  if (name.endsWith('s')) return name;
+  return '${name}s';
 }

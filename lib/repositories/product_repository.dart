@@ -436,6 +436,37 @@ class SqliteProductRepository implements ProductRepository {
     AppRefreshController.instance.dataChanged();
   }
 
+  Future<void> restore(int id) async {
+    if (actorRole == 'STAFF') throw StateError('Owner permission required.');
+    await _database.transaction((txn) async {
+      final rows = await txn.query(
+        'products',
+        columns: ['name'],
+        where: 'id=? AND is_archived=1',
+        whereArgs: [id],
+      );
+      if (rows.isEmpty) {
+        throw const InvalidProductException('Archived product not found.');
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'products',
+        {'is_archived': 0, 'updated_at': now},
+        where: 'id=?',
+        whereArgs: [id],
+      );
+      await txn.insert('activity_logs', {
+        'event_type': 'PRODUCT_RESTORED',
+        'description': 'Product restored — ${rows.single['name']}',
+        'actor_role': actorRole,
+        'related_entity_type': 'PRODUCT',
+        'related_entity_id': id,
+        'created_at': now,
+      });
+    });
+    AppRefreshController.instance.dataChanged();
+  }
+
   String _validate(ProductDraft draft) {
     final name = _normalizeName(draft.name);
     if (draft.photoPath.trim().isEmpty) {

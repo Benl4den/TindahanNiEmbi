@@ -208,7 +208,29 @@ void main() {
         sellingPriceCentavos: 1500,
         startingQuantity: 2,
         minimumStockLevel: 12,
-        unitConfiguration: ProductUnitPreset.forCategory('Soft Drinks', 1500),
+        unitConfiguration: ProductUnitConfiguration(
+          baseUnit: BaseUnit.bottle,
+          purchasePackages: const [
+            PurchasePackageDraft(
+              name: 'Case',
+              baseQuantity: 24,
+              isDefault: true,
+            ),
+          ],
+          sellingOptions: const [
+            SellingOptionDraft(
+              name: 'Bottle',
+              baseQuantity: 1,
+              priceCentavos: 1500,
+              isDefault: true,
+            ),
+            SellingOptionDraft(
+              name: 'Case',
+              baseQuantity: 24,
+              priceCentavos: 36000,
+            ),
+          ],
+        ),
       ),
     );
     final option = (await ProductUnitRepository(db).sellingOptions(coke.id))

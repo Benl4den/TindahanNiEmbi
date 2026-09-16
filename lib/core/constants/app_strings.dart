@@ -34,6 +34,7 @@ abstract final class AppStrings {
   static const productName = 'Product Name';
   static const category = 'Category';
   static const purchasePrice = 'Purchase Price';
+  static const piecePurchasePrice = 'Piece Purchase Price';
   static const sellingPrice = 'Selling Price';
   static const startingStock = 'Starting Stock';
   static const minimumStock = 'Low Stock Level';

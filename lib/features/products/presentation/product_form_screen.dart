@@ -58,6 +58,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late bool _categoryLocked;
   bool _processingPhoto = false;
   String? _initialUnitsFingerprint, _unitsFingerprint;
+  bool _unitRefreshScheduled = false;
 
   @override
   void initState() {
@@ -375,7 +376,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 Expanded(
                                   child: _field(
                                     _purchase,
-                                    AppStrings.purchasePrice,
+                                    AppStrings.piecePurchasePrice,
                                     money: true,
                                   ),
                                 ),
@@ -440,7 +441,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                     _unitsFingerprint != fingerprint;
                                 _units = value;
                                 _unitsFingerprint = fingerprint;
-                                if (changed) setState(() {});
+                                if (changed) _scheduleUnitRefresh();
                               },
                               onPricesChanged: (purchase, selling) {
                                 _purchase.text = (purchase / 100)
@@ -504,6 +505,18 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     );
   }
 
+  /// Unit editors can report a derived price while they are rebuilding their
+  /// own fields.  Defer the parent repaint so Flutter never receives a
+  /// `setState` request during that child build.
+  void _scheduleUnitRefresh() {
+    if (_unitRefreshScheduled) return;
+    _unitRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _unitRefreshScheduled = false;
+      if (mounted) setState(() {});
+    });
+  }
+
   Widget _field(
     TextEditingController controller,
     String label, {
@@ -554,8 +567,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     return const {
       'rice',
       'cooking oil',
-      'soft drinks',
-      'softdrinks',
       'cigarettes',
       'cigarettes & tobacco',
     }.contains(name);

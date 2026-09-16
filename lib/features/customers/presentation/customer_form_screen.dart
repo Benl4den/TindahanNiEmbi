@@ -120,10 +120,20 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       ),
     );
     if (widget.compact) {
+      final media = MediaQuery.of(context);
+      final availableHeight =
+          media.size.height -
+          media.padding.vertical -
+          media.viewInsets.bottom -
+          48;
       return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
+          constraints: BoxConstraints(
+            maxWidth: 520,
+            maxHeight: availableHeight.clamp(240.0, double.infinity),
+          ),
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,

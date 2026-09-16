@@ -136,43 +136,6 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
     ),
     body: Column(
       children: [
-        Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: context.semanticColors.surfaceContainer,
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.menu_book_rounded,
-                color: context.semanticColors.utang,
-                size: 36,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Keep every UTANG clear',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      'Your store’s UTANG notebook. Track balances, record payments, and keep accounts clear.',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
         FutureBuilder<List<Customer>>(
           future: allCustomers,
           builder: (_, snapshot) {
@@ -193,25 +156,32 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                       ),
                 )
                 .length;
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Row(
                 children: [
-                  _utangMetric(
-                    'Total Outstanding UTANG',
-                    standardMoney(total),
-                    context.semanticColors.utang,
+                  Expanded(
+                    child: _utangMetric(
+                      'Outstanding UTANG',
+                      standardMoney(total),
+                      context.semanticColors.utang,
+                    ),
                   ),
-                  _utangMetric(
-                    'Customers with Balance',
-                    '${owing.length}',
-                    context.semanticColors.utang,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _utangMetric(
+                      'With balance',
+                      '${owing.length} customers',
+                      context.semanticColors.utang,
+                    ),
                   ),
-                  _utangMetric(
-                    'Paid in the Last 7 Days',
-                    '$recent customers',
-                    context.semanticColors.success,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _utangMetric(
+                      'Paid this week',
+                      '$recent customers',
+                      context.semanticColors.success,
+                    ),
                   ),
                 ],
               ),
@@ -219,11 +189,42 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
           },
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
-          child: AppSearchField(
-            controller: q,
-            hintText: 'Search customers...',
-            onChanged: (_) => setState(reload),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) => constraints.maxWidth >= 620
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: AppSearchField(
+                          controller: q,
+                          hintText: 'Search customers...',
+                          onChanged: (_) => setState(reload),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: create,
+                        icon: const Icon(Icons.person_add),
+                        label: const Text('Add New Customer'),
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AppSearchField(
+                        controller: q,
+                        hintText: 'Search customers...',
+                        onChanged: (_) => setState(reload),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: create,
+                        icon: const Icon(Icons.person_add),
+                        label: const Text('Add New Customer'),
+                      ),
+                    ],
+                  ),
           ),
         ),
         Expanded(
@@ -243,7 +244,7 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
                           ),
                         )
                       : ListView(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                           children: s.data!
                               .map(
                                 (c) => UtangCustomerCard(
@@ -258,17 +259,10 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
         ),
       ],
     ),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: create,
-      icon: const Icon(Icons.person_add),
-      label: const Text('Add New Customer'),
-    ),
   );
 
   Widget _utangMetric(String label, String value, Color color) => Container(
-    width: 230,
-    margin: const EdgeInsets.only(right: 12),
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     decoration: BoxDecoration(
       color: color.withValues(alpha: .08),
       border: Border.all(color: color.withValues(alpha: .3)),

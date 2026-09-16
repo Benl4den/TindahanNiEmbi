@@ -103,7 +103,16 @@ class _State extends State<CashSaleScreen> {
 
   void _changeCart(VoidCallback change) {
     final previous = {for (final line in c.lines) line.key: line.baseQuantity};
-    setState(change);
+    try {
+      setState(change);
+    } on StateError {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Not enough stock available for this sale.'),
+        ),
+      );
+      return;
+    }
     _cartKeys.removeWhere((key, _) => !c.lines.any((line) => line.key == key));
     for (final line in c.lines) {
       if (line.baseQuantity > (previous[line.key] ?? 0)) {
@@ -1257,15 +1266,9 @@ class _State extends State<CashSaleScreen> {
                                                 VisualDensity.compact,
                                             onPressed: line.quantityScale != 1
                                                 ? null
-                                                : () {
-                                                    try {
-                                                      _changeCart(
-                                                        () => c.increaseLine(
-                                                          line,
-                                                        ),
-                                                      );
-                                                    } catch (_) {}
-                                                  },
+                                                : () => _changeCart(
+                                                    () => c.increaseLine(line),
+                                                  ),
                                             icon: const Icon(
                                               Icons.add,
                                               size: 18,

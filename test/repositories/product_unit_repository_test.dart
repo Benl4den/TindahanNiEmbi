@@ -119,7 +119,9 @@ void main() {
     expect(rice.baseUnit, BaseUnit.gram);
     expect(rice.purchasePackages.map((x) => x.baseQuantity), [25000, 50000]);
     final drinks = ProductUnitPreset.forCategory('Soft Drinks', 1500);
-    expect(drinks.purchasePackages.single.baseQuantity, 24);
+    expect(drinks.baseUnit, BaseUnit.piece);
+    expect(drinks.purchasePackages.single.baseQuantity, 1);
+    expect(drinks.sellingOptions.single.name, 'Piece');
     final bigDrink = ProductUnitConfiguration(
       baseUnit: BaseUnit.bottle,
       purchasePackages: const [
@@ -152,7 +154,7 @@ void main() {
     expect(standardOil.sellingOptions.single.name, 'Piece');
     final cigarettes = ProductUnitPreset.forCategory('Cigarettes', 800);
     expect(cigarettes.baseUnit, BaseUnit.stick);
-    expect(cigarettes.sellingOptions.map((x) => x.priceCentavos), [800, 800]);
+    expect(cigarettes.sellingOptions.map((x) => x.priceCentavos), [800, 16000]);
     final independentPrices = ProductUnitConfiguration(
       baseUnit: BaseUnit.stick,
       purchasePackages: const [
@@ -197,7 +199,29 @@ void main() {
           sellingPriceCentavos: 1500,
           startingQuantity: 2,
           minimumStockLevel: 12,
-          unitConfiguration: ProductUnitPreset.forCategory('Soft Drinks', 1500),
+          unitConfiguration: ProductUnitConfiguration(
+            baseUnit: BaseUnit.bottle,
+            purchasePackages: const [
+              PurchasePackageDraft(
+                name: 'Case',
+                baseQuantity: 24,
+                isDefault: true,
+              ),
+            ],
+            sellingOptions: const [
+              SellingOptionDraft(
+                name: 'Bottle',
+                baseQuantity: 1,
+                priceCentavos: 1500,
+                isDefault: true,
+              ),
+              SellingOptionDraft(
+                name: 'Case',
+                baseQuantity: 24,
+                priceCentavos: 36000,
+              ),
+            ],
+          ),
         ),
       );
       expect(product.currentQuantity, 48);

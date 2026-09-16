@@ -9,11 +9,13 @@ class UnitsPackagingEditor extends StatefulWidget {
     required this.defaultSellingPriceCentavos,
     required this.onChanged,
     this.initial,
+    this.initiallyExpanded = true,
   });
   final String categoryName;
   final int defaultSellingPriceCentavos;
   final ProductUnitConfiguration? initial;
   final ValueChanged<ProductUnitConfiguration> onChanged;
+  final bool initiallyExpanded;
 
   @override
   State<UnitsPackagingEditor> createState() => _UnitsPackagingEditorState();
@@ -77,109 +79,120 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
     return number != null && number > 0 ? null : 0;
   }
 
+  String get _summary {
+    final package = value.purchasePackages.firstOrNull?.name ?? 'package';
+    final option = value.sellingOptions.firstOrNull?.name ?? 'unit';
+    return '${value.baseUnit.label} stock • Buy by $package • Sell by $option';
+  }
+
   @override
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Units & Packaging',
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Set how you buy, store, and sell this product. The app converts package quantities automatically.',
-          ),
-          const SizedBox(height: 18),
-          DropdownButtonFormField<BaseUnit>(
-            initialValue: value.baseUnit,
-            decoration: const InputDecoration(
-              labelText: 'Stock Counting Unit',
-              border: OutlineInputBorder(),
-            ),
-            items: BaseUnit.values
-                .map((x) => DropdownMenuItem(value: x, child: Text(x.label)))
-                .toList(),
-            onChanged: (unit) {
-              if (unit != null) {
-                update(
-                  ProductUnitConfiguration(
-                    baseUnit: unit,
-                    purchasePackages: value.purchasePackages,
-                    sellingOptions: value.sellingOptions,
-                  ),
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'How do you buy this product?',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < value.purchasePackages.length; i++)
-            _purchaseRow(i),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () {
-                update(
-                  ProductUnitConfiguration(
-                    baseUnit: value.baseUnit,
-                    purchasePackages: [
-                      ...value.purchasePackages,
-                      const PurchasePackageDraft(
-                        name: 'Custom package',
-                        baseQuantity: 1,
-                      ),
-                    ],
-                    sellingOptions: value.sellingOptions,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add purchase package'),
-            ),
-          ),
-          const Divider(height: 30),
-          Text(
-            'How do you sell this product?',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < value.sellingOptions.length; i++) _sellingRow(i),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () {
-                update(
-                  ProductUnitConfiguration(
-                    baseUnit: value.baseUnit,
-                    purchasePackages: value.purchasePackages,
-                    sellingOptions: [
-                      ...value.sellingOptions,
-                      SellingOptionDraft(
-                        name: 'Custom size',
-                        baseQuantity: 1,
-                        priceCentavos: widget.defaultSellingPriceCentavos,
-                      ),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add selling option'),
-            ),
-          ),
-        ],
+    child: ExpansionTile(
+      initiallyExpanded: widget.initiallyExpanded,
+      tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      title: Text(
+        'Units & Packaging',
+        style: Theme.of(context).textTheme.titleLarge
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
+      subtitle: Text(_summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Set how you buy, store, and sell this product. The app converts package quantities automatically.',
+            ),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<BaseUnit>(
+              initialValue: value.baseUnit,
+              decoration: const InputDecoration(
+                labelText: 'Stock Counting Unit',
+                border: OutlineInputBorder(),
+              ),
+              items: BaseUnit.values
+                  .map((x) => DropdownMenuItem(value: x, child: Text(x.label)))
+                  .toList(),
+              onChanged: (unit) {
+                if (unit != null) {
+                  update(
+                    ProductUnitConfiguration(
+                      baseUnit: unit,
+                      purchasePackages: value.purchasePackages,
+                      sellingOptions: value.sellingOptions,
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'How do you buy this product?',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < value.purchasePackages.length; i++)
+              _purchaseRow(i),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  update(
+                    ProductUnitConfiguration(
+                      baseUnit: value.baseUnit,
+                      purchasePackages: [
+                        ...value.purchasePackages,
+                        const PurchasePackageDraft(
+                          name: 'Custom package',
+                          baseQuantity: 1,
+                        ),
+                      ],
+                      sellingOptions: value.sellingOptions,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add purchase package'),
+              ),
+            ),
+            const Divider(height: 30),
+            Text(
+              'How do you sell this product?',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < value.sellingOptions.length; i++)
+              _sellingRow(i),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  update(
+                    ProductUnitConfiguration(
+                      baseUnit: value.baseUnit,
+                      purchasePackages: value.purchasePackages,
+                      sellingOptions: [
+                        ...value.sellingOptions,
+                        SellingOptionDraft(
+                          name: 'Custom size',
+                          baseQuantity: 1,
+                          priceCentavos: widget.defaultSellingPriceCentavos,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add selling option'),
+              ),
+            ),
+          ],
+        ),
+      ],
     ),
   );
 

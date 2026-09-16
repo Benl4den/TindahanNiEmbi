@@ -587,11 +587,14 @@ class _GCashScreenState extends State<GCashScreen> {
                         });
                         try {
                           final cents = parseMoneyCentavos(amount.text);
-                          if (cents == null ||
-                              cents <= 0 ||
-                              reason.text.trim().isEmpty) {
+                          if (cents == null || cents <= 0) {
                             throw const PaymentAccountingException(
-                              'Enter a positive amount (up to two decimals) and a reason.',
+                              'Enter a valid amount with up to two decimal places.',
+                            );
+                          }
+                          if (reason.text.trim().isEmpty) {
+                            throw const PaymentAccountingException(
+                              'Provide a reason for this adjustment.',
                             );
                           }
                           final role = await widget.auth.verify(pin.text);

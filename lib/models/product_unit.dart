@@ -78,27 +78,6 @@ class ProductUnitPreset {
         ],
       );
     }
-    if (name == 'soft drinks' || name == 'softdrinks') {
-      return ProductUnitConfiguration(
-        baseUnit: BaseUnit.bottle,
-        purchasePackages: const [
-          PurchasePackageDraft(name: 'Case', baseQuantity: 24, isDefault: true),
-        ],
-        sellingOptions: [
-          SellingOptionDraft(
-            name: 'Bottle',
-            baseQuantity: 1,
-            priceCentavos: defaultSellingPriceCentavos,
-            isDefault: true,
-          ),
-          SellingOptionDraft(
-            name: 'Case',
-            baseQuantity: 24,
-            priceCentavos: defaultSellingPriceCentavos,
-          ),
-        ],
-      );
-    }
     if (name == 'cigarettes' || name == 'cigarettes & tobacco') {
       return ProductUnitConfiguration(
         baseUnit: BaseUnit.stick,
@@ -115,7 +94,7 @@ class ProductUnitPreset {
           SellingOptionDraft(
             name: 'Pack',
             baseQuantity: 20,
-            priceCentavos: defaultSellingPriceCentavos,
+            priceCentavos: defaultSellingPriceCentavos * 20,
           ),
         ],
       );

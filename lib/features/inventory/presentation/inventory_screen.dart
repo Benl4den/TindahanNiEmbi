@@ -197,6 +197,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
     body: FutureBuilder<List<Product>>(
       future: _products,
       builder: (_, products) {
+        if (products.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: () => setState(_reload),
+              child: const Text('Could not load inventory. Try again'),
+            ),
+          );
+        }
         if (!products.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -206,7 +214,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
           children: [
             FutureBuilder<OwnedInventorySummary>(
               future: _summary,
-              builder: (_, s) => _summaryCards(s.data),
+              builder: (_, s) => s.hasError
+                  ? const Text('Inventory values are temporarily unavailable.')
+                  : _summaryCards(s.data),
             ),
             const SizedBox(height: 20),
             TextField(
