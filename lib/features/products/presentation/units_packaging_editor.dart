@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/number_format.dart';
 import '../../../models/product_unit.dart';
 
 class UnitsPackagingEditor extends StatefulWidget {
@@ -329,10 +330,7 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
       positive(x) == null ? null : 'Quantity must be greater than 0.';
   String? _moneyMessage(String? x) =>
       _centavos(x ?? '') == null ? 'Enter a valid non-negative price.' : null;
-  int? _centavos(String x) {
-    final n = double.tryParse(x.trim());
-    return n == null || n < 0 ? null : (n * 100).round();
-  }
+  int? _centavos(String x) => parseMoneyCentavos(x);
 
   void _replacePurchase(int i, {String? name, int? quantity}) {
     final old = value.purchasePackages[i], list = [...value.purchasePackages];

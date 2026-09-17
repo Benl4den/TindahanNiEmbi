@@ -408,10 +408,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
       kind == 'rice' || kind == 'oil' ? _clean('${base / 1000}') : '$base';
   int _suggestLarge(int small, int base) =>
       kind == 'rice' ? (small * base / 1000).round() : small * base;
-  int? _cents(String text) {
-    final n = double.tryParse(numericInput(text));
-    return n == null || !n.isFinite || n < 0 ? null : (n * 100).round();
-  }
+  int? _cents(String text) => parseMoneyCentavos(text);
 
   String _money(int cents) => standardMoney(cents).replaceFirst('₱', '');
   String _clean(String text) => text.replaceFirst(RegExp(r'\.0+$'), '');

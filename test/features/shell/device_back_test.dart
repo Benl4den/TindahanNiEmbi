@@ -54,6 +54,7 @@ void main() {
           role: UserRole.owner,
           lock: () {},
           onThemePreferenceChanged: (_) async {},
+          onDatabaseRestored: () {},
         ),
       ),
     );

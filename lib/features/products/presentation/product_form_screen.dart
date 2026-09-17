@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -57,6 +58,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late bool _unitsLoading;
   late bool _categoryLocked;
   bool _processingPhoto = false;
+  bool _saved = false;
+  String? _originalPhotoPath;
+  final Set<String> _newPhotoPaths = {};
   String? _initialUnitsFingerprint, _unitsFingerprint;
   bool _unitRefreshScheduled = false;
 
@@ -85,6 +89,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         widget.categoryInitiallyLocked &&
         _categoryId != null;
     _photoPath = product?.photoPath;
+    _originalPhotoPath = _photoPath;
     _unitsLoading =
         product != null && widget.repository is SqliteProductRepository;
     if (product != null && widget.repository is SqliteProductRepository) {
@@ -106,6 +111,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   @override
   void dispose() {
+    if (!_saved) {
+      for (final path in _newPhotoPaths) {
+        unawaited(widget.photoService.delete(path).catchError((_) {}));
+      }
+    }
     for (final controller in [
       _name,
       _purchase,
@@ -136,7 +146,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     setState(() => _processingPhoto = true);
     try {
       final result = await picker();
-      if (result != null && mounted) setState(() => _photoPath = result);
+      if (result != null && mounted) {
+        final previous = _photoPath;
+        setState(() => _photoPath = result);
+        _newPhotoPaths.add(result);
+        if (previous != null &&
+            previous != result &&
+            _newPhotoPaths.remove(previous)) {
+          unawaited(widget.photoService.delete(previous).catchError((_) {}));
+        }
+      }
     } on PhotoCaptureException catch (error) {
       if (!mounted) return;
       _message(
@@ -149,10 +168,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
-  int? _money(String value) {
-    final parsed = double.tryParse(numericInput(value));
-    return parsed == null ? null : (parsed * 100).round();
-  }
+  int? _money(String value) => parseMoneyCentavos(value);
 
   int? _whole(String value) => int.tryParse(numericInput(value));
 
@@ -184,6 +200,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         );
         if (widget.onDraft != null) {
           widget.onDraft!(draft);
+          _saved = true;
           if (mounted && widget.closeAfterDraft) Navigator.pop(context, true);
           return;
         }
@@ -209,7 +226,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         );
         widget.onSaved?.call(saved);
+        final original = _originalPhotoPath;
+        if (original != null && original != _photoPath) {
+          unawaited(widget.photoService.delete(original).catchError((_) {}));
+        }
       }
+      _saved = true;
       if (mounted) Navigator.pop(context, true);
     } on InvalidProductException catch (error) {
       if (mounted) _message(error.message);

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../database/app_database.dart';
 
@@ -145,32 +146,34 @@ class BackupService {
   Future<BackupHealth> health() async {
     final files = await localBackups();
     if (files.isEmpty) return const BackupHealth(status: 'Backup Recommended');
-    final file = files.first;
-    try {
-      final manifest = await validate(file.path);
-      final modified = await file.lastModified();
-      final age = DateTime.now().difference(modified).inDays;
-      return BackupHealth(
-        status: age > 14
-            ? 'Backup Overdue'
-            : age > 7
-            ? 'Backup Recommended'
-            : 'Recent',
-        createdAt: manifest.createdAt.toLocal(),
-        filePath: file.path,
-        fileSizeBytes: await file.length(),
-        imageCount: manifest.imageCount,
-        schemaVersion: manifest.schemaVersion,
-        valid: true,
-      );
-    } catch (_) {
-      return BackupHealth(
-        status: 'Backup Recommended',
-        filePath: file.path,
-        fileSizeBytes: await file.length(),
-        valid: false,
-      );
+    for (final file in files) {
+      try {
+        final manifest = await validate(file.path);
+        final age = DateTime.now()
+            .difference(manifest.createdAt.toLocal())
+            .inDays;
+        return BackupHealth(
+          status: age > 14
+              ? 'Backup Overdue'
+              : age > 7
+              ? 'Backup Recommended'
+              : 'Recent',
+          createdAt: manifest.createdAt.toLocal(),
+          filePath: file.path,
+          fileSizeBytes: await file.length(),
+          imageCount: manifest.imageCount,
+          schemaVersion: manifest.schemaVersion,
+          valid: true,
+        );
+      } catch (_) {}
     }
+    final newest = files.first;
+    return BackupHealth(
+      status: 'Backup Recommended',
+      filePath: newest.path,
+      fileSizeBytes: await newest.length(),
+      valid: false,
+    );
   }
 
   Future<BackupManifest> validate(String archivePath) async {
@@ -220,7 +223,39 @@ class BackupService {
         utf8.decode(databaseBytes.take(15).toList()) != 'SQLite format 3') {
       throw const InvalidBackupException('Invalid SQLite snapshot');
     }
+    await _verifyDatabaseIntegrity(databaseBytes);
     return manifest;
+  }
+
+  Future<void> _verifyDatabaseIntegrity(List<int> bytes) async {
+    final temp = await Directory.systemTemp.createTemp(
+      'tindahan_backup_check_',
+    );
+    Database? database;
+    try {
+      final file = File(path.join(temp.path, 'tindahan.db'));
+      await file.writeAsBytes(bytes, flush: true);
+      final factory = appDatabase.factory ?? databaseFactory;
+      database = await factory.openDatabase(
+        file.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      final rows = await database.rawQuery('PRAGMA integrity_check');
+      if (rows.length != 1 || rows.single.values.first != 'ok') {
+        throw const InvalidBackupException(
+          'Backup database integrity check failed',
+        );
+      }
+    } on InvalidBackupException {
+      rethrow;
+    } catch (_) {
+      throw const InvalidBackupException(
+        'Backup database integrity check failed',
+      );
+    } finally {
+      await database?.close();
+      if (await temp.exists()) await temp.delete(recursive: true);
+    }
   }
 
   Future<void> restore(String archivePath) async {

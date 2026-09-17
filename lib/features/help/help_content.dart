@@ -49,17 +49,19 @@ class HelpArticle {
   final List<String> keywords;
 
   bool matches(String query) {
-    final words =
-        '$title $group $description ${steps.join(' ')} '
-                '${notes.join(' ')} ${keywords.join(' ')}'
-            .toLowerCase();
-    return query
-        .toLowerCase()
-        .split(RegExp(r'\\s+'))
-        .where((word) => word.isNotEmpty)
-        .every(words.contains);
+    final words = _searchTerms(
+      '$title $group $description ${steps.join(' ')} '
+      '${notes.join(' ')} ${keywords.join(' ')}',
+    );
+    return _searchTerms(query).every(words.contains);
   }
 }
+
+List<String> _searchTerms(String value) =>
+    RegExp(r'[a-z0-9]+')
+        .allMatches(value.toLowerCase())
+        .map((match) => match.group(0)!)
+        .toList();
 
 const helpGroups = [
   'Getting Started',

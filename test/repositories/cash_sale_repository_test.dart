@@ -68,6 +68,29 @@ void main() {
     expect(await history.recent(search: 'Sale', limit: 1000), hasLength(501));
   });
   test(
+    'history keeps one sale and its original actor after later audit logs',
+    () async {
+      await CashSaleRepository(
+        db,
+        actorRole: 'OWNER',
+      ).save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      final saleId = (await db.query('cash_sales')).single['id']! as int;
+      await db.insert('activity_logs', {
+        'event_type': 'TRANSACTION_REVERSED',
+        'description': 'Later audit event',
+        'actor_role': 'STAFF',
+        'actor_name': 'Later Staff',
+        'related_entity_type': 'CASH_SALE',
+        'related_entity_id': saleId,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      final entries = await TransactionHistoryRepository(db).recent();
+      expect(entries, hasLength(1));
+      expect(entries.single.actor, 'Owner');
+    },
+  );
+  test(
     'daily summary includes more than 100 sales and excludes other days',
     () async {
       final now = DateTime.now().toUtc().toIso8601String();

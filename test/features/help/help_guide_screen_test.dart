@@ -15,4 +15,15 @@ void main() {
     expect(find.text('GCash Cash-In'), findsOneWidget);
     expect(find.text('Sales'), findsNothing);
   });
+
+  testWidgets('search matches separate words across an article', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: HelpGuideScreen()));
+
+    await tester.enterText(find.byType(TextField), 'first dashboard');
+    await tester.pump();
+
+    expect(find.text('Dashboard'), findsOneWidget);
+  });
 }

@@ -144,6 +144,51 @@ void main() {
   });
 
   test(
+    'rejects a backup with a SQLite header but damaged database pages',
+    () async {
+      final service = BackupService(app, documentsDirectory: temp);
+      final valid = await service.create(outputPath: '${temp.path}/valid.zip');
+      final archive = ZipDecoder().decodeBytes(await File(valid).readAsBytes());
+      final database = archive.firstWhere(
+        (file) => file.name == 'database/tindahan.db',
+      );
+      final damaged = List<int>.from(database.content as List<int>)
+        ..fillRange(100, 120, 0);
+      final replacement = Archive();
+      for (final file in archive) {
+        replacement.add(
+          file.name == 'database/tindahan.db'
+              ? ArchiveFile(file.name, damaged.length, damaged)
+              : file,
+        );
+      }
+      final path = '${temp.path}/damaged.zip';
+      await File(path).writeAsBytes(ZipEncoder().encode(replacement));
+
+      await expectLater(
+        service.validate(path),
+        throwsA(isA<InvalidBackupException>()),
+      );
+    },
+  );
+
+  test('backup health falls back to the newest valid local backup', () async {
+    final service = BackupService(app, documentsDirectory: temp);
+    final valid = await service.create(
+      outputPath: '${temp.path}/TindahanNiEmbi_1.tnebackup.zip',
+    );
+    final damaged = File('${temp.path}/TindahanNiEmbi_2.tnebackup.zip');
+    await damaged.writeAsBytes([1, 2, 3]);
+    await damaged.setLastModified(
+      DateTime.now().add(const Duration(minutes: 1)),
+    );
+
+    final health = await service.health();
+    expect(health.valid, isTrue);
+    expect(health.filePath, valid);
+  });
+
+  test(
     'backup rotation deletes only excess recognized backup copies',
     () async {
       for (var i = 0; i < 6; i++) {

@@ -74,12 +74,14 @@ class AppShell extends StatefulWidget {
     required this.role,
     required this.lock,
     required this.onThemePreferenceChanged,
+    required this.onDatabaseRestored,
   });
   final Database database;
   final AppDatabase appDatabase;
   final UserRole role;
   final VoidCallback lock;
   final Future<void> Function(AppThemePreference) onThemePreferenceChanged;
+  final VoidCallback onDatabaseRestored;
   @override
   State<AppShell> createState() => _State();
 }
@@ -962,7 +964,7 @@ class _State extends State<AppShell> {
               icon: Icons.backup,
               page: BackupScreen(
                 service: BackupService(widget.appDatabase),
-                onRestored: () => setState(() {}),
+                onRestored: widget.onDatabaseRestored,
               ),
               action: null,
             ),

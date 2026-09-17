@@ -24,6 +24,7 @@ class _State extends State<TindahanNiEmbiApp> {
   late final AppDatabase db;
   late Future<Database> startup;
   AppThemePreference themePreference = AppThemePreference.system;
+  int _sessionVersion = 0;
 
   @override
   void initState() {
@@ -48,6 +49,11 @@ class _State extends State<TindahanNiEmbiApp> {
   }
 
   void retryStartup() => setState(() => startup = _bootstrap());
+
+  void _restartAfterRestore() => setState(() {
+    _sessionVersion++;
+    startup = _bootstrap();
+  });
   @override
   void dispose() {
     db.close();
@@ -83,6 +89,7 @@ class _State extends State<TindahanNiEmbiApp> {
           return const Scaffold(body: _StartupView());
         }
         return AuthGate(
+          key: ValueKey('auth-session-$_sessionVersion'),
           auth: AuthService(s.data!),
           builder: (role, lock) => AppShell(
             database: s.data!,
@@ -90,6 +97,7 @@ class _State extends State<TindahanNiEmbiApp> {
             role: role,
             lock: lock,
             onThemePreferenceChanged: _setThemePreference,
+            onDatabaseRestored: _restartAfterRestore,
           ),
         );
       },
