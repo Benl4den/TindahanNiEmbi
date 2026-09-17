@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../services/backup_service.dart';
 import '../../help/help_button.dart';
@@ -60,12 +61,22 @@ class _State extends State<BackupScreen> {
   Future<void> restore() async {
     if (busy) return;
     setState(() => busy = true);
+    Directory? selectedCopy;
     try {
       final picked = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
-      if (picked?.path == null) return;
+      if (picked == null) return;
+      if (!mounted) return;
+      // Android document providers may supply a content URI without a local
+      // path. Keep our own copy until validation and restore finish.
+      selectedCopy = await Directory.systemTemp.createTemp('tindahan_import_');
+      final selectedFile = File(path.join(selectedCopy.path, 'selected.zip'));
+      await picked.readAsByteStream().cast<List<int>>().pipe(
+        selectedFile.openWrite(),
+      );
+      await widget.service.validate(selectedFile.path);
       if (!mounted) return;
       final yes = await showDialog<bool>(
         context: context,
@@ -91,17 +102,24 @@ class _State extends State<BackupScreen> {
         ),
       );
       if (yes != true || !mounted) return;
-      await widget.service.restore(picked!.path!);
+      await widget.service.restore(selectedFile.path);
       if (!mounted) return;
       widget.onRestored();
       if (mounted) setState(() => status = 'Backup restored.');
-    } catch (_) {
+    } on InvalidBackupException catch (error) {
       if (mounted) {
         setState(
-          () => status = 'Restore could not be completed. Check the backup file and try again.',
+          () => status = 'Restore could not be completed: ${error.message}.',
         );
       }
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Restore could not be completed: $error');
+      }
     } finally {
+      if (selectedCopy != null && await selectedCopy.exists()) {
+        await selectedCopy.delete(recursive: true);
+      }
       if (mounted) setState(() => busy = false);
     }
   }

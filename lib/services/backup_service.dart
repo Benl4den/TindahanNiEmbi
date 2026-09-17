@@ -265,9 +265,17 @@ class BackupService {
     final dbPath = await appDatabase.resolvedPath;
     final docs = await _documents;
     final imageDir = Directory(path.join(docs.path, 'product_images'));
+    var safetyReady = false;
     try {
       final current = await appDatabase.database;
-      await current.execute('PRAGMA wal_checkpoint(FULL)');
+      // A checkpoint returns rows. Android's execute() rejects SQL that
+      // returns a result, so use rawQuery() before copying the database.
+      final checkpoint = await current.rawQuery('PRAGMA wal_checkpoint(FULL)');
+      if (checkpoint.isNotEmpty && checkpoint.first.values.first != 0) {
+        throw const InvalidBackupException(
+          'Could not prepare current store data for restore',
+        );
+      }
       await appDatabase.close();
       await File(dbPath).copy(path.join(safety.path, 'database.db'));
       if (await imageDir.exists()) {
@@ -276,6 +284,7 @@ class BackupService {
           Directory(path.join(safety.path, 'images')),
         );
       }
+      safetyReady = true;
       final archive = ZipDecoder().decodeBytes(
         await File(archivePath).readAsBytes(),
       );
@@ -317,10 +326,12 @@ class BackupService {
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (_) {
-      await appDatabase.replaceWith(path.join(safety.path, 'database.db'));
-      if (await imageDir.exists()) await imageDir.delete(recursive: true);
-      final old = Directory(path.join(safety.path, 'images'));
-      if (await old.exists()) await _copyDirectory(old, imageDir);
+      if (safetyReady) {
+        await appDatabase.replaceWith(path.join(safety.path, 'database.db'));
+        if (await imageDir.exists()) await imageDir.delete(recursive: true);
+        final old = Directory(path.join(safety.path, 'images'));
+        if (await old.exists()) await _copyDirectory(old, imageDir);
+      }
       rethrow;
     } finally {
       await temp.delete(recursive: true);
