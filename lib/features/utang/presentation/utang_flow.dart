@@ -751,6 +751,68 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
     if (mounted) setState(reload);
   }
 
+  Future<void> _addExistingUtang(Customer customer) async {
+    final amount = TextEditingController();
+    final note = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Add Existing UTANG Amount'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Use this for a balance the customer already owed before you started using the app. It does not create a sale or change stock.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amount,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Existing UTANG amount',
+                  prefixText: '₱ ',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: note,
+                decoration: const InputDecoration(
+                  labelText: 'Note or reference (optional)',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final cents = ((double.tryParse(amount.text.trim()) ?? 0) * 100)
+                  .round();
+              if (cents <= 0) return;
+              await widget.utang.addExistingBalance(
+                customerId: customer.id,
+                amountCentavos: cents,
+                note: note.text,
+              );
+              if (dialog.mounted) Navigator.pop(dialog, true);
+            },
+            child: const Text('Add Amount'),
+          ),
+        ],
+      ),
+    );
+    if (result == true && mounted) await refreshDetailsNow();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Customer Account Details')),
@@ -812,6 +874,14 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                       icon: const Icon(Icons.add),
                       label: const Text('New UTANG Sale'),
                     ),
+                    if (widget.reversals != null) ...[
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => _addExistingUtang(d.customer),
+                        icon: const Icon(Icons.history_edu_outlined),
+                        label: const Text('Add Existing UTANG Amount'),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     OutlinedButton.icon(
                       onPressed: currentBalance <= 0
@@ -912,7 +982,11 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                               ),
                             ),
                             title: Text(
-                              e.type.startsWith('UTANG') ? 'UTANG' : 'Payment',
+                              e.isExistingBalance
+                                  ? 'Existing UTANG'
+                                  : e.type.startsWith('UTANG')
+                                  ? 'UTANG'
+                                  : 'Payment',
                             ),
                             subtitle: Text(
                               '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'

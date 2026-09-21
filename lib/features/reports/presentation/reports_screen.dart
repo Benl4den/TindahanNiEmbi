@@ -203,7 +203,7 @@ class ReportsScreen extends StatelessWidget {
               c,
               "Today's Sales",
               standardMoney(x.daily),
-              'Cash ${standardMoney(x.dailyCash)}  •  GCash ${standardMoney(x.dailyGCash)}',
+              'Cash ${standardMoney(x.dailyCash)}  •  GCash ${standardMoney(x.dailyGCash)}  •  Maya ${standardMoney(x.dailyMaya)}',
               Icons.point_of_sale_outlined,
             ),
             const SizedBox(height: 12),

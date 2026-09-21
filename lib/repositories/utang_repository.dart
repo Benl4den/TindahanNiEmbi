@@ -5,6 +5,7 @@ import '../core/formatters/number_format.dart';
 import '../models/utang_draft.dart';
 import '../services/auth_service.dart';
 import 'consignment_allocation.dart';
+import 'brand_analytics_repository.dart';
 import '../services/app_refresh_controller.dart';
 
 class UtangRepository {
@@ -16,6 +17,61 @@ class UtangRepository {
   Future<int> save(UtangDraft draft) async {
     return AppRefreshController.instance.after(
       _database.transaction((txn) => saveWithExecutor(txn, draft)),
+    );
+  }
+
+  /// Records a pre-app customer balance without creating a sale or changing
+  /// stock. It deliberately uses the same customer ledger as normal UTANG.
+  Future<int> addExistingBalance({
+    required int customerId,
+    required int amountCentavos,
+    String? note,
+    DateTime? occurredAt,
+  }) async {
+    if (amountCentavos <= 0) throw ArgumentError.value(amountCentavos);
+    return AppRefreshController.instance.after(
+      _database.transaction((tx) async {
+        final customer = await tx.query(
+          'customers',
+          columns: ['full_name'],
+          where: 'id=? AND is_archived=0',
+          whereArgs: [customerId],
+          limit: 1,
+        );
+        if (customer.isEmpty) throw StateError('Active customer not found.');
+        final now = (occurredAt ?? DateTime.now()).toUtc().toIso8601String();
+        final id = await tx.insert('utang_transactions', {
+          'customer_id': customerId,
+          'total_centavos': amountCentavos,
+          'status': 'POSTED',
+          'notes': note?.trim(),
+          'occurred_at': now,
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'is_existing_balance': 1,
+        });
+        final reference = 'EXU-${id.toString().padLeft(6, '0')}';
+        await tx.insert('customer_ledger_entries', {
+          'customer_id': customerId,
+          'entry_type': 'UTANG',
+          'amount_change_centavos': amountCentavos,
+          'utang_transaction_id': id,
+          'description':
+              'Existing UTANG • $reference${note == null || note.trim().isEmpty ? '' : ' • ${note.trim()}'}',
+          'occurred_at': now,
+          'created_at': now,
+        });
+        await tx.insert('activity_logs', {
+          'event_type': 'EXISTING_UTANG_ADDED',
+          'description':
+              'Existing UTANG added for ${customer.single['full_name']} — ${standardMoney(amountCentavos)}',
+          'actor_role': actorRole,
+          'actor_name': CurrentActor.labelFor(actorRole),
+          'related_entity_type': 'UTANG',
+          'related_entity_id': id,
+          'created_at': now,
+        });
+        return id;
+      }),
     );
   }
 
@@ -154,6 +210,13 @@ class UtangRepository {
         totalSaleCentavos: lineTotal,
         utangItemId: itemId,
         occurredAt: now,
+      );
+      await BrandAnalyticsRepository.recordSaleItem(
+        txn,
+        productId: productId,
+        baseQuantity: entry.baseQuantity,
+        unitCostCentavos: row['purchase_price_centavos']! as int,
+        utangItemId: itemId,
       );
       await txn.insert('inventory_movements', {
         'inventory_transaction_id': inventoryTransactionId,

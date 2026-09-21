@@ -181,13 +181,16 @@ class ReversalRepository {
         reason: reason,
       );
     }
-    final inv = await tx.insert('inventory_transactions', {
-      'type': 'REVERSAL',
-      'reference_number': _ref(reversal),
-      'notes': reason.trim(),
-      'occurred_at': now,
-      'created_at': now,
-    });
+    final isExistingBalance = !cash && header['is_existing_balance'] == 1;
+    final inv = isExistingBalance
+        ? null
+        : await tx.insert('inventory_transactions', {
+            'type': 'REVERSAL',
+            'reference_number': _ref(reversal),
+            'notes': reason.trim(),
+            'occurred_at': now,
+            'created_at': now,
+          });
     for (final item in items) {
       final product = (await tx.query(
             'products',
@@ -220,7 +223,8 @@ class ReversalRepository {
         'entry_type': 'UTANG_REVERSAL',
         'amount_change_centavos': -(header['total_centavos']! as int),
         'utang_transaction_id': id,
-        'description': 'UTANG reversal ${_ref(reversal)}',
+        'description':
+            '${isExistingBalance ? 'Existing UTANG reversal' : 'UTANG reversal'} ${_ref(reversal)}',
         'occurred_at': now,
         'created_at': now,
       });

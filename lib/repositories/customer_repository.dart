@@ -100,7 +100,9 @@ class SqliteCustomerRepository implements CustomerRepository {
       throw const InvalidCustomerException('Customer not found.');
     }
     final ledger = await _database.rawQuery(
-      '''SELECT l.*, CASE WHEN l.utang_transaction_id IS NULL THEN NULL ELSE (SELECT COUNT(*) FROM utang_transaction_items i WHERE i.utang_transaction_id=l.utang_transaction_id) END item_count FROM customer_ledger_entries l WHERE l.customer_id=? ORDER BY l.occurred_at DESC, l.id DESC''',
+      '''SELECT l.*, CASE WHEN l.utang_transaction_id IS NULL THEN NULL ELSE (SELECT COUNT(*) FROM utang_transaction_items i WHERE i.utang_transaction_id=l.utang_transaction_id) END item_count,
+      COALESCE((SELECT is_existing_balance FROM utang_transactions u WHERE u.id=l.utang_transaction_id),0) is_existing_balance
+      FROM customer_ledger_entries l WHERE l.customer_id=? ORDER BY l.occurred_at DESC, l.id DESC''',
       [id],
     );
     final productRows = await _database.rawQuery(

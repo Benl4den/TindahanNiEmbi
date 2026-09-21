@@ -289,7 +289,7 @@ class ExpenseRepository {
     String? where,
     List<Object?> args = const [],
   }) async => (await executor.rawQuery(
-    '''SELECT e.*,ep.payment_method,ep.gcash_reference,
+    '''SELECT e.*,COALESCE(ep.payment_method_display,ep.payment_method,'CASH') payment_method,COALESCE(ep.payment_reference,ep.gcash_reference) gcash_reference,
       replacement.expense_ref corrected_by_ref,original.expense_ref correction_of_ref,
       COALESCE(c1.reason,c2.reason,r.reason) change_reason,
       r.actor_name change_actor_name,

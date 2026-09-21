@@ -4,11 +4,14 @@ import '../../../repositories/category_repository.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
+import '../../../repositories/brand_analytics_repository.dart';
+import '../../../services/feature_access_service.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../widgets/app_state_view.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 import 'selecta_screen.dart';
+import 'brand_analytics_screen.dart';
 
 class ManagedBrandsScreen extends StatefulWidget {
   const ManagedBrandsScreen({
@@ -18,12 +21,16 @@ class ManagedBrandsScreen extends StatefulWidget {
     required this.inventory,
     required this.categories,
     required this.photoService,
+    required this.analytics,
+    required this.access,
   });
   final SpecialInventoryRepository special;
   final ProductRepository products;
   final InventoryRepository inventory;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
+  final BrandAnalyticsRepository analytics;
+  final FeatureAccessService access;
 
   @override
   State<ManagedBrandsScreen> createState() => _ManagedBrandsScreenState();
@@ -84,6 +91,18 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
       ),
     ).then((_) => setState(() {}));
   }
+
+  void _analytics(InventoryGroup group) => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => BrandAnalyticsScreen(
+        groupCode: group.code,
+        groupName: group.name,
+        analytics: widget.analytics,
+        access: widget.access,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -171,13 +190,15 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 410,
-                          mainAxisExtent: 190,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 410,
+                      // The brand card includes two actions. Reserve enough
+                      // height for both at tablet text scaling so they never
+                      // overflow the card.
+                      mainAxisExtent: 208,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
                     itemCount: snapshot.data!.length + 1,
                     itemBuilder: (_, index) {
                       if (index == snapshot.data!.length) {
@@ -291,6 +312,14 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                         .primary,
                                     fontWeight: FontWeight.w700,
                                   ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => _analytics(group),
+                                  icon: const Icon(
+                                    Icons.insights_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('View analytics'),
                                 ),
                               ],
                             ),

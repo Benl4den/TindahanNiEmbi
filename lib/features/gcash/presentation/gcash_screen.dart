@@ -313,7 +313,15 @@ class _GCashScreenState extends State<GCashScreen> {
                                   : Colors.red.shade800,
                             ),
                           ),
-                          title: Text(_label(entry.type)),
+                          title: Text(
+                            entry.loanId != null
+                                ? '5-6 Loan Received'
+                                : entry.loanPaymentId != null
+                                ? entry.reversalOfEntryId != null
+                                      ? '5-6 Loan Payment Cancelled'
+                                      : '5-6 Loan Payment'
+                                : _label(entry.type),
+                          ),
                           subtitle: Text(
                             '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
                             style: TextStyle(

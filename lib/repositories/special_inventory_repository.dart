@@ -54,8 +54,10 @@ class SpecialInventoryRepository {
     }
     return db.rawQuery('''
       SELECT s.occurred_at,i.quantity,i.line_total_centavos,
-        CASE COALESCE(sp.payment_method,'CASH')
-          WHEN 'GCASH' THEN 'GCash sale' ELSE 'Cash sale' END source,
+        CASE COALESCE(sp.payment_method_display,sp.payment_method,'CASH')
+          WHEN 'GCASH' THEN 'GCash sale'
+          WHEN 'MAYA' THEN 'Maya sale'
+          ELSE 'Cash sale' END source,
         COALESCE((SELECT l.actor_name FROM activity_logs l
           WHERE l.related_entity_type='CASH_SALE' AND l.related_entity_id=s.id
           ORDER BY l.id DESC LIMIT 1),'Owner') actor_name

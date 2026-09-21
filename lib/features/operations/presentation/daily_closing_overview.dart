@@ -67,7 +67,7 @@ class DailyClosingOverview extends StatelessWidget {
             icon: Icons.account_balance_wallet_outlined,
             accent: red,
             caption: x.expenseCount == null
-                ? 'Cash and GCash expenses'
+                ? 'Cash, GCash and Maya expenses'
                 : '${x.expenseCount} expenses',
           ),
         ]),
@@ -77,6 +77,7 @@ class DailyClosingOverview extends StatelessWidget {
             row('Cash Sales', x.cashSales),
             row('UTANG Payments in Cash', x.cashPayments),
             row('GCash Services — Cash Received', x.gcashServiceCashReceived),
+            row('5-6 Loans Received in Cash', x.loanCashReceived),
             const Divider(),
             row(
               'Total Cash Received',
@@ -89,6 +90,9 @@ class DailyClosingOverview extends StatelessWidget {
             row('Operating Expenses in Cash', x.cashExpenses),
             row('GCash Services — Cash Paid Out', x.gcashServiceCashPaid),
             row('Supplier Payments in Cash', x.cashRemittances),
+            row('5-6 Loan Payments in Cash', x.loanCashPayments),
+            if (x.loanCashPaymentReversals != 0)
+              row('Cancelled 5-6 Loan Payments', -x.loanCashPaymentReversals),
             const Divider(),
             row('Total Cash Paid Out', x.cashPaid, color: red, strong: true),
           ]),
@@ -114,6 +118,7 @@ class DailyClosingOverview extends StatelessWidget {
             row('UTANG Payments', x.payments),
             row('Paid in Cash', x.cashPayments),
             row('Paid with GCash', x.gcashPayments),
+            row('Paid with Maya', x.mayaPayments),
             const Divider(),
             row(
               'Net Change',
@@ -136,12 +141,28 @@ class DailyClosingOverview extends StatelessWidget {
             row('Service Fee Income', x.serviceFeeIncome),
             const Text('Includes recorded cancellations and fixes.'),
           ]),
+          if (x.mayaSales != 0 ||
+              x.mayaPayments != 0 ||
+              x.mayaExpenses != 0 ||
+              x.mayaRemittances != 0)
+            panel(
+              'Maya Activity',
+              Icons.account_balance_wallet_outlined,
+              blue,
+              [
+                row('Maya Sales', x.mayaSales),
+                row('UTANG Payments with Maya', x.mayaPayments),
+                row('Expenses paid with Maya', x.mayaExpenses),
+                row('Supplier Payments with Maya', x.mayaRemittances),
+                const Text('Maya is separate from physical cash and GCash.'),
+              ],
+            ),
           panel('Consignment', Icons.inventory_2_outlined, purple, [
             row('Consignment Sales', x.consignmentSales),
             row('Amount Owed from These Sales', x.supplierPayable),
             row(
               'Supplier Payments This Day',
-              x.cashRemittances + x.gcashRemittances,
+              x.cashRemittances + x.gcashRemittances + x.mayaRemittances,
             ),
             const Divider(),
             row(

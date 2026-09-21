@@ -59,6 +59,14 @@ class DailyClosingSummary {
     required this.lowStock,
     required this.outOfStock,
     required this.topProducts,
+    this.mayaSales = 0,
+    this.mayaSaleCount = 0,
+    this.mayaPayments = 0,
+    this.mayaExpenses = 0,
+    this.mayaRemittances = 0,
+    this.loanCashReceived = 0,
+    this.loanCashPayments = 0,
+    this.loanCashPaymentReversals = 0,
   });
   final int? expenseCount;
   final int cashSales,
@@ -96,11 +104,23 @@ class DailyClosingSummary {
       lowStock,
       outOfStock;
   final List<Map<String, Object?>> topProducts;
-  int get totalSales => cashSales + gcashSales;
+  final int mayaSales,
+      mayaSaleCount,
+      mayaPayments,
+      mayaExpenses,
+      mayaRemittances;
+  final int loanCashReceived, loanCashPayments, loanCashPaymentReversals;
+  int get totalSales => cashSales + gcashSales + mayaSales;
   int get serviceFeeIncome => cashInServiceFees + cashOutServiceFees;
   int get totalEarnings => totalSales + serviceFeeIncome;
-  int get cashReceived => cashSales + cashPayments + gcashServiceCashReceived;
-  int get cashPaid => cashExpenses + cashRemittances + gcashServiceCashPaid;
+  int get cashReceived =>
+      cashSales + cashPayments + gcashServiceCashReceived + loanCashReceived;
+  int get cashPaid =>
+      cashExpenses +
+      cashRemittances +
+      gcashServiceCashPaid +
+      loanCashPayments -
+      loanCashPaymentReversals;
   int get cashDifference => cashReceived - cashPaid;
   int get gcashDifference => gcashMoneyIn - gcashMoneyOut;
   // Retained for repository compatibility. Owner-facing UI uses the clearer
@@ -113,6 +133,14 @@ class DailyClosingSummary {
   Map<String, Object?> toJson() => {
     'cashSales': cashSales,
     'gcashSales': gcashSales,
+    'mayaSales': mayaSales,
+    'mayaSaleCount': mayaSaleCount,
+    'mayaPayments': mayaPayments,
+    'mayaExpenses': mayaExpenses,
+    'mayaRemittances': mayaRemittances,
+    'loanCashReceived': loanCashReceived,
+    'loanCashPayments': loanCashPayments,
+    'loanCashPaymentReversals': loanCashPaymentReversals,
     'cashSaleCount': cashSaleCount,
     'gcashSaleCount': gcashSaleCount,
     'newUtang': newUtang,
@@ -162,6 +190,14 @@ class DailyClosingSummary {
     return DailyClosingSummary(
       cashSales: value('cashSales'),
       gcashSales: value('gcashSales'),
+      mayaSales: value('mayaSales'),
+      mayaSaleCount: value('mayaSaleCount'),
+      mayaPayments: value('mayaPayments'),
+      mayaExpenses: value('mayaExpenses'),
+      mayaRemittances: value('mayaRemittances'),
+      loanCashReceived: value('loanCashReceived'),
+      loanCashPayments: value('loanCashPayments'),
+      loanCashPaymentReversals: value('loanCashPaymentReversals'),
       cashSaleCount: value('cashSaleCount'),
       gcashSaleCount: value('gcashSaleCount'),
       newUtang: value('newUtang'),
@@ -315,33 +351,47 @@ class OperationsRepository {
     Future<Map<String, Object?>> one(String sql) =>
         db.rawQuery(sql, [start, end]).then((x) => x.single);
     final cash = await one('''SELECT
-      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN sp.payment_method='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash_total,
-      SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN 1 ELSE 0 END) cash_count,
-      SUM(CASE WHEN sp.payment_method='GCASH' THEN 1 ELSE 0 END) gcash_count
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='MAYA' THEN s.total_centavos ELSE 0 END),0) maya_total,
+      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method,'CASH')='CASH' THEN 1 ELSE 0 END) cash_count,
+      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='GCASH' THEN 1 ELSE 0 END) gcash_count,
+      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='MAYA' THEN 1 ELSE 0 END) maya_count
       FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
       WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?''');
     final utang = await one(
-      "SELECT COALESCE(SUM(total_centavos),0) total,COUNT(*) count FROM utang_transactions WHERE status='POSTED' AND occurred_at>=? AND occurred_at<?",
+      "SELECT COALESCE(SUM(total_centavos),0) total,COUNT(*) count FROM utang_transactions WHERE status='POSTED' AND COALESCE(is_existing_balance,0)=0 AND occurred_at>=? AND occurred_at<?",
     );
     final pay = await one(
       '''SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count,
-      COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN payment_method='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total
       FROM utang_payments WHERE status='POSTED' AND paid_at>=? AND paid_at<?''',
     );
     final expenses = await one(
       '''SELECT COALESCE(SUM(e.amount_centavos),0) total,COUNT(*) count,
-      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method,'CASH')='CASH' THEN e.amount_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN ep.payment_method='GCASH' THEN e.amount_centavos ELSE 0 END),0) gcash_total
+      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method,'CASH')='CASH' THEN e.amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method)='GCASH' THEN e.amount_centavos ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method)='MAYA' THEN e.amount_centavos ELSE 0 END),0) maya_total
       FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
       WHERE e.status='POSTED' AND e.expense_datetime>=? AND e.expense_datetime<?''',
     );
     final remittances = await one('''SELECT
-      COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN payment_method='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method,'CASH')='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total,
       COUNT(*) count FROM consignor_remittances
       WHERE remitted_at>=? AND remitted_at<?''');
+    final loanReceipts = await one(
+      '''SELECT COALESCE(SUM(CASE WHEN source_kind='NEW' AND received_payment_method='CASH' THEN borrowed_amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loans WHERE created_at>=? AND created_at<?''',
+    );
+    final loanPayments = await one(
+      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loan_payments WHERE paid_at>=? AND paid_at<?''',
+    );
+    final loanReversals = await one(
+      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loan_payments WHERE status='REVERSED' AND reversed_at>=? AND reversed_at<?''',
+    );
     final gcash = (await db.rawQuery(
       '''SELECT
       COALESCE(SUM(CASE WHEN occurred_at<? THEN amount_change_centavos ELSE 0 END),0) opening,
@@ -374,18 +424,26 @@ class OperationsRepository {
     return DailyClosingSummary(
       cashSales: (cash['cash_total'] as int?) ?? 0,
       gcashSales: (cash['gcash_total'] as int?) ?? 0,
+      mayaSales: (cash['maya_total'] as int?) ?? 0,
       cashSaleCount: (cash['cash_count'] as int?) ?? 0,
       gcashSaleCount: (cash['gcash_count'] as int?) ?? 0,
+      mayaSaleCount: (cash['maya_count'] as int?) ?? 0,
       newUtang: utang['total']! as int,
       payments: pay['total']! as int,
       cashPayments: pay['cash_total']! as int,
       gcashPayments: pay['gcash_total']! as int,
+      mayaPayments: pay['maya_total']! as int,
       operatingExpenses: expenses['total']! as int,
       expenseCount: expenses['count']! as int,
       cashExpenses: expenses['cash_total']! as int,
       gcashExpenses: expenses['gcash_total']! as int,
+      mayaExpenses: expenses['maya_total']! as int,
       cashRemittances: remittances['cash_total']! as int,
       gcashRemittances: remittances['gcash_total']! as int,
+      mayaRemittances: remittances['maya_total']! as int,
+      loanCashReceived: loanReceipts['cash_total']! as int,
+      loanCashPayments: loanPayments['cash_total']! as int,
+      loanCashPaymentReversals: loanReversals['cash_total']! as int,
       gcashOpeningBalance: gcash['opening']! as int,
       gcashMoneyIn: gcash['money_in']! as int,
       gcashMoneyOut: gcash['money_out']! as int,
@@ -407,11 +465,15 @@ class OperationsRepository {
       transactionCount:
           ((cash['cash_count'] as int?) ?? 0) +
           ((cash['gcash_count'] as int?) ?? 0) +
+          ((cash['maya_count'] as int?) ?? 0) +
           (utang['count']! as int) +
           (pay['count']! as int) +
           (expenses['count']! as int) +
           (remittances['count']! as int) +
-          (services['service_count']! as int),
+          (services['service_count']! as int) +
+          (loanReceipts['count']! as int) +
+          (loanPayments['count']! as int) +
+          (loanReversals['count']! as int),
       lowStock: (stock['low'] as int?) ?? 0,
       outOfStock: (stock['out'] as int?) ?? 0,
       topProducts: top,
@@ -426,6 +488,9 @@ class OperationsRepository {
       UNION ALL SELECT expense_datetime FROM expenses WHERE status='POSTED'
       UNION ALL SELECT remitted_at FROM consignor_remittances
       UNION ALL SELECT created_at FROM gcash_service_transactions
+      UNION ALL SELECT created_at FROM loans
+      UNION ALL SELECT paid_at FROM loan_payments
+      UNION ALL SELECT reversed_at FROM loan_payments WHERE reversed_at IS NOT NULL
       UNION ALL SELECT closing_date FROM daily_closing_snapshots
       ORDER BY stamp DESC''');
     final days = <String, DateTime>{};

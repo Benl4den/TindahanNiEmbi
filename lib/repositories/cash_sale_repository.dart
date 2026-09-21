@@ -6,6 +6,7 @@ import '../models/utang_draft.dart';
 import '../models/payment_method.dart';
 import '../services/auth_service.dart';
 import 'consignment_allocation.dart';
+import 'brand_analytics_repository.dart';
 import 'payment_accounting_repository.dart';
 import '../services/app_refresh_controller.dart';
 
@@ -199,6 +200,13 @@ class CashSaleRepository {
         cashSaleItemId: saleItemId,
         occurredAt: now,
       );
+      await BrandAnalyticsRepository.recordSaleItem(
+        tx,
+        productId: x.item.productId,
+        baseQuantity: x.baseQuantity,
+        unitCostCentavos: x.row['purchase_price_centavos']! as int,
+        cashSaleItemId: saleItemId,
+      );
       await tx.insert('inventory_movements', {
         'inventory_transaction_id': inv,
         'product_id': x.item.productId,
@@ -236,7 +244,7 @@ class CashSaleRepository {
 
   Future<CashSaleResult?> latest() async {
     final rows = await db.rawQuery(
-      "SELECT s.*,COALESCE(sp.payment_method,'CASH') payment_method,sp.gcash_reference,COALESCE(SUM(i.quantity),0) item_count FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id WHERE s.status='POSTED' GROUP BY s.id ORDER BY s.occurred_at DESC,s.id DESC LIMIT 1",
+      "SELECT s.*,COALESCE(sp.payment_method_display,sp.payment_method,'CASH') payment_method,COALESCE(sp.payment_reference,sp.gcash_reference) gcash_reference,COALESCE(SUM(i.quantity),0) item_count FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id WHERE s.status='POSTED' GROUP BY s.id ORDER BY s.occurred_at DESC,s.id DESC LIMIT 1",
     );
     return rows.isEmpty ? null : CashSaleResult.fromMap(rows.single);
   }
@@ -268,7 +276,7 @@ class CashSaleRepository {
 
   Future<CashSaleDetails> details(int id) async {
     final rows = await db.rawQuery(
-      '''SELECT s.*,COALESCE(sp.payment_method,'CASH') payment_method,sp.gcash_reference FROM cash_sales s
+      '''SELECT s.*,COALESCE(sp.payment_method_display,sp.payment_method,'CASH') payment_method,COALESCE(sp.payment_reference,sp.gcash_reference) gcash_reference FROM cash_sales s
       LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id WHERE s.id=? LIMIT 1''',
       [id],
     );
@@ -291,7 +299,7 @@ class CashSaleRepository {
       '''
       SELECT * FROM (SELECT s.id,s.reference,'CASH' sale_type,NULL customer_name,s.occurred_at,
         s.total_centavos,COALESCE(SUM(i.quantity),0) item_count,s.status,
-        sp.payment_method,sp.gcash_reference,
+        COALESCE(sp.payment_method_display,sp.payment_method,'CASH') payment_method,COALESCE(sp.payment_reference,sp.gcash_reference) gcash_reference,
         (SELECT replacement_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.original_entity_id=s.id) corrected_by_id,
         (SELECT original_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.replacement_entity_id=s.id) correction_of_id
       FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id
@@ -304,7 +312,7 @@ class CashSaleRepository {
         (SELECT original_entity_id FROM transaction_corrections tc WHERE tc.entity_type='UTANG' AND tc.replacement_entity_id=u.id)
       FROM utang_transactions u JOIN customers c ON c.id=u.customer_id
       LEFT JOIN utang_transaction_items i ON i.utang_transaction_id=u.id
-      WHERE ? IN ('ALL','UTANG') GROUP BY u.id)
+      WHERE ? IN ('ALL','UTANG') AND COALESCE(u.is_existing_balance,0)=0 GROUP BY u.id)
       ORDER BY occurred_at DESC,id DESC LIMIT 100
     ''',
       [type, type],

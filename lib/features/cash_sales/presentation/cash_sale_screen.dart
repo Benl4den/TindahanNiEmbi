@@ -463,17 +463,24 @@ class _State extends State<CashSaleScreen> {
                       icon: Icon(Icons.phone_android),
                       label: Text('GCash'),
                     ),
+                    ButtonSegment(
+                      value: PaymentMethod.maya,
+                      icon: Icon(Icons.account_balance_wallet_outlined),
+                      label: Text('Maya'),
+                    ),
                   ],
                   selected: {paymentMethod},
                   onSelectionChanged: (value) =>
                       setDialog(() => paymentMethod = value.single),
                 ),
-                if (paymentMethod == PaymentMethod.gcash) ...[
+                if (paymentMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: 10),
                   TextField(
                     onChanged: (value) => reference = value,
-                    decoration: const InputDecoration(
-                      labelText: 'GCash Reference (optional)',
+                    decoration: InputDecoration(
+                      labelText: paymentMethod == PaymentMethod.maya
+                          ? 'Maya Reference (optional)'
+                          : 'GCash Reference (optional)',
                       prefixIcon: Icon(Icons.tag),
                     ),
                   ),

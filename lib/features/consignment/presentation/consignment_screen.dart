@@ -298,18 +298,25 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                       icon: Icon(Icons.phone_android),
                       label: Text('GCash'),
                     ),
+                    ButtonSegment(
+                      value: PaymentMethod.maya,
+                      icon: Icon(Icons.account_balance_wallet_outlined),
+                      label: Text('Maya'),
+                    ),
                   ],
                   selected: {paymentMethod},
                   onSelectionChanged: saving
                       ? null
                       : (value) => setState(() => paymentMethod = value.single),
                 ),
-                if (paymentMethod == PaymentMethod.gcash) ...[
+                if (paymentMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: 14),
                   TextField(
                     controller: gcashReference,
-                    decoration: const InputDecoration(
-                      labelText: 'GCash Reference (optional)',
+                    decoration: InputDecoration(
+                      labelText: paymentMethod == PaymentMethod.maya
+                          ? 'Maya Reference (optional)'
+                          : 'GCash Reference (optional)',
                       prefixIcon: Icon(Icons.tag),
                       border: OutlineInputBorder(),
                     ),

@@ -33,10 +33,10 @@ class TransactionHistoryRepository {
         : DateTime(day.year, day.month, day.day + 1).toUtc().toIso8601String();
     final rows = await db.rawQuery(
       '''SELECT * FROM (
-      SELECT s.id,'CASH' type,'Sale • '||COALESCE(sp.payment_method,'CASH') title,s.total_centavos amount,s.occurred_at occurred,s.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) actor FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='CASH_SALE' AND related_entity_id=s.id)
-      UNION ALL SELECT u.id,'UTANG','UTANG • '||c.full_name,u.total_centavos,u.occurred_at,u.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_transactions u JOIN customers c ON c.id=u.customer_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='UTANG' AND related_entity_id=u.id)
-      UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||p.payment_method||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_payments p JOIN customers c ON c.id=p.customer_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='PAYMENT' AND related_entity_id=p.id)
-      UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='EXPENSE' AND related_entity_id=e.id)
+      SELECT s.id,'CASH' type,'Sale • '||COALESCE(sp.payment_method_display,sp.payment_method,'CASH') title,s.total_centavos amount,s.occurred_at occurred,s.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) actor FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='CASH_SALE' AND related_entity_id=s.id)
+      UNION ALL SELECT u.id,'UTANG',CASE WHEN COALESCE(u.is_existing_balance,0)=1 THEN 'Existing UTANG • ' ELSE 'UTANG Sale • ' END||c.full_name,u.total_centavos,u.occurred_at,u.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_transactions u JOIN customers c ON c.id=u.customer_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='UTANG' AND related_entity_id=u.id)
+      UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||COALESCE(p.payment_method_display,p.payment_method)||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_payments p JOIN customers c ON c.id=p.customer_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='PAYMENT' AND related_entity_id=p.id)
+      UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method_display,ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='EXPENSE' AND related_entity_id=e.id)
       UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Cancelled' ELSE '' END,g.customer_total_centavos,g.created_at,g.status,COALESCE(g.created_by_name_snapshot,a.actor_name,CASE COALESCE(g.created_by_role_snapshot,a.actor_role) WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM gcash_service_transactions g LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='GCASH_SERVICE' AND related_entity_id=g.id)
       UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED',COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM consignment_batches b JOIN products p ON p.id=b.product_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='CONSIGNMENT_BATCH' AND related_entity_id=b.id)
     ) WHERE (?='ALL' OR type=?) AND instr(lower(title),lower(?))>0${day == null ? '' : ' AND occurred>=? AND occurred<?'} ORDER BY occurred DESC,type,id DESC LIMIT ?''',
@@ -67,7 +67,7 @@ class TransactionHistoryRepository {
     switch (entry.type) {
       case 'CASH':
         final header = (await db.rawQuery(
-          '''SELECT s.*,COALESCE(sp.payment_method,'CASH') payment_method,sp.gcash_reference
+          '''SELECT s.*,COALESCE(sp.payment_method_display,sp.payment_method,'CASH') payment_method,COALESCE(sp.payment_reference,sp.gcash_reference) gcash_reference
           FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id WHERE s.id=?''',
           [entry.id],
         )).single;
@@ -91,13 +91,20 @@ class TransactionHistoryRepository {
         );
         return {...header, 'items': items};
       case 'PAYMENT':
-        return (await db.rawQuery(
+        final payment = (await db.rawQuery(
           'SELECT p.*,c.full_name FROM utang_payments p JOIN customers c ON c.id=p.customer_id WHERE p.id=?',
           [entry.id],
         )).single;
+        return {
+          ...payment,
+          'payment_method':
+              payment['payment_method_display'] ?? payment['payment_method'],
+          'payment_reference':
+              payment['payment_reference'] ?? payment['gcash_reference'],
+        };
       case 'EXPENSE':
         return (await db.rawQuery(
-          '''SELECT e.*,COALESCE(ep.payment_method,'CASH') payment_method,ep.gcash_reference
+          '''SELECT e.*,COALESCE(ep.payment_method_display,ep.payment_method,'CASH') payment_method,COALESCE(ep.payment_reference,ep.gcash_reference) gcash_reference
           FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id WHERE e.id=?''',
           [entry.id],
         )).single;

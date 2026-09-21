@@ -14,9 +14,13 @@ class GCashLedgerEntry {
     this.gcashReference,
     this.notes,
     this.gcashServiceTransactionId,
+    this.loanId,
+    this.loanPaymentId,
+    this.reversalOfEntryId,
   });
   final int id, amountChangeCentavos;
   final int? gcashServiceTransactionId;
+  final int? loanId, loanPaymentId, reversalOfEntryId;
   final String reference, type;
   final String? gcashReference, notes;
   final DateTime occurredAt;
@@ -25,6 +29,9 @@ class GCashLedgerEntry {
       GCashLedgerEntry(
         id: map['id']! as int,
         gcashServiceTransactionId: map['gcash_service_transaction_id'] as int?,
+        loanId: map['loan_id'] as int?,
+        loanPaymentId: map['loan_payment_id'] as int?,
+        reversalOfEntryId: map['reversal_of_entry_id'] as int?,
         reference: map['reference']! as String,
         type: map['entry_type']! as String,
         amountChangeCentavos: map['amount_change_centavos']! as int,
@@ -81,9 +88,13 @@ class PaymentAccountingRepository {
     final reference = normalizeReference(gcashReference);
     await tx.insert('sale_payments', {
       'cash_sale_id': saleId,
-      'payment_method': method.dbValue,
+      'payment_method': method.legacyStorageValue,
+      'payment_method_display': method == PaymentMethod.maya
+          ? method.dbValue
+          : null,
       'amount_centavos': amountCentavos,
       'gcash_reference': method == PaymentMethod.gcash ? reference : null,
+      'payment_reference': method == PaymentMethod.maya ? reference : null,
       'created_at': occurredAt,
     });
     if (method == PaymentMethod.gcash) {
@@ -132,9 +143,13 @@ class PaymentAccountingRepository {
     final reference = normalizeReference(gcashReference);
     await tx.insert('expense_payments', {
       'expense_id': expenseId,
-      'payment_method': method.dbValue,
+      'payment_method': method.legacyStorageValue,
+      'payment_method_display': method == PaymentMethod.maya
+          ? method.dbValue
+          : null,
       'amount_centavos': amountCentavos,
       'gcash_reference': method == PaymentMethod.gcash ? reference : null,
+      'payment_reference': method == PaymentMethod.maya ? reference : null,
       'created_at': occurredAt,
     });
     if (method == PaymentMethod.gcash) {
@@ -233,6 +248,58 @@ class PaymentAccountingRepository {
       reversalOfEntryId: original['id']! as int,
       actorRole: actorRole,
       notes: reason.trim(),
+      occurredAt: occurredAt,
+    );
+  }
+
+  static Future<void> postLoanGCashMovement(
+    DatabaseExecutor tx, {
+    required int amountChangeCentavos,
+    int? loanId,
+    int? loanPaymentId,
+    String? gcashReference,
+    String? actorRole,
+    required String occurredAt,
+    required String notes,
+  }) async {
+    await _postLedger(
+      tx,
+      type: amountChangeCentavos < 0 ? 'ADJUSTMENT_OUT' : 'ADJUSTMENT_IN',
+      amountChangeCentavos: amountChangeCentavos,
+      loanId: loanId,
+      loanPaymentId: loanPaymentId,
+      gcashReference: normalizeReference(gcashReference),
+      actorRole: actorRole,
+      notes: notes,
+      occurredAt: occurredAt,
+    );
+  }
+
+  static Future<void> reverseLoanGCashPayment(
+    DatabaseExecutor tx, {
+    required int paymentId,
+    String? actorRole,
+    required String occurredAt,
+    required String reason,
+  }) async {
+    final rows = await tx.query(
+      'gcash_ledger_entries',
+      where: "loan_payment_id=? AND entry_type='ADJUSTMENT_OUT'",
+      whereArgs: [paymentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw StateError('Original GCash loan payment was not found.');
+    }
+    final original = rows.single;
+    await _postLedger(
+      tx,
+      type: 'REVERSAL',
+      amountChangeCentavos: -(original['amount_change_centavos']! as int),
+      loanPaymentId: paymentId,
+      reversalOfEntryId: original['id']! as int,
+      actorRole: actorRole,
+      notes: '5-6 loan payment cancelled: $reason',
       occurredAt: occurredAt,
     );
   }
@@ -344,6 +411,8 @@ class PaymentAccountingRepository {
     int? transactionReversalId,
     int? expenseReversalId,
     int? gcashServiceTransactionId,
+    int? loanId,
+    int? loanPaymentId,
     int? reversalOfEntryId,
     String? gcashReference,
     String? notes,
@@ -364,6 +433,8 @@ class PaymentAccountingRepository {
       'transaction_reversal_id': transactionReversalId,
       'expense_reversal_id': expenseReversalId,
       'gcash_service_transaction_id': gcashServiceTransactionId,
+      'loan_id': loanId,
+      'loan_payment_id': loanPaymentId,
       'reversal_of_entry_id': reversalOfEntryId,
       'gcash_reference': gcashReference,
       'notes': notes,

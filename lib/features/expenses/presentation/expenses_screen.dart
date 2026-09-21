@@ -611,17 +611,24 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                   icon: Icon(Icons.phone_android),
                   label: Text('GCash'),
                 ),
+                ButtonSegment(
+                  value: PaymentMethod.maya,
+                  icon: Icon(Icons.account_balance_wallet_outlined),
+                  label: Text('Maya'),
+                ),
               ],
               selected: {paymentMethod},
               onSelectionChanged: busy
                   ? null
                   : (value) => setState(() => paymentMethod = value.single),
             ),
-            if (paymentMethod == PaymentMethod.gcash)
+            if (paymentMethod != PaymentMethod.cash)
               TextField(
                 controller: gcashReference,
-                decoration: const InputDecoration(
-                  labelText: 'GCash Reference (optional)',
+                decoration: InputDecoration(
+                  labelText: paymentMethod == PaymentMethod.maya
+                      ? 'Maya Reference (optional)'
+                      : 'GCash Reference (optional)',
                   prefixIcon: Icon(Icons.tag),
                 ),
               ),
@@ -741,7 +748,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         notes: notes.text,
         referenceNo: reference.text,
         paymentMethod: paymentMethod,
-        gcashReference: paymentMethod == PaymentMethod.gcash
+        gcashReference: paymentMethod != PaymentMethod.cash
             ? gcashReference.text
             : null,
       );

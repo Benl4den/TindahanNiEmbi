@@ -548,8 +548,14 @@ class ConsignmentRepository {
           'notes': notes?.trim(),
           'remitted_at': now,
           'created_at': now,
-          'payment_method': paymentMethod.dbValue,
+          'payment_method': paymentMethod.legacyStorageValue,
+          'payment_method_display': paymentMethod == PaymentMethod.maya
+              ? paymentMethod.dbValue
+              : null,
           'gcash_reference': paymentMethod == PaymentMethod.gcash
+              ? PaymentAccountingRepository.normalizeReference(gcashReference)
+              : null,
+          'payment_reference': paymentMethod == PaymentMethod.maya
               ? PaymentAccountingRepository.normalizeReference(gcashReference)
               : null,
         });

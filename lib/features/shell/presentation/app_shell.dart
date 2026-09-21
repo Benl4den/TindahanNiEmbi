@@ -29,6 +29,9 @@ import '../../../repositories/reversal_repository.dart';
 import '../../../repositories/utang_repository.dart';
 import '../../../repositories/consignment_repository.dart';
 import '../../../repositories/special_inventory_repository.dart';
+import '../../../repositories/brand_analytics_repository.dart';
+import '../../../repositories/supplier_contacts_repository.dart';
+import '../../../repositories/loan_repository.dart';
 import '../../../repositories/sale_draft_repository.dart';
 import '../../../repositories/transaction_history_repository.dart';
 import '../../../services/auth_service.dart';
@@ -38,6 +41,7 @@ import '../../../services/data_integrity_service.dart';
 import '../../../services/storage_management_service.dart';
 import '../../../services/app_refresh_controller.dart';
 import '../../../services/settings_service.dart';
+import '../../../services/feature_access_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../activity_logs/presentation/activity_logs_screen.dart';
 import '../../activity_logs/presentation/staff_activity_screen.dart';
@@ -58,6 +62,8 @@ import '../../products/presentation/products_screen.dart';
 import '../../reports/presentation/reports_screen.dart';
 import '../../special_inventory/presentation/managed_brands_screen.dart';
 import '../../security/presentation/security_screen.dart';
+import '../../suppliers/presentation/supplier_contacts_screen.dart';
+import '../../loans/presentation/loan_management_screen.dart';
 import '../../utang/presentation/utang_flow.dart';
 import '../../utang/presentation/utang_checkout.dart';
 import '../../transactions/transaction_history_screen.dart';
@@ -473,6 +479,8 @@ class _State extends State<AppShell> {
               inventory: InventoryRepository(widget.database, actorRole: role),
               categories: SqliteCategoryRepository(widget.database),
               photoService: LocalProductPhotoService(),
+              analytics: BrandAnalyticsRepository(widget.database),
+              access: FeatureAccessService(widget.database),
             )
           : _denied(),
     2 =>
@@ -839,6 +847,8 @@ class _State extends State<AppShell> {
                 ),
                 categories: SqliteCategoryRepository(widget.database),
                 photoService: LocalProductPhotoService(),
+                analytics: BrandAnalyticsRepository(widget.database),
+                access: FeatureAccessService(widget.database),
               ),
               action: null,
             ),
@@ -905,6 +915,25 @@ class _State extends State<AppShell> {
               page: StorageManagementScreen(
                 storage: StorageManagementService(widget.appDatabase),
                 backups: BackupService(widget.appDatabase),
+              ),
+              action: null,
+            ),
+          if (owner)
+            (
+              label: '5-6 Loan Management',
+              icon: Icons.account_balance_outlined,
+              page: LoanManagementScreen(
+                repository: LoanRepository(widget.database, actorRole: role),
+                access: FeatureAccessService(widget.database),
+              ),
+              action: null,
+            ),
+          if (owner)
+            (
+              label: 'Supplier Contacts',
+              icon: Icons.contact_phone_outlined,
+              page: SupplierContactsScreen(
+                repository: SupplierContactsRepository(widget.database),
               ),
               action: null,
             ),
@@ -1003,6 +1032,8 @@ class _State extends State<AppShell> {
             'Restock',
             'Products',
             'Categories',
+            'Supplier Contacts',
+            '5-6 Loan Management',
           }.contains(x.label),
         )
         .toList();

@@ -9,9 +9,10 @@ class SalesPeriodSummary {
     this.monthly, {
     required this.dailyCash,
     required this.dailyGCash,
+    required this.dailyMaya,
   });
   final int daily, weekly, monthly;
-  final int dailyCash, dailyGCash;
+  final int dailyCash, dailyGCash, dailyMaya;
 }
 
 class ReportsRepository {
@@ -72,8 +73,9 @@ class ReportsRepository {
         .then((r) => r.single['value']! as int);
     final today = await db.rawQuery(
       '''SELECT
-      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash,
-      COALESCE(SUM(CASE WHEN sp.payment_method='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash,
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash,
+      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='MAYA' THEN s.total_centavos ELSE 0 END),0) maya
       FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
       WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?''',
       [
@@ -83,12 +85,14 @@ class ReportsRepository {
     );
     final dailyCash = today.single['cash']! as int;
     final dailyGCash = today.single['gcash']! as int;
+    final dailyMaya = today.single['maya']! as int;
     return SalesPeriodSummary(
-      dailyCash + dailyGCash,
+      dailyCash + dailyGCash + dailyMaya,
       await total(week),
       await total(month),
       dailyCash: dailyCash,
       dailyGCash: dailyGCash,
+      dailyMaya: dailyMaya,
     );
   }
 
@@ -100,10 +104,10 @@ class ReportsRepository {
           )).single['value']!
           as int;
   Future<List<Map<String, Object?>>> utangHistory() => db.rawQuery(
-    'SELECT c.full_name,u.total_centavos,u.occurred_at,u.status FROM utang_transactions u JOIN customers c ON c.id=u.customer_id ORDER BY u.occurred_at DESC',
+    'SELECT c.full_name,u.total_centavos,u.occurred_at,u.status,CASE WHEN COALESCE(u.is_existing_balance,0)=1 THEN \'Existing UTANG\' ELSE \'UTANG Sale\' END type FROM utang_transactions u JOIN customers c ON c.id=u.customer_id ORDER BY u.occurred_at DESC',
   );
   Future<List<Map<String, Object?>>> paymentHistory() => db.rawQuery(
-    'SELECT c.full_name,p.amount_centavos,p.paid_at,p.status,p.payment_method,p.gcash_reference FROM utang_payments p JOIN customers c ON c.id=p.customer_id ORDER BY p.paid_at DESC',
+    'SELECT c.full_name,p.amount_centavos,p.paid_at,p.status,COALESCE(p.payment_method_display,p.payment_method) payment_method,COALESCE(p.payment_reference,p.gcash_reference) payment_reference FROM utang_payments p JOIN customers c ON c.id=p.customer_id ORDER BY p.paid_at DESC',
   );
   Future<List<Map<String, Object?>>> customerLedger() => db.rawQuery(
     'SELECT c.full_name,l.entry_type,l.amount_change_centavos,l.occurred_at FROM customer_ledger_entries l JOIN customers c ON c.id=l.customer_id ORDER BY l.occurred_at DESC,l.id DESC',

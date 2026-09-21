@@ -10,6 +10,7 @@ abstract final class DisplayLabels {
   static String paymentMethod(Object? code) => switch (code) {
     'CASH' => 'Cash',
     'GCASH' => 'GCash',
+    'MAYA' => 'Maya',
     _ => 'Not recorded',
   };
 
