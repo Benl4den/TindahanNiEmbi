@@ -67,6 +67,9 @@ class DailyClosingSummary {
     this.loanCashReceived = 0,
     this.loanCashPayments = 0,
     this.loanCashPaymentReversals = 0,
+    this.loanMayaReceived = 0,
+    this.loanMayaPayments = 0,
+    this.loanMayaPaymentReversals = 0,
   });
   final int? expenseCount;
   final int cashSales,
@@ -110,6 +113,7 @@ class DailyClosingSummary {
       mayaExpenses,
       mayaRemittances;
   final int loanCashReceived, loanCashPayments, loanCashPaymentReversals;
+  final int loanMayaReceived, loanMayaPayments, loanMayaPaymentReversals;
   int get totalSales => cashSales + gcashSales + mayaSales;
   int get serviceFeeIncome => cashInServiceFees + cashOutServiceFees;
   int get totalEarnings => totalSales + serviceFeeIncome;
@@ -141,6 +145,9 @@ class DailyClosingSummary {
     'loanCashReceived': loanCashReceived,
     'loanCashPayments': loanCashPayments,
     'loanCashPaymentReversals': loanCashPaymentReversals,
+    'loanMayaReceived': loanMayaReceived,
+    'loanMayaPayments': loanMayaPayments,
+    'loanMayaPaymentReversals': loanMayaPaymentReversals,
     'cashSaleCount': cashSaleCount,
     'gcashSaleCount': gcashSaleCount,
     'newUtang': newUtang,
@@ -198,6 +205,9 @@ class DailyClosingSummary {
       loanCashReceived: value('loanCashReceived'),
       loanCashPayments: value('loanCashPayments'),
       loanCashPaymentReversals: value('loanCashPaymentReversals'),
+      loanMayaReceived: value('loanMayaReceived'),
+      loanMayaPayments: value('loanMayaPayments'),
+      loanMayaPaymentReversals: value('loanMayaPaymentReversals'),
       cashSaleCount: value('cashSaleCount'),
       gcashSaleCount: value('gcashSaleCount'),
       newUtang: value('newUtang'),
@@ -384,13 +394,13 @@ class OperationsRepository {
       COUNT(*) count FROM consignor_remittances
       WHERE remitted_at>=? AND remitted_at<?''');
     final loanReceipts = await one(
-      '''SELECT COALESCE(SUM(CASE WHEN source_kind='NEW' AND received_payment_method='CASH' THEN borrowed_amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loans WHERE created_at>=? AND created_at<?''',
+      '''SELECT COALESCE(SUM(CASE WHEN source_kind='NEW' AND received_payment_method='CASH' THEN borrowed_amount_centavos ELSE 0 END),0) cash_total,COALESCE(SUM(CASE WHEN source_kind='NEW' AND received_payment_method='MAYA' THEN borrowed_amount_centavos ELSE 0 END),0) maya_total,COUNT(*) count FROM loans WHERE created_at>=? AND created_at<?''',
     );
     final loanPayments = await one(
-      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loan_payments WHERE paid_at>=? AND paid_at<?''',
+      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COALESCE(SUM(CASE WHEN payment_method='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total,COUNT(*) count FROM loan_payments WHERE paid_at>=? AND paid_at<?''',
     );
     final loanReversals = await one(
-      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COUNT(*) count FROM loan_payments WHERE status='REVERSED' AND reversed_at>=? AND reversed_at<?''',
+      '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COALESCE(SUM(CASE WHEN payment_method='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total,COUNT(*) count FROM loan_payments WHERE status='REVERSED' AND reversed_at>=? AND reversed_at<?''',
     );
     final gcash = (await db.rawQuery(
       '''SELECT
@@ -444,6 +454,9 @@ class OperationsRepository {
       loanCashReceived: loanReceipts['cash_total']! as int,
       loanCashPayments: loanPayments['cash_total']! as int,
       loanCashPaymentReversals: loanReversals['cash_total']! as int,
+      loanMayaReceived: loanReceipts['maya_total']! as int,
+      loanMayaPayments: loanPayments['maya_total']! as int,
+      loanMayaPaymentReversals: loanReversals['maya_total']! as int,
       gcashOpeningBalance: gcash['opening']! as int,
       gcashMoneyIn: gcash['money_in']! as int,
       gcashMoneyOut: gcash['money_out']! as int,

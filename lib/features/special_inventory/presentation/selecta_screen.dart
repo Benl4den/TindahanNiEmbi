@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
+import '../../../repositories/brand_analytics_repository.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/product_unit_repository.dart';
 import '../../inventory/presentation/package_stock_in_dialog.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
+import '../../../services/feature_access_service.dart';
 import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_search_field.dart';
 import '../../../widgets/status_badge.dart';
@@ -23,6 +25,8 @@ class SelectaScreen extends StatefulWidget {
     required this.inventory,
     required this.categories,
     required this.photoService,
+    required this.analytics,
+    required this.access,
     this.groupCode = 'SELECTA',
     this.groupName = 'Selecta',
     this.lockFrozenCategory = true,
@@ -32,6 +36,8 @@ class SelectaScreen extends StatefulWidget {
   final InventoryRepository inventory;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
+  final BrandAnalyticsRepository analytics;
+  final FeatureAccessService access;
   final String groupCode, groupName;
   final bool lockFrozenCategory;
   @override
@@ -298,6 +304,91 @@ class _SelectaScreenState extends State<SelectaScreen> {
     ],
   );
 
+  Widget _brandMetric(String label, String value, IconData icon) => SizedBox(
+    width: 205,
+    child: Card(
+      color: Theme.of(context).colorScheme.primaryContainer
+          .withValues(alpha: .4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(height: 6),
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            Text(value, style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _brandOverview() => FutureBuilder<bool>(
+    future: widget.access.allows(ProFeature.managedBrandAnalytics),
+    builder: (_, gate) {
+      if (gate.data != true) return const SizedBox.shrink();
+      return FutureBuilder<Map<String, Object?>>(
+        future: widget.analytics.summary(widget.groupCode),
+        builder: (_, result) {
+          if (!result.hasData) {
+            return result.hasError
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Could not load brand performance.'),
+                  )
+                : const LinearProgressIndicator();
+          }
+          final data = result.data!;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Brand performance',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _brandMetric(
+                      'Sales',
+                      standardMoney(data['sales']! as int),
+                      Icons.payments_outlined,
+                    ),
+                    _brandMetric(
+                      'Estimated cost',
+                      standardMoney(data['cost']! as int),
+                      Icons.inventory_2_outlined,
+                    ),
+                    _brandMetric(
+                      'Estimated gross profit',
+                      standardMoney(data['profit']! as int),
+                      Icons.trending_up,
+                    ),
+                    _brandMetric(
+                      'Units sold',
+                      '${data['units']}',
+                      Icons.shopping_bag_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Posted sales are kept in brand history, including sales made before a product was assigned. Older costs are estimates; a product linked to multiple brands can appear in each brand’s history.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+
   Future<void> _remove(Product product) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -349,6 +440,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     ),
     body: Column(
       children: [
+        _brandOverview(),
         Padding(
           padding: const EdgeInsets.all(20),
           child: LayoutBuilder(
@@ -427,110 +519,154 @@ class _SelectaScreenState extends State<SelectaScreen> {
                   onAction: _create,
                 );
               }
-              return GridView.builder(
-                padding: const EdgeInsets.all(20),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 440,
-                  mainAxisExtent: 276,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                itemCount: s.data!.length,
-                itemBuilder: (_, i) {
-                  final p = s.data![i],
-                      out = p.currentQuantity == 0,
-                      low = !out && p.currentQuantity <= p.minimumStockLevel;
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: SizedBox(
-                              width: 96,
-                              height: 140,
-                              child: ProductImage(
-                                path: p.photoPath,
-                                placeholderIcon: Icons.inventory_2_outlined,
+              return FutureBuilder<Map<int, OwnedInventoryProductValue>>(
+                future: widget.inventory.ownedProductValues(),
+                builder: (_, values) {
+                  if (values.hasError) {
+                    return const Center(
+                      child: Text(
+                        'Could not load product values. Try reopening this brand.',
+                      ),
+                    );
+                  }
+                  if (!values.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(20),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 440,
+                          mainAxisExtent: 430,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: s.data!.length,
+                    itemBuilder: (_, i) {
+                      final p = s.data![i],
+                          out = p.currentQuantity == 0,
+                          low =
+                              !out && p.currentQuantity <= p.minimumStockLevel;
+                      final value = values.data![p.id];
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: SizedBox(
+                                  width: 96,
+                                  height: 140,
+                                  child: ProductImage(
+                                    path: p.photoPath,
+                                    placeholderIcon: Icons.inventory_2_outlined,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  p.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                Text(standardMoney(p.sellingPriceCentavos)),
-                                Text(
-                                  'Stock ${productQuantityText(p, p.currentQuantity)}',
-                                ),
-                                StatusBadge(
-                                  label: out
-                                      ? 'Out of Stock'
-                                      : low
-                                      ? 'Low Stock'
-                                      : 'In Stock',
-                                  status: out
-                                      ? AppStatus.critical
-                                      : low
-                                      ? AppStatus.attention
-                                      : AppStatus.normal,
-                                ),
-                                const SizedBox(height: 6),
-                                Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    SizedBox(
-                                      height: 48,
-                                      child: FilledButton.tonalIcon(
-                                        onPressed: () => _stockIn(p),
-                                        icon: const Icon(Icons.add_box),
-                                        label: const Text('Stock In'),
-                                      ),
+                                    Text(
+                                      p.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
                                     ),
-                                    Row(
+                                    Text(standardMoney(p.sellingPriceCentavos)),
+                                    Text(
+                                      'Stock ${productQuantityText(p, p.currentQuantity)}',
+                                    ),
+                                    StatusBadge(
+                                      label: out
+                                          ? 'Out of Stock'
+                                          : low
+                                          ? 'Low Stock'
+                                          : 'In Stock',
+                                      status: out
+                                          ? AppStatus.critical
+                                          : low
+                                          ? AppStatus.attention
+                                          : AppStatus.normal,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    if (value == null)
+                                      Text(
+                                        'Supplier-owned stock • not included in owned inventory values',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      )
+                                    else ...[
+                                      Text(
+                                        'Current Stock Cost  ${standardMoney(value.currentStockCostCentavos)}',
+                                      ),
+                                      Text(
+                                        'Potential Sales Value  ${standardMoney(value.potentialSalesValueCentavos)}',
+                                      ),
+                                      Text(
+                                        'Potential Gross Profit  ${standardMoney(value.potentialGrossProfitCentavos)}',
+                                      ),
+                                    ],
+                                    const SizedBox(height: 10),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
                                       children: [
-                                        Expanded(
-                                          child: TextButton.icon(
-                                            onPressed: () => _saleHistory(p),
-                                            icon: const Icon(
-                                              Icons.bar_chart_outlined,
-                                              size: 18,
+                                        SizedBox(
+                                          height: 48,
+                                          child: FilledButton.tonalIcon(
+                                            onPressed: () => _stockIn(p),
+                                            icon: const Icon(Icons.add_box),
+                                            label: const Text('Stock In'),
+                                          ),
+                                        ),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextButton.icon(
+                                                onPressed: () =>
+                                                    _saleHistory(p),
+                                                icon: const Icon(
+                                                  Icons.bar_chart_outlined,
+                                                  size: 18,
+                                                ),
+                                                label: const Text(
+                                                  'Sale History',
+                                                ),
+                                              ),
                                             ),
-                                            label: const Text('Sale History'),
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Edit product',
-                                          onPressed: () => _edit(p),
-                                          icon: const Icon(Icons.edit_outlined),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Remove from brand',
-                                          onPressed: () => _remove(p),
-                                          icon: const Icon(
-                                            Icons.remove_circle_outline,
-                                          ),
+                                            IconButton(
+                                              tooltip: 'Edit product',
+                                              onPressed: () => _edit(p),
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Remove from brand',
+                                              onPressed: () => _remove(p),
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               );

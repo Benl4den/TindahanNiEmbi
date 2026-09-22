@@ -303,7 +303,7 @@ class CashSaleRepository {
         (SELECT replacement_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.original_entity_id=s.id) corrected_by_id,
         (SELECT original_entity_id FROM transaction_corrections c WHERE c.entity_type='CASH_SALE' AND c.replacement_entity_id=s.id) correction_of_id
       FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id LEFT JOIN cash_sale_items i ON i.cash_sale_id=s.id
-      WHERE ? IN ('ALL','CASH') GROUP BY s.id
+      WHERE ? IN ('ALL',COALESCE(sp.payment_method_display,sp.payment_method,'CASH')) GROUP BY s.id
       UNION ALL
       SELECT u.id,u.reference,'UTANG',c.full_name,u.occurred_at,
         u.total_centavos,COALESCE(SUM(i.quantity),0),u.status,

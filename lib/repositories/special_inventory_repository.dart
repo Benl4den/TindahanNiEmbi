@@ -217,6 +217,42 @@ class SpecialInventoryRepository {
           whereArgs: [existing.single['id']],
         );
       }
+      // A product may have sold before it was added to this brand. Capture
+      // those posted sales once, with an explicitly estimated historical cost.
+      // Existing attributions keep their original sale-time cost unchanged.
+      if (code != 'CONSIGNMENT') {
+        final groupId = groups.single['id']! as int;
+        await tx.rawInsert(
+          '''INSERT OR IGNORE INTO brand_sale_attributions(
+          inventory_group_id,cash_sale_item_id,cost_centavos,is_estimate)
+          SELECT ?,i.id,
+            COALESCE((SELECT SUM(COALESCE(a.actual_payable_centavos,a.payable_centavos))
+              FROM consignment_allocations a WHERE a.cash_sale_item_id=i.id),
+              CAST(ROUND(1.0*COALESCE(i.total_base_quantity,i.quantity)*p.purchase_price_centavos/
+                COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
+                  WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)) AS INTEGER)),1
+          FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
+          JOIN products p ON p.id=i.product_id
+          WHERE i.product_id=? AND s.status='POSTED' ''',
+          [groupId, productId],
+        );
+        await tx.rawInsert(
+          '''INSERT OR IGNORE INTO brand_sale_attributions(
+          inventory_group_id,utang_item_id,cost_centavos,is_estimate)
+          SELECT ?,i.id,
+            COALESCE((SELECT SUM(COALESCE(a.actual_payable_centavos,a.payable_centavos))
+              FROM consignment_allocations a WHERE a.utang_item_id=i.id),
+              CAST(ROUND(1.0*COALESCE(i.total_base_quantity,i.quantity)*p.purchase_price_centavos/
+                COALESCE((SELECT k.base_quantity FROM product_purchase_packages k
+                  WHERE k.product_id=p.id AND k.is_default=1 AND k.is_archived=0 LIMIT 1),1)) AS INTEGER)),1
+          FROM utang_transaction_items i
+          JOIN utang_transactions u ON u.id=i.utang_transaction_id
+          JOIN products p ON p.id=i.product_id
+          WHERE i.product_id=? AND u.status='POSTED'
+            AND COALESCE(u.is_existing_balance,0)=0''',
+          [groupId, productId],
+        );
+      }
       await tx.insert('activity_logs', {
         'event_type': 'SPECIAL_INVENTORY_ASSIGNED',
         'description': '${products.single['name']} assigned to $code',

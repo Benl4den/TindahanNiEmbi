@@ -348,7 +348,17 @@ class _State extends State<AppShell> {
         label: 'Dashboard',
       ),
     );
-    const navTargets = [13, 0, 6, 12, 5, 3, 4, 1, 2, 11, 7, 8, 9, 10];
+    bodyDestinations.addAll(const [
+      NavigationDestination(
+        icon: Icon(Icons.contact_phone_outlined),
+        label: 'Supplier Contacts',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.account_balance_outlined),
+        label: '5/6 Loan Management',
+      ),
+    ]);
+    const navTargets = [13, 0, 6, 12, 5, 3, 4, 1, 2, 14, 11, 7, 8, 9, 15, 10];
     final allowedTargets = widget.role == UserRole.owner
         ? navTargets
         : navTargets
@@ -543,6 +553,19 @@ class _State extends State<AppShell> {
     9 =>
       widget.role == UserRole.owner
           ? ReportsScreen(repository: ReportsRepository(widget.database))
+          : _denied(),
+    14 =>
+      widget.role == UserRole.owner
+          ? SupplierContactsScreen(
+              repository: SupplierContactsRepository(widget.database),
+            )
+          : _denied(),
+    15 =>
+      widget.role == UserRole.owner
+          ? LoanManagementScreen(
+              repository: LoanRepository(widget.database, actorRole: role),
+              access: FeatureAccessService(widget.database),
+            )
           : _denied(),
     11 => TransactionHistoryScreen(
       repository: TransactionHistoryRepository(widget.database),
@@ -792,8 +815,8 @@ class _State extends State<AppShell> {
   String _navSection(int target) => switch (target) {
     13 || 0 || 6 || 12 => 'Daily Selling',
     5 || 3 || 4 => 'Stock & Products',
-    1 || 2 => 'Supplier Products',
-    11 || 7 || 8 || 9 => 'Store Records',
+    1 || 2 || 14 => 'Supplier Products',
+    11 || 7 || 8 || 9 || 15 => 'Store Records',
     _ => 'Administration',
   };
 
@@ -920,25 +943,6 @@ class _State extends State<AppShell> {
             ),
           if (owner)
             (
-              label: '5-6 Loan Management',
-              icon: Icons.account_balance_outlined,
-              page: LoanManagementScreen(
-                repository: LoanRepository(widget.database, actorRole: role),
-                access: FeatureAccessService(widget.database),
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Supplier Contacts',
-              icon: Icons.contact_phone_outlined,
-              page: SupplierContactsScreen(
-                repository: SupplierContactsRepository(widget.database),
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
               label: 'Products',
               icon: Icons.inventory,
               page: ProductsScreen(
@@ -1033,7 +1037,7 @@ class _State extends State<AppShell> {
             'Products',
             'Categories',
             'Supplier Contacts',
-            '5-6 Loan Management',
+            '5/6 Loan Management',
           }.contains(x.label),
         )
         .toList();

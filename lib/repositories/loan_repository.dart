@@ -90,12 +90,12 @@ class LoanRepository {
           loanId: i,
           actorRole: actorRole,
           occurredAt: now,
-          notes: '5-6 loan received',
+          notes: '5/6 loan received',
         );
       }
       await tx.insert('activity_logs', {
         'event_type': 'LOAN_CREATED',
-        'description': '5-6 loan L56-${i.toString().padLeft(6, '0')} created',
+        'description': '5/6 loan L56-${i.toString().padLeft(6, '0')} created',
         'actor_role': actorRole,
         'related_entity_type': 'LOAN',
         'related_entity_id': i,
@@ -151,7 +151,7 @@ class LoanRepository {
           gcashReference: reference,
           actorRole: actorRole,
           occurredAt: now,
-          notes: '5-6 loan payment',
+          notes: '5/6 loan payment',
         );
       }
       if (amount == remaining) {
@@ -165,7 +165,7 @@ class LoanRepository {
       await tx.insert('activity_logs', {
         'event_type': 'LOAN_PAYMENT_POSTED',
         'description':
-            '5-6 loan payment L5P-${id.toString().padLeft(6, '0')} recorded',
+            '5/6 loan payment L5P-${id.toString().padLeft(6, '0')} recorded',
         'actor_role': actorRole,
         'related_entity_type': 'LOAN_PAYMENT',
         'related_entity_id': id,
@@ -224,7 +224,7 @@ class LoanRepository {
       }
       await tx.insert('activity_logs', {
         'event_type': 'LOAN_PAYMENT_REVERSED',
-        'description': '5-6 loan payment reversed — ${reason.trim()}',
+        'description': '5/6 loan payment reversed — ${reason.trim()}',
         'actor_role': actorRole,
         'related_entity_type': 'LOAN_PAYMENT',
         'related_entity_id': paymentId,

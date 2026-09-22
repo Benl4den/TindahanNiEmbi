@@ -17,6 +17,16 @@ int? _moneyCentavos(String input) {
   return whole * 100 + cents;
 }
 
+Widget _loanMetric(BuildContext context, String label, int amount) => Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    Text(label, style: Theme.of(context).textTheme.bodyMedium),
+    const SizedBox(height: 3),
+    Text(standardMoney(amount), style: Theme.of(context).textTheme.titleMedium),
+  ],
+);
+
 class LoanManagementScreen extends StatefulWidget {
   const LoanManagementScreen({
     super.key,
@@ -32,19 +42,63 @@ class LoanManagementScreen extends StatefulWidget {
 class _LoanManagementScreenState extends State<LoanManagementScreen> {
   bool completed = false;
   late Future<bool> accessAllowed;
+  late Future<List<Map<String, Object?>>> _loans;
 
   @override
   void initState() {
     super.initState();
     accessAllowed = widget.access.allows(ProFeature.fiveSixLoanManagement);
+    _loans = widget.repository.loans();
+  }
+
+  void _reload() {
+    if (mounted) {
+      setState(() {
+        _loans = widget.repository.loans(completed: completed);
+      });
+    }
+  }
+
+  // Wait until the dialog has left the overlay before disposing its text
+  // controllers, rebuilding this screen, or opening the next dialog.
+  Future<T?> _showLoanDialog<T>(WidgetBuilder builder) {
+    final route = DialogRoute<T>(context: context, builder: builder);
+    Navigator.of(context).push(route);
+    return route.completed;
   }
 
   Future<void> _details(Map<String, Object?> loan) async {
     final loanId = loan['id']! as int;
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(loan['lender_name']! as String),
+    Map<String, Object?>? paymentToCancel;
+    var recordPayment = false;
+    await _showLoanDialog<void>(
+      (dialog) => AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    loan['lender_name']! as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Loan details',
+                    style: Theme.of(dialog).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Close loan details',
+              onPressed: () => Navigator.pop(dialog),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
         content: SizedBox(
           width: 500,
           child: FutureBuilder<List<Map<String, Object?>>>(
@@ -67,18 +121,80 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    Text(
-                      'Borrowed: ${standardMoney(loan['borrowed_amount_centavos']! as int)}',
+                    Builder(
+                      builder: (context) {
+                        final borrowed =
+                            loan['borrowed_amount_centavos']! as int;
+                        final total = loan['agreed_repayment_centavos']! as int;
+                        final paid = loan['paid_centavos']! as int;
+                        final remaining = (total - paid).clamp(0, total);
+                        final progress = total == 0
+                            ? 0.0
+                            : (paid / total).clamp(0.0, 1.0);
+                        Widget metric(String label, int amount) => Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(label),
+                              const SizedBox(height: 4),
+                              Text(
+                                standardMoney(amount),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                        );
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'TOTAL TO REPAY',
+                                  style: Theme.of(context).textTheme.labelLarge,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  standardMoney(total),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium,
+                                ),
+                                const SizedBox(height: 22),
+                                Row(
+                                  children: [
+                                    metric('Borrowed', borrowed),
+                                    metric('Paid', paid),
+                                    metric('Remaining', remaining),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Repayment progress',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall,
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '${standardMoney(paid)} of ${standardMoney(total)} paid',
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                LinearProgressIndicator(value: progress),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
+                    const SizedBox(height: 20),
                     Text(
-                      'Agreed repayment: ${standardMoney(loan['agreed_repayment_centavos']! as int)}',
-                    ),
-                    Text(
-                      'Remaining: ${standardMoney((loan['agreed_repayment_centavos']! as int) - (loan['paid_centavos']! as int))}',
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Payment history',
+                      'Payment History',
                       style: Theme.of(dialog).textTheme.titleMedium,
                     ),
                     if (rows.isEmpty) const Text('No payments recorded yet.'),
@@ -89,21 +205,42 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                       )?.toLocal();
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          '${standardMoney(payment['amount_centavos']! as int)} • ${PaymentMethod.fromDatabase(payment['payment_method']).label}',
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                standardMoney(
+                                  payment['amount_centavos']! as int,
+                                ),
+                                style: Theme.of(dialog).textTheme.titleMedium,
+                              ),
+                            ),
+                            Text(
+                              PaymentMethod.fromDatabase(
+                                payment['payment_method'],
+                              ).label,
+                            ),
+                          ],
                         ),
                         subtitle: Text(
-                          '${when == null ? 'Date unavailable' : MaterialLocalizations.of(dialog).formatMediumDate(when)} • ${reversed ? 'Cancelled' : 'Completed'}${reversed ? '\nReason: ${payment['reversal_reason'] ?? 'Not recorded'}' : ''}',
+                          '${when == null ? 'Date unavailable' : MaterialLocalizations.of(dialog).formatMediumDate(when)}${when == null ? '' : ' • ${MaterialLocalizations.of(dialog).formatTimeOfDay(TimeOfDay.fromDateTime(when))}'} • ${reversed ? 'Reversed' : 'Completed'}${reversed ? '\nReason: ${payment['reversal_reason'] ?? 'Not recorded'}' : ''}',
                         ),
                         isThreeLine: reversed,
                         trailing: reversed
-                            ? null
-                            : TextButton(
-                                onPressed: () async {
+                            ? const Icon(Icons.history_outlined)
+                            : PopupMenuButton<String>(
+                                tooltip: 'Payment actions',
+                                onSelected: (_) {
+                                  paymentToCancel = payment;
                                   Navigator.pop(dialog);
-                                  await _cancelPayment(payment);
                                 },
-                                child: const Text('Cancel record'),
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'reverse',
+                                    child: Text('Reverse Payment'),
+                                  ),
+                                ],
+                                icon: const Icon(Icons.more_horiz),
                               ),
                       );
                     }),
@@ -114,39 +251,42 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Close'),
-          ),
           if (loan['status'] == 'ACTIVE')
-            FilledButton(
+            FilledButton.icon(
               onPressed: () async {
+                recordPayment = true;
                 Navigator.pop(dialog);
-                await _pay(loan);
               },
-              child: const Text('Record Payment'),
+              icon: const Icon(Icons.payments_outlined),
+              label: const Text('Record Payment'),
             ),
         ],
       ),
     );
+    if (!mounted) return;
+    if (paymentToCancel != null) {
+      await _cancelPayment(paymentToCancel!);
+    } else if (recordPayment) {
+      await _pay(loan);
+    }
   }
 
   Future<void> _cancelPayment(Map<String, Object?> payment) async {
     final reason = TextEditingController();
     final pin = TextEditingController();
     var busy = false;
+    var cancelled = false;
     String? error;
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
+    await _showLoanDialog<void>(
+      (dialog) => StatefulBuilder(
         builder: (_, update) => AlertDialog(
           scrollable: true,
-          title: const Text('Cancel Loan Payment?'),
+          title: const Text('Reverse Payment?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'This restores ${standardMoney(payment['amount_centavos']! as int)} to the loan balance. The original payment stays in history.',
+                'This restores ${standardMoney(payment['amount_centavos']! as int)} to the loan balance. The original payment remains in history as reversed.',
               ),
               const SizedBox(height: 12),
               TextField(
@@ -197,8 +337,8 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                           reason: reason.text,
                           ownerPinAuthorized: true,
                         );
+                        cancelled = true;
                         if (dialog.mounted) Navigator.pop(dialog);
-                        if (mounted) setState(() {});
                       } catch (e) {
                         if (dialog.mounted) {
                           update(
@@ -211,7 +351,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                         if (dialog.mounted) update(() => busy = false);
                       }
                     },
-              child: const Text('Cancel Payment Record'),
+              child: const Text('Reverse Payment'),
             ),
           ],
         ),
@@ -219,6 +359,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     );
     reason.dispose();
     pin.dispose();
+    if (cancelled) _reload();
   }
 
   Future<void> _pay(Map<String, Object?> loan) async {
@@ -227,9 +368,8 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     var method = PaymentMethod.cash;
     var busy = false;
     String? error;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (d) => StatefulBuilder(
+    final saved = await _showLoanDialog<bool>(
+      (d) => StatefulBuilder(
         builder: (_, setDialog) => AlertDialog(
           scrollable: true,
           title: const Text('Record Loan Payment'),
@@ -337,7 +477,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     );
     amount.dispose();
     note.dispose();
-    if (saved == true && mounted) setState(() {});
+    if (saved == true) _reload();
   }
 
   Future<void> _addLender() async {
@@ -347,17 +487,18 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     if (!mounted) return;
     final c = TextEditingController();
     String? error;
-    await showDialog<void>(
-      context: context,
-      builder: (x) => StatefulBuilder(
+    var busy = false;
+    final saved = await _showLoanDialog<bool>(
+      (x) => StatefulBuilder(
         builder: (_, update) => AlertDialog(
+          scrollable: true,
           title: const Text('Add Lender'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: c,
-                autofocus: true,
+                autofocus: false,
                 decoration: const InputDecoration(labelText: 'Lender name'),
               ),
               if (error != null)
@@ -373,22 +514,31 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () async {
-                if (c.text.trim().isEmpty) {
-                  update(() => error = 'Enter a lender name.');
-                  return;
-                }
-                try {
-                  await widget.repository.createLender(c.text);
-                  if (x.mounted) Navigator.pop(x);
-                } catch (_) {
-                  if (x.mounted) {
-                    update(
-                      () => error = 'Could not save lender. Please try again.',
-                    );
-                  }
-                }
-              },
+              onPressed: busy
+                  ? null
+                  : () async {
+                      if (c.text.trim().isEmpty) {
+                        update(() => error = 'Enter a lender name.');
+                        return;
+                      }
+                      update(() {
+                        busy = true;
+                        error = null;
+                      });
+                      try {
+                        await widget.repository.createLender(c.text);
+                        if (x.mounted) Navigator.pop(x, true);
+                      } catch (_) {
+                        if (x.mounted) {
+                          update(
+                            () => error =
+                                'Could not save lender. Please try again.',
+                          );
+                        }
+                      } finally {
+                        if (x.mounted) update(() => busy = false);
+                      }
+                    },
               child: const Text('Save'),
             ),
           ],
@@ -396,7 +546,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
       ),
     );
     c.dispose();
-    if (mounted) setState(() {});
+    if (saved == true) _reload();
   }
 
   Future<void> _add() async {
@@ -414,22 +564,27 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     var source = 'NEW', freq = 'DAILY', method = PaymentMethod.cash;
     var busy = false;
     String? error;
-    await showDialog(
-      context: context,
-      builder: (x) => StatefulBuilder(
+    final saved = await _showLoanDialog<bool>(
+      (x) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
           scrollable: true,
-          title: const Text('Add 5-6 Loan'),
+          title: const Text('Add 5/6 Loan'),
           content: SizedBox(
-            width: 460,
+            width: 500,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (error != null)
                   Text(
                     error!,
                     style: TextStyle(color: Theme.of(x).colorScheme.error),
                   ),
+                Text(
+                  'Lender and source',
+                  style: Theme.of(x).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
                   initialValue: lender,
                   items: lenders
@@ -443,6 +598,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                   onChanged: (v) => set(() => lender = v!),
                   decoration: const InputDecoration(labelText: 'Lender'),
                 ),
+                const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
                   initialValue: source,
                   items: const [
@@ -458,22 +614,41 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                   onChanged: (v) => set(() => source = v!),
                   decoration: const InputDecoration(labelText: 'Loan source'),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  source == 'NEW' ? 'Record money your store receives today.' : 'Track a loan you received earlier without adding money to today’s totals.',
+                  style: Theme.of(x).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 20),
+                Text('Loan amounts', style: Theme.of(x).textTheme.titleMedium),
+                const SizedBox(height: 12),
                 TextField(
                   controller: borrowed,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Amount borrowed',
                     prefixText: '₱ ',
                   ),
                 ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: agreed,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
-                    labelText: 'Agreed total repayment',
+                    labelText: 'Total to repay',
                     prefixText: '₱ ',
                   ),
                 ),
+                const SizedBox(height: 20),
+                Text(
+                  'Collection plan',
+                  style: Theme.of(x).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: freq,
                   items: const [
@@ -491,14 +666,18 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                     labelText: 'Collection frequency',
                   ),
                 ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: scheduled,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Expected payment (optional)',
                     prefixText: '₱ ',
                   ),
                 ),
+                const SizedBox(height: 14),
                 if (source == 'NEW')
                   DropdownButtonFormField<PaymentMethod>(
                     initialValue: method,
@@ -512,6 +691,12 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Money received through',
                     ),
+                  ),
+                if (source == 'NEW') const SizedBox(height: 8),
+                if (source == 'NEW')
+                  Text(
+                    'Choose where the borrowed money was received. This affects today’s cash or wallet record.',
+                    style: Theme.of(x).textTheme.bodySmall,
                   ),
               ],
             ),
@@ -538,7 +723,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                               (scheduledCents == null ||
                                   scheduledCents <= 0))) {
                         set(
-                          () => error = 'Enter valid positive amounts. Agreed repayment must be at least the amount borrowed; use at most two decimals.',
+                          () => error = 'Enter valid positive amounts. Total to repay must be at least the amount borrowed; use at most two decimals.',
                         );
                         return;
                       }
@@ -557,7 +742,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                           scheduled: scheduledCents,
                           receivedMethod: source == 'NEW' ? method : null,
                         );
-                        if (x.mounted) Navigator.pop(x);
+                        if (x.mounted) Navigator.pop(x, true);
                       } catch (_) {
                         if (x.mounted) {
                           set(
@@ -577,35 +762,12 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     borrowed.dispose();
     agreed.dispose();
     scheduled.dispose();
-    if (mounted) setState(() {});
+    if (saved == true) _reload();
   }
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(
-      title: const Text('5-6 Loan Management'),
-      actions: [
-        FutureBuilder<bool>(
-          future: accessAllowed,
-          builder: (_, result) => result.data != true
-              ? const SizedBox.shrink()
-              : Row(
-                  children: [
-                    IconButton(
-                      onPressed: _addLender,
-                      tooltip: 'Add lender',
-                      icon: const Icon(Icons.person_add_alt_1_outlined),
-                    ),
-                    IconButton(
-                      onPressed: _add,
-                      tooltip: 'Add loan',
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
-                  ],
-                ),
-        ),
-      ],
-    ),
+    appBar: AppBar(title: const Text('5/6 Loan Management')),
     body: FutureBuilder<bool>(
       future: accessAllowed,
       builder: (_, g) {
@@ -619,13 +781,13 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
         }
         if (!g.data!) {
           return const ProFeaturePreview(
-            title: '5-6 Loan Management',
+            title: '5/6 Loan Management',
             description: 'Track lender balances, daily or weekly collections, and payment history in one clear place.',
             icon: Icons.account_balance_outlined,
           );
         }
         return FutureBuilder<List<Map<String, Object?>>>(
-          future: widget.repository.loans(completed: completed),
+          future: _loans,
           builder: (_, s) => s.hasError
               ? const Center(
                   child: Text('Could not load loans. Reopen this section.'),
@@ -633,14 +795,67 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
               : Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ChoiceChip(
-                        label: Text(
-                          completed ? 'Completed loans' : 'Active loans',
-                        ),
-                        selected: true,
-                        onSelected: (_) =>
-                            setState(() => completed = !completed),
+                      padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Know what you owe and track every payment clearly.',
+                                  style: Theme.of(c).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Keep lenders, repayment plans, and payment history in one place.',
+                                  style: Theme.of(c).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          OutlinedButton.icon(
+                            onPressed: _addLender,
+                            icon: const Icon(Icons.person_add_alt_1_outlined),
+                            label: const Text('Add Lender'),
+                          ),
+                          const SizedBox(width: 10),
+                          FilledButton.icon(
+                            onPressed: _add,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Loan'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+                      child: Row(
+                        children: [
+                          SegmentedButton<bool>(
+                            segments: const [
+                              ButtonSegment(
+                                value: false,
+                                label: Text('Active'),
+                              ),
+                              ButtonSegment(
+                                value: true,
+                                label: Text('Completed'),
+                              ),
+                            ],
+                            selected: {completed},
+                            onSelectionChanged: (selection) {
+                              completed = selection.single;
+                              _reload();
+                            },
+                          ),
+                          const Spacer(),
+                          if (s.hasData)
+                            Text(
+                              '${s.data!.length} ${completed ? 'completed' : 'active'} ${s.data!.length == 1 ? 'loan' : 'loans'}',
+                            ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -666,37 +881,136 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                               ),
                             )
                           : ListView(
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                               children: s.data!.map((r) {
-                                final remaining =
-                                    (r['agreed_repayment_centavos']! as int) -
-                                    (r['paid_centavos']! as int);
+                                final borrowed =
+                                    r['borrowed_amount_centavos']! as int;
+                                final agreed =
+                                    r['agreed_repayment_centavos']! as int;
+                                final paid = r['paid_centavos']! as int;
+                                final remaining = (agreed - paid).clamp(
+                                  0,
+                                  agreed,
+                                );
+                                final progress = agreed == 0
+                                    ? 0.0
+                                    : (paid / agreed).clamp(0.0, 1.0);
                                 return Card(
-                                  child: ListTile(
-                                    leading: const CircleAvatar(
-                                      child: Icon(
-                                        Icons.account_balance_outlined,
-                                      ),
-                                    ),
-                                    title: Text(r['lender_name']! as String),
-                                    subtitle: Text(
-                                      '${r['collection_frequency']} collection • Borrowed ${standardMoney(r['borrowed_amount_centavos']! as int)}',
-                                    ),
+                                  child: InkWell(
                                     onTap: () => _details(r),
-                                    trailing: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        const Text('Remaining'),
-                                        Text(
-                                          standardMoney(remaining),
-                                          style: Theme.of(c)
-                                              .textTheme
-                                              .titleMedium,
-                                        ),
-                                      ],
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(22),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const CircleAvatar(
+                                                child: Icon(
+                                                  Icons
+                                                      .account_balance_outlined,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 16),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      r['lender_name']!
+                                                          as String,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: Theme.of(c)
+                                                          .textTheme
+                                                          .titleLarge,
+                                                    ),
+                                                    Text(
+                                                      '${r['collection_frequency'] == 'DAILY' ? 'Daily' : 'Weekly'} collection • ${r['source_kind'] == 'NEW' ? 'Received in store' : 'Existing loan'}',
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (completed)
+                                                const Chip(
+                                                  label: Text('Completed'),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 22),
+                                          Wrap(
+                                            spacing: 36,
+                                            runSpacing: 12,
+                                            children: [
+                                              _loanMetric(
+                                                c,
+                                                'Borrowed',
+                                                borrowed,
+                                              ),
+                                              _loanMetric(
+                                                c,
+                                                'Total to Repay',
+                                                agreed,
+                                              ),
+                                              _loanMetric(c, 'Paid', paid),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 18),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: LinearProgressIndicator(
+                                                  value: progress,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 18),
+                                              Text(
+                                                '${standardMoney(paid)} of ${standardMoney(agreed)} paid',
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 18),
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    completed
+                                                        ? 'Completed'
+                                                        : 'Remaining',
+                                                    style: Theme.of(c)
+                                                        .textTheme
+                                                        .bodyMedium,
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    standardMoney(remaining),
+                                                    style: Theme.of(c)
+                                                        .textTheme
+                                                        .headlineSmall,
+                                                  ),
+                                                ],
+                                              ),
+                                              const Spacer(),
+                                              Text(
+                                                'Tap for details',
+                                                style: Theme.of(c)
+                                                    .textTheme
+                                                    .bodyMedium,
+                                              ),
+                                              const Icon(Icons.chevron_right),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );

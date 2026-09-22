@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
+import 'package:tindahan_ni_embi/database/migrations/migration_v26.dart';
 import 'package:tindahan_ni_embi/models/customer.dart';
 import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
@@ -104,6 +105,35 @@ void main() {
   });
 
   test(
+    'Maya loan movements appear in daily closing without changing cash',
+    () async {
+      final loans = LoanRepository(db, actorRole: 'OWNER');
+      final lender = await loans.createLender('Maya lender');
+      final loanId = await loans.create(
+        lenderId: lender,
+        borrowed: 10000,
+        agreed: 12000,
+        sourceKind: 'NEW',
+        start: DateTime.now(),
+        frequency: 'DAILY',
+        receivedMethod: PaymentMethod.maya,
+      );
+      await loans.pay(loanId: loanId, amount: 2000, method: PaymentMethod.maya);
+      final paymentId = (await loans.paymentsFor(loanId)).single['id']! as int;
+      await loans.reversePayment(
+        paymentId: paymentId,
+        reason: 'Duplicate',
+        ownerPinAuthorized: true,
+      );
+      final summary = await OperationsRepository(db).daily(DateTime.now());
+      expect(summary.loanMayaReceived, 10000);
+      expect(summary.loanMayaPayments, 2000);
+      expect(summary.loanMayaPaymentReversals, 2000);
+      expect(summary.cashDifference, 0);
+    },
+  );
+
+  test(
     'brand analytics keeps sale-time price and attribution after edits',
     () async {
       final category = await SqliteCategoryRepository(db).create('Snacks');
@@ -141,6 +171,75 @@ void main() {
   );
 
   test(
+    'adding a product to a brand includes its earlier posted sales',
+    () async {
+      final category = await SqliteCategoryRepository(db).create('Goods');
+      final product = await SqliteProductRepository(db).create(
+        ProductDraft(
+          categoryId: category.id,
+          name: 'Earlier sale',
+          photoPath: '/earlier',
+          purchasePriceCentavos: 400,
+          sellingPriceCentavos: 700,
+          startingQuantity: 5,
+          minimumStockLevel: 1,
+        ),
+      );
+      await CashSaleRepository(db)
+          .save([UtangItemDraft(productId: product.id, quantity: 2)]);
+      final brands = SpecialInventoryRepository(db);
+      final brand = await brands.createBrand('New brand');
+      expect(
+        (await BrandAnalyticsRepository(db).summary(brand.code))['sales'],
+        0,
+      );
+      await brands.assign(product.id, brand.code);
+      final summary = await BrandAnalyticsRepository(db).summary(brand.code);
+      expect(summary['sales'], 1400);
+      expect(summary['units'], 2);
+      expect(summary['estimatedItems'], 1);
+      await brands.assign(product.id, brand.code);
+      expect(
+        (await BrandAnalyticsRepository(db).summary(brand.code))['sales'],
+        1400,
+      );
+    },
+  );
+
+  test('upgrade fills older sales for an already assigned brand', () async {
+    final category = await SqliteCategoryRepository(db).create('Goods');
+    final product = await SqliteProductRepository(db).create(
+      ProductDraft(
+        categoryId: category.id,
+        name: 'Previously assigned',
+        photoPath: '/previous',
+        purchasePriceCentavos: 300,
+        sellingPriceCentavos: 500,
+        startingQuantity: 3,
+        minimumStockLevel: 1,
+      ),
+    );
+    await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: product.id, quantity: 1)]);
+    final brand = await SpecialInventoryRepository(db)
+        .createBrand('Older brand');
+    await db.insert('product_inventory_groups', {
+      'product_id': product.id,
+      'inventory_group_id': brand.id,
+      'assigned_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    expect(
+      (await BrandAnalyticsRepository(db).summary(brand.code))['sales'],
+      0,
+    );
+    await MigrationV26().migrate(db);
+    expect(
+      (await BrandAnalyticsRepository(db).summary(brand.code))['sales'],
+      500,
+    );
+  });
+
+  test(
     'Maya histories keep their payment label and opening UTANG is not a sale',
     () async {
       final category = await SqliteCategoryRepository(db).create('Goods');
@@ -167,6 +266,13 @@ void main() {
           .addExistingBalance(customerId: customer.id, amountCentavos: 1000);
       final history = await CashSaleRepository(db).history();
       expect(history, hasLength(1));
+      expect(
+        (await CashSaleRepository(db).history(type: 'MAYA'))
+            .single
+            .paymentMethod,
+        PaymentMethod.maya,
+      );
+      expect(await CashSaleRepository(db).history(type: 'CASH'), isEmpty);
       final transactions = TransactionHistoryRepository(db);
       expect(
         (await transactions.recent(search: 'Existing UTANG')).single.title,

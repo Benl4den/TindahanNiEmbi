@@ -299,7 +299,7 @@ class PaymentAccountingRepository {
       loanPaymentId: paymentId,
       reversalOfEntryId: original['id']! as int,
       actorRole: actorRole,
-      notes: '5-6 loan payment cancelled: $reason',
+      notes: '5/6 loan payment reversed: $reason',
       occurredAt: occurredAt,
     );
   }

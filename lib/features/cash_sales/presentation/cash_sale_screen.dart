@@ -1539,6 +1539,8 @@ class _State extends State<CashSaleScreen> {
                         for (final x in const [
                           ('ALL', 'All'),
                           ('CASH', 'Cash'),
+                          ('GCASH', 'GCash'),
+                          ('MAYA', 'Maya'),
                           ('UTANG', 'UTANG'),
                         ])
                           ChoiceChip(
@@ -1587,7 +1589,7 @@ class _State extends State<CashSaleScreen> {
                                         : Icons.payments,
                                   ),
                                   title: Text(
-                                    '${e.isUtang ? 'UTANG Sale' : 'Cash Sale'} • ${e.reference}',
+                                    '${e.isUtang ? 'UTANG Sale' : '${e.paymentMethod.label} Sale'} • ${e.reference}',
                                   ),
                                   subtitle: Text(
                                     '${e.customerName == null ? '' : '${e.customerName} • '}${MaterialLocalizations.of(context).formatMediumDate(local)} • ${TimeOfDay.fromDateTime(local).format(context)}\n'

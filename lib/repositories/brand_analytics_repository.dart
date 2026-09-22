@@ -23,6 +23,17 @@ class BrandAnalyticsRepository {
       [cashSaleItemId ?? utangItemId],
     );
     final consignmentCost = allocation.single['cost'] as int?;
+    final packages = await tx.rawQuery(
+      '''SELECT base_quantity FROM product_purchase_packages
+      WHERE product_id=? AND is_default=1 AND is_archived=0 LIMIT 1''',
+      [productId],
+    );
+    final packageQuantity = packages.isEmpty
+        ? 1
+        : (packages.single['base_quantity']! as int);
+    final estimatedCost =
+        (baseQuantity * unitCostCentavos + packageQuantity ~/ 2) ~/
+        packageQuantity;
     final memberships = await tx.rawQuery(
       '''SELECT m.inventory_group_id FROM product_inventory_groups m
       JOIN inventory_groups g ON g.id=m.inventory_group_id
@@ -34,7 +45,7 @@ class BrandAnalyticsRepository {
         'inventory_group_id': membership['inventory_group_id'],
         'cash_sale_item_id': cashSaleItemId,
         'utang_item_id': utangItemId,
-        'cost_centavos': consignmentCost ?? baseQuantity * unitCostCentavos,
+        'cost_centavos': consignmentCost ?? estimatedCost,
         'is_estimate': consignmentCost == null ? 1 : 0,
       });
     }

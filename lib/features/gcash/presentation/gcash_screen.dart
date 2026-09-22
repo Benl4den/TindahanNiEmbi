@@ -315,11 +315,11 @@ class _GCashScreenState extends State<GCashScreen> {
                           ),
                           title: Text(
                             entry.loanId != null
-                                ? '5-6 Loan Received'
+                                ? '5/6 Loan Received'
                                 : entry.loanPaymentId != null
                                 ? entry.reversalOfEntryId != null
-                                      ? '5-6 Loan Payment Cancelled'
-                                      : '5-6 Loan Payment'
+                                      ? '5/6 Loan Payment Reversed'
+                                      : '5/6 Loan Payment'
                                 : _label(entry.type),
                           ),
                           subtitle: Text(

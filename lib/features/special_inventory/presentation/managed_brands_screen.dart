@@ -11,7 +11,6 @@ import '../../../widgets/app_state_view.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 import 'selecta_screen.dart';
-import 'brand_analytics_screen.dart';
 
 class ManagedBrandsScreen extends StatefulWidget {
   const ManagedBrandsScreen({
@@ -37,6 +36,7 @@ class ManagedBrandsScreen extends StatefulWidget {
 }
 
 class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
+  bool _openingBrand = false;
   Future<void> _add() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -74,35 +74,32 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
     }
   }
 
-  void _open(InventoryGroup group) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SelectaScreen(
-          special: widget.special,
-          products: widget.products,
-          inventory: widget.inventory,
-          categories: widget.categories,
-          photoService: widget.photoService,
-          groupCode: group.code,
-          groupName: group.name,
-          lockFrozenCategory: group.code == 'SELECTA',
+  Future<void> _open(InventoryGroup group) async {
+    if (_openingBrand) return;
+    _openingBrand = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SelectaScreen(
+            special: widget.special,
+            products: widget.products,
+            inventory: widget.inventory,
+            categories: widget.categories,
+            photoService: widget.photoService,
+            groupCode: group.code,
+            groupName: group.name,
+            lockFrozenCategory: group.code == 'SELECTA',
+            analytics: widget.analytics,
+            access: widget.access,
+          ),
         ),
-      ),
-    ).then((_) => setState(() {}));
+      );
+      if (mounted) setState(() {});
+    } finally {
+      _openingBrand = false;
+    }
   }
-
-  void _analytics(InventoryGroup group) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => BrandAnalyticsScreen(
-        groupCode: group.code,
-        groupName: group.name,
-        analytics: widget.analytics,
-        access: widget.access,
-      ),
-    ),
-  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -190,15 +187,13 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 410,
-                      // The brand card includes two actions. Reserve enough
-                      // height for both at tablet text scaling so they never
-                      // overflow the card.
-                      mainAxisExtent: 208,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 410,
+                          mainAxisExtent: 192,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
                     itemCount: snapshot.data!.length + 1,
                     itemBuilder: (_, index) {
                       if (index == snapshot.data!.length) {
@@ -312,14 +307,6 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                         .primary,
                                     fontWeight: FontWeight.w700,
                                   ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => _analytics(group),
-                                  icon: const Icon(
-                                    Icons.insights_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text('View analytics'),
                                 ),
                               ],
                             ),

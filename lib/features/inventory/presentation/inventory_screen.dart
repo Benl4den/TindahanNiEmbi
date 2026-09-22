@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../widgets/overview_banner.dart';
 import '../../../widgets/product_image.dart';
 
 import '../../../core/constants/app_strings.dart';
@@ -32,6 +31,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   final _search = TextEditingController();
   ProductStockStatus? _status;
   String _sort = 'Name';
+  String _ownership = 'All products';
   @override
   void initState() {
     super.initState();
@@ -189,7 +189,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         TextButton.icon(
           onPressed: _showHistory,
           icon: const Icon(Icons.history),
-          label: const Text('History'),
+          label: const Text('Inventory History'),
         ),
         const SizedBox(width: 8),
       ],
@@ -210,7 +210,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         }
         final visible = _filterAndSort(products.data!);
         return ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
             FutureBuilder<OwnedInventorySummary>(
               future: _summary,
@@ -219,52 +219,45 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   : _summaryCards(s.data),
             ),
             const SizedBox(height: 20),
-            TextField(
-              controller: _search,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'Search inventory',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _filterChip('All', null),
-                _filterChip('Low Stock', ProductStockStatus.lowStock),
-                _filterChip('Out of Stock', ProductStockStatus.outOfStock),
-                PopupMenuButton<String>(
-                  onSelected: (value) => setState(() => _sort = value),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'Name', child: Text('Name')),
-                    PopupMenuItem(
-                      value: 'Lowest Stock',
-                      child: Text('Lowest Stock'),
-                    ),
-                    PopupMenuItem(
-                      value: 'Highest Stock',
-                      child: Text('Highest Stock'),
-                    ),
-                    PopupMenuItem(
-                      value: 'Recently Updated',
-                      child: Text('Recently Updated'),
-                    ),
-                  ],
-                  child: Chip(
-                    avatar: const Icon(Icons.sort, size: 18),
-                    label: Text('Sort: $_sort'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             FutureBuilder<Map<int, OwnedInventoryProductValue>>(
               future: _productValues,
-              builder: (_, values) =>
-                  _productList(visible, values.data ?? const {}),
+              builder: (_, values) {
+                final productValues = values.data ?? const {};
+                final filtered = visible.where((product) {
+                  final owned = productValues.containsKey(product.id);
+                  return _ownership == 'All products' ||
+                      (_ownership == 'Owned products' && owned) ||
+                      (_ownership == 'Consigned products' && !owned);
+                }).toList();
+                return Column(
+                  children: [
+                    _inventoryToolbar(),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _filterChip('All', null),
+                        _filterChip('Low Stock', ProductStockStatus.lowStock),
+                        _filterChip(
+                          'Out of Stock',
+                          ProductStockStatus.outOfStock,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            '${filtered.length} ${filtered.length == 1 ? 'product' : 'products'}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _productList(filtered, productValues),
+                  ],
+                );
+              },
             ),
           ],
         );
@@ -276,6 +269,87 @@ class _InventoryScreenState extends State<InventoryScreen> {
     label: Text(label),
     selected: _status == value,
     onSelected: (_) => setState(() => _status = value),
+  );
+
+  Widget _inventoryToolbar() {
+    final search = TextField(
+      controller: _search,
+      onChanged: (_) => setState(() {}),
+      decoration: const InputDecoration(
+        prefixIcon: Icon(Icons.search),
+        labelText: 'Search inventory',
+        hintText: 'Search inventory by product name',
+      ),
+    );
+    final filter = PopupMenuButton<String>(
+      onSelected: (value) => setState(() => _ownership = value),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'All products', child: Text('All products')),
+        PopupMenuItem(value: 'Owned products', child: Text('Owned products')),
+        PopupMenuItem(
+          value: 'Consigned products',
+          child: Text('Consigned products'),
+        ),
+      ],
+      child: _toolbarButton(
+        Icons.filter_alt_outlined,
+        _ownership == 'All products' ? 'Filter' : _ownership,
+      ),
+    );
+    final sort = PopupMenuButton<String>(
+      onSelected: (value) => setState(() => _sort = value),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'Name', child: Text('Name')),
+        PopupMenuItem(value: 'Lowest Stock', child: Text('Lowest Stock')),
+        PopupMenuItem(value: 'Highest Stock', child: Text('Highest Stock')),
+        PopupMenuItem(
+          value: 'Recently Updated',
+          child: Text('Recently Updated'),
+        ),
+      ],
+      child: _toolbarButton(Icons.sort, 'Sort: $_sort'),
+    );
+    return LayoutBuilder(
+      builder: (_, box) {
+        if (box.maxWidth >= 760) {
+          return Row(
+            children: [
+              Expanded(child: search),
+              const SizedBox(width: 12),
+              filter,
+              const SizedBox(width: 12),
+              sort,
+            ],
+          );
+        }
+        return Column(
+          children: [
+            search,
+            const SizedBox(height: 10),
+            Row(children: [filter, const SizedBox(width: 10), sort]),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _toolbarButton(IconData icon, String label) => Container(
+    constraints: const BoxConstraints(minHeight: 52),
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 8),
+        Text(label, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(width: 6),
+        const Icon(Icons.keyboard_arrow_down, size: 18),
+      ],
+    ),
   );
 
   List<Product> _filterAndSort(List<Product> source) {
@@ -300,51 +374,145 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _summaryCards(OwnedInventorySummary? summary) {
     final s = summary;
-    return LayoutBuilder(
-      builder: (_, box) {
-        final columns = box.maxWidth >= 900
-            ? 3
-            : box.maxWidth >= 560
-            ? 2
-            : 1;
-        final width = (box.maxWidth - (columns - 1) * 12) / columns;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _summaryMetric(
-              'Inventory Cost',
-              s?.inventoryCostCentavos ?? 0,
-              Icons.inventory_2_outlined,
-              width,
-            ),
-            _summaryMetric(
-              'Potential Sales Value',
-              s?.potentialSalesValueCentavos ?? 0,
-              Icons.sell_outlined,
-              width,
-            ),
-            _summaryMetric(
-              'Potential Gross Profit',
-              s?.potentialGrossProfitCentavos ?? 0,
-              Icons.trending_up_outlined,
-              width,
-            ),
-          ],
-        );
-      },
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer
+            .withValues(alpha: .3),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Owned Inventory Summary',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(width: 6),
+              const Tooltip(
+                message: 'Supplier-owned consignment stock is not included.',
+                child: Icon(Icons.info_outline, size: 19),
+              ),
+            ],
+          ),
+          const Text('Consignment stock excluded'),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (_, box) {
+              final columns = box.maxWidth >= 900
+                  ? 3
+                  : box.maxWidth >= 560
+                  ? 2
+                  : 1;
+              final width = (box.maxWidth - (columns - 1) * 12) / columns;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _summaryMetric(
+                    'Inventory Cost',
+                    s?.inventoryCostCentavos ?? 0,
+                    Icons.inventory_2_outlined,
+                    width,
+                  ),
+                  _summaryMetric(
+                    'Potential Sales Value',
+                    s?.potentialSalesValueCentavos ?? 0,
+                    Icons.sell_outlined,
+                    width,
+                  ),
+                  _summaryMetric(
+                    'Potential Gross Profit',
+                    s?.potentialGrossProfitCentavos ?? 0,
+                    Icons.trending_up_outlined,
+                    width,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _summaryMetric(String title, int value, IconData icon, double width) =>
       SizedBox(
         width: width,
-        child: OverviewBanner(
-          title: title,
-          value: standardMoney(value),
-          caption: 'Owned stock only',
-          icon: icon,
-          valueFontSize: 22,
+        child: Builder(
+          builder: (context) {
+            final help = switch (title) {
+              'Inventory Cost' => 'How much your current owned stock cost you.',
+              'Potential Sales Value' => 'How much you could receive if all current stock is sold at current selling prices.',
+              _ => 'Potential Sales Value minus Inventory Cost.',
+            };
+            final accent = switch (title) {
+              'Potential Sales Value' => Colors.blue.shade600,
+              'Potential Gross Profit' => Colors.orange.shade700,
+              _ => Theme.of(context).colorScheme.primary,
+            };
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: accent.withValues(alpha: .16),
+                    foregroundColor: accent,
+                    child: Icon(icon),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            Tooltip(
+                              message: help,
+                              child: const Icon(Icons.info_outline, size: 18),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          standardMoney(value),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: accent,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          help,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       );
 
@@ -377,102 +545,220 @@ class _InventoryScreenState extends State<InventoryScreen> {
               elevation: 0,
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Semantics(
-                          image: true,
-                          label: '${p.name} product image',
-                          child: SizedBox(
-                            width: 64,
-                            height: 64,
-                            child: ProductImage(
-                              path: p.photoPath,
-                              borderRadius: 14,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.name,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              Text(
-                                value == null
-                                    ? 'Consignment stock • Sell: ${standardMoney(p.sellingPriceCentavos)} / ${p.baseUnitLabel}'
-                                    : 'Cost: ${standardMoney(value.currentStockCostCentavos ~/ (p.currentQuantity == 0 ? 1 : p.currentQuantity))} / ${p.baseUnitLabel} • Sell: ${standardMoney(p.sellingPriceCentavos)} / ${p.baseUnitLabel}',
-                              ),
-                              if (value != null) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Current Stock Cost: ${standardMoney(value.currentStockCostCentavos)}',
-                                ),
-                                Text(
-                                  'Potential Sales Value: ${standardMoney(value.potentialSalesValueCentavos)}',
-                                ),
-                                Text(
-                                  'Potential Gross Profit: ${standardMoney(value.potentialGrossProfitCentavos)}',
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Text('Stock'),
-                              Text(
-                                productQuantityText(p, p.currentQuantity),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall,
-                              ),
-                              Text(
-                                statusLabel,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: out
-                                      ? Colors.red.shade700
-                                      : low
-                                      ? Colors.orange.shade800
-                                      : Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => _showHistory(productName: p.name),
-                        icon: const Icon(Icons.history),
-                        label: const Text('View Movement History'),
-                      ),
-                    ),
-                  ],
-                ),
+              child: LayoutBuilder(
+                builder: (_, box) => box.maxWidth >= 850
+                    ? _wideProductRow(p, value, statusLabel, out, low)
+                    : _compactProductCard(p, value, statusLabel, out, low),
               ),
             );
           }).toList(),
         );
+
+  Widget _wideProductRow(
+    Product product,
+    OwnedInventoryProductValue? value,
+    String status,
+    bool out,
+    bool low,
+  ) => Padding(
+    padding: const EdgeInsets.all(14),
+    child: Row(
+      children: [
+        SizedBox(width: 330, child: _productIdentity(product, value)),
+        const VerticalDivider(width: 24),
+        if (value == null)
+          const Expanded(
+            flex: 3,
+            child: Text(
+              'Supplier-owned stock • excluded from owned inventory values',
+            ),
+          )
+        else ...[
+          Expanded(
+            child: _valueCell(
+              'Current Stock Cost',
+              value.currentStockCostCentavos,
+            ),
+          ),
+          Expanded(
+            child: _valueCell(
+              'Potential Sales Value',
+              value.potentialSalesValueCentavos,
+            ),
+          ),
+          Expanded(
+            child: _valueCell(
+              'Potential Gross Profit',
+              value.potentialGrossProfitCentavos,
+            ),
+          ),
+        ],
+        const VerticalDivider(width: 24),
+        SizedBox(width: 150, child: _stockCell(product, status, out, low)),
+        _productMenu(product),
+      ],
+    ),
+  );
+
+  Widget _compactProductCard(
+    Product product,
+    OwnedInventoryProductValue? value,
+    String status,
+    bool out,
+    bool low,
+  ) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _productIdentity(product, value)),
+            _productMenu(product),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (value == null)
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Supplier-owned stock • excluded from owned inventory values',
+            ),
+          )
+        else
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: [
+              _valueCell('Current Stock Cost', value.currentStockCostCentavos),
+              _valueCell(
+                'Potential Sales Value',
+                value.potentialSalesValueCentavos,
+              ),
+              _valueCell(
+                'Potential Gross Profit',
+                value.potentialGrossProfitCentavos,
+              ),
+            ],
+          ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: 180,
+            child: _stockCell(product, status, out, low),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _productIdentity(Product product, OwnedInventoryProductValue? value) {
+    final packageSize = product.defaultPurchaseBaseQuantity ?? 1;
+    final costPerUnit = (product.purchasePriceCentavos / packageSize).round();
+    return Row(
+      children: [
+        Semantics(
+          image: true,
+          label: '${product.name} product image',
+          child: SizedBox(
+            width: 72,
+            height: 72,
+            child: ProductImage(path: product.photoPath, borderRadius: 12),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(
+                value == null
+                    ? 'Supplier-owned inventory'
+                    : 'Cost: ${standardMoney(costPerUnit)} / ${product.baseUnitLabel}',
+              ),
+              Text(
+                'Sell: ${standardMoney(product.sellingPriceCentavos)} / ${product.baseUnitLabel}',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _valueCell(String label, int amount) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Text(
+          standardMoney(amount),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
+    ),
+  );
+
+  Widget _stockCell(Product product, String status, bool out, bool low) {
+    final color = out
+        ? Theme.of(context).colorScheme.error
+        : low
+        ? Colors.orange.shade700
+        : Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${product.currentQuantity}',
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(color: color, fontWeight: FontWeight.w700),
+        ),
+        Text(product.baseUnitLabel),
+        const SizedBox(height: 4),
+        Chip(
+          label: Text(status),
+          side: BorderSide.none,
+          backgroundColor: color.withValues(alpha: .16),
+          labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+    );
+  }
+
+  Widget _productMenu(Product product) => PopupMenuButton<String>(
+    tooltip: 'Inventory actions for ${product.name}',
+    onSelected: (action) {
+      if (action == 'stock') {
+        _chooseAndPost(false, initialProductId: product.id);
+      } else if (action == 'adjust') {
+        _chooseAndPost(true, initialProductId: product.id);
+      } else {
+        _showHistory(productName: product.name);
+      }
+    },
+    itemBuilder: (_) => const [
+      PopupMenuItem(value: 'stock', child: Text('Stock In')),
+      PopupMenuItem(value: 'adjust', child: Text('Adjust Stock')),
+      PopupMenuItem(value: 'history', child: Text('Movement History')),
+    ],
+    icon: const Icon(Icons.more_vert),
+  );
 
   Future<void> _showHistory({String? productName}) async {
     await showDialog<void>(

@@ -64,6 +64,7 @@ void main() {
         23,
         24,
         25,
+        26,
       ],
     );
     expect((await db.query('app_settings')).single['value'], '0');

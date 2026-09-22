@@ -77,7 +77,7 @@ class DailyClosingOverview extends StatelessWidget {
             row('Cash Sales', x.cashSales),
             row('UTANG Payments in Cash', x.cashPayments),
             row('GCash Services — Cash Received', x.gcashServiceCashReceived),
-            row('5-6 Loans Received in Cash', x.loanCashReceived),
+            row('5/6 Loans Received in Cash', x.loanCashReceived),
             const Divider(),
             row(
               'Total Cash Received',
@@ -90,9 +90,9 @@ class DailyClosingOverview extends StatelessWidget {
             row('Operating Expenses in Cash', x.cashExpenses),
             row('GCash Services — Cash Paid Out', x.gcashServiceCashPaid),
             row('Supplier Payments in Cash', x.cashRemittances),
-            row('5-6 Loan Payments in Cash', x.loanCashPayments),
+            row('5/6 Loan Payments in Cash', x.loanCashPayments),
             if (x.loanCashPaymentReversals != 0)
-              row('Cancelled 5-6 Loan Payments', -x.loanCashPaymentReversals),
+              row('Reversed 5/6 Loan Payments', -x.loanCashPaymentReversals),
             const Divider(),
             row('Total Cash Paid Out', x.cashPaid, color: red, strong: true),
           ]),
@@ -144,7 +144,9 @@ class DailyClosingOverview extends StatelessWidget {
           if (x.mayaSales != 0 ||
               x.mayaPayments != 0 ||
               x.mayaExpenses != 0 ||
-              x.mayaRemittances != 0)
+              x.mayaRemittances != 0 ||
+              x.loanMayaReceived != 0 ||
+              x.loanMayaPayments != 0)
             panel(
               'Maya Activity',
               Icons.account_balance_wallet_outlined,
@@ -154,6 +156,13 @@ class DailyClosingOverview extends StatelessWidget {
                 row('UTANG Payments with Maya', x.mayaPayments),
                 row('Expenses paid with Maya', x.mayaExpenses),
                 row('Supplier Payments with Maya', x.mayaRemittances),
+                row('5/6 Loans Received with Maya', x.loanMayaReceived),
+                row('5/6 Loan Payments with Maya', x.loanMayaPayments),
+                if (x.loanMayaPaymentReversals != 0)
+                  row(
+                    'Reversed 5/6 Loan Payments',
+                    -x.loanMayaPaymentReversals,
+                  ),
                 const Text('Maya is separate from physical cash and GCash.'),
               ],
             ),
