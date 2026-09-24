@@ -7,6 +7,7 @@ import '../../../models/category.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../services/product_photo_service.dart';
+import '../../../services/feature_access_service.dart';
 import 'product_card.dart';
 import 'product_form_screen.dart';
 import 'product_details_screen.dart';
@@ -20,10 +21,12 @@ class ProductsScreen extends StatefulWidget {
     required this.repository,
     required this.categoryRepository,
     required this.photoService,
+    this.access,
   });
   final ProductRepository repository;
   final CategoryRepository categoryRepository;
   final ProductPhotoService photoService;
+  final FeatureAccessService? access;
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
@@ -521,7 +524,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
       (archiveFilter == 'ACTIVE' ? 0 : 1);
 
   Future<void> _details(Product product) async {
-    if (widget.repository is! SqliteProductRepository) return;
+    if (widget.repository is! SqliteProductRepository ||
+        widget.access == null) {
+      return;
+    }
     final edit = await showDialog<bool>(
       context: context,
       builder: (dialog) => Dialog(
@@ -532,6 +538,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
           child: ProductDetailsScreen(
             product: product,
             repository: widget.repository as SqliteProductRepository,
+            access: widget.access!,
+            categoryName: categories
+                .where((category) => category.id == product.categoryId)
+                .map((category) => category.name)
+                .firstOrNull,
             onEdit: () => Navigator.of(dialog).pop(true),
           ),
         ),

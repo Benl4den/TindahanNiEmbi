@@ -2,6 +2,7 @@ import '../../../widgets/brand_logo.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../../../widgets/app_back_navigation.dart';
 
@@ -103,7 +104,115 @@ class _State extends State<AppShell> {
   int? pendingConsignorId;
   int? pendingConsignmentProductId;
   bool railExpanded = true;
+  bool _savingDevelopmentPlan = false;
+  String? _developmentPlanError;
+  Future<AppPlan>? _developmentPlanLoad;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
+
+  Widget _developerPlanSection() {
+    final controller = AppPlanController.instance;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => FutureBuilder<AppPlan>(
+              future: _developmentPlanLoad ??= controller.load(),
+              builder: (context, snapshot) {
+                final plan = controller.plan;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'DEVELOPER TOOLS',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        if (snapshot.hasData)
+                          Chip(label: Text('DEV • ${plan.name.toUpperCase()}')),
+                      ],
+                    ),
+                    const Text('Development builds only'),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Test Plan',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    if (snapshot.connectionState == ConnectionState.waiting)
+                      const LinearProgressIndicator(),
+                    if (snapshot.hasData)
+                      SegmentedButton<AppPlan>(
+                        segments: const [
+                          ButtonSegment(
+                            value: AppPlan.free,
+                            label: Text('FREE'),
+                          ),
+                          ButtonSegment(value: AppPlan.pro, label: Text('PRO')),
+                        ],
+                        selected: {plan},
+                        onSelectionChanged: _savingDevelopmentPlan
+                            ? null
+                            : (selection) async {
+                                setState(() {
+                                  _savingDevelopmentPlan = true;
+                                  _developmentPlanError = null;
+                                });
+                                try {
+                                  await controller.setDevelopmentPlan(
+                                    selection.single,
+                                  );
+                                } catch (_) {
+                                  if (mounted) {
+                                    setState(
+                                      () => _developmentPlanError = 'Could not save the test plan. Please try again.',
+                                    );
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setState(
+                                      () => _savingDevelopmentPlan = false,
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Use this setting to test Free and Pro experiences during development. Store records are not changed.',
+                    ),
+                    if (snapshot.hasError || _developmentPlanError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _developmentPlanError ??
+                            'Could not load the test plan.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      if (snapshot.hasError)
+                        TextButton(
+                          onPressed: () => setState(
+                            () => _developmentPlanLoad = controller.load(),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _showAppearanceDialog() async {
     var selectedPreference = await SettingsService(widget.database)
@@ -509,6 +618,7 @@ class _State extends State<AppShell> {
           : _denied(),
     3 => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
+      access: FeatureAccessService(widget.database),
     ),
     4 => RestockScreen(
       operations: OperationsRepository(widget.database),
@@ -528,6 +638,7 @@ class _State extends State<AppShell> {
               ),
               categoryRepository: SqliteCategoryRepository(widget.database),
               photoService: LocalProductPhotoService(),
+              access: FeatureAccessService(widget.database),
             )
           : _denied(),
     6 => UtangCustomerScreen(
@@ -952,6 +1063,7 @@ class _State extends State<AppShell> {
                 ),
                 categoryRepository: SqliteCategoryRepository(widget.database),
                 photoService: LocalProductPhotoService(),
+                access: FeatureAccessService(widget.database),
               ),
               action: null,
             ),
@@ -1173,6 +1285,11 @@ class _State extends State<AppShell> {
                   'Protect and restore store records',
                   backup,
                 ),
+                if (showDeveloperPlanTools(
+                  debugBuild: kDebugMode,
+                  owner: owner,
+                ))
+                  _developerPlanSection(),
               ],
             ),
           ),

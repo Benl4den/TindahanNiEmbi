@@ -39,6 +39,22 @@ class OwnedInventorySummary {
       potentialSalesValueCentavos - inventoryCostCentavos;
 }
 
+class OwnedInventoryHealth {
+  const OwnedInventoryHealth({
+    required this.productIds,
+    required this.activeProducts,
+    required this.lowStock,
+    required this.outOfStock,
+    required this.noRecentSales,
+  });
+
+  final Set<int> productIds;
+  final int activeProducts;
+  final int lowStock;
+  final int outOfStock;
+  final int noRecentSales;
+}
+
 class InventoryRepository {
   const InventoryRepository(this._database, {this.actorRole});
   final Database _database;
@@ -61,6 +77,51 @@ class InventoryRepository {
 
   Future<int> inventoryValueCentavos() async {
     return (await ownedSummary()).inventoryCostCentavos;
+  }
+
+  /// Operational ownership and stock status; does not read financial totals.
+  Future<OwnedInventoryHealth> ownedHealth({
+    bool includeRecentSales = false,
+  }) async {
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
+    final rows = await _database.rawQuery(
+      '''SELECT p.id, p.current_quantity, p.minimum_stock_level,
+      ${includeRecentSales ? '''CASE WHEN EXISTS(
+        SELECT 1 FROM cash_sale_items i JOIN cash_sales s ON s.id=i.cash_sale_id
+        WHERE i.product_id=p.id AND s.status='POSTED' AND s.occurred_at>=?
+      ) OR EXISTS(
+        SELECT 1 FROM utang_transaction_items i JOIN utang_transactions s ON s.id=i.utang_transaction_id
+        WHERE i.product_id=p.id AND s.status='POSTED' AND s.occurred_at>=?
+      ) THEN 1 ELSE 0 END''' : '0'} AS recently_sold
+      FROM products p WHERE p.is_archived=0 AND NOT EXISTS(
+        SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
+        WHERE m.product_id=p.id AND m.archived_at IS NULL AND g.code='CONSIGNMENT')''',
+      includeRecentSales ? [cutoff, cutoff] : [],
+    );
+    var active = 0;
+    var low = 0;
+    var out = 0;
+    var noSales = 0;
+    for (final row in rows) {
+      final quantity = row['current_quantity'] as int;
+      if (quantity == 0) {
+        out++;
+      } else {
+        active++;
+        if (quantity <= (row['minimum_stock_level'] as int)) low++;
+        if (includeRecentSales && row['recently_sold'] == 0) noSales++;
+      }
+    }
+    return OwnedInventoryHealth(
+      productIds: {for (final row in rows) row['id'] as int},
+      activeProducts: active,
+      lowStock: low,
+      outOfStock: out,
+      noRecentSales: noSales,
+    );
   }
 
   Future<OwnedInventorySummary> ownedSummary() async {
@@ -125,6 +186,7 @@ class InventoryRepository {
     required int productId,
     required int quantityChange,
     required String reason,
+    int? expectedCurrentQuantity,
   }) {
     if (reason.trim().isEmpty) {
       throw const InvalidInventoryOperation('Reason is required.');
@@ -134,6 +196,7 @@ class InventoryRepository {
       quantityChange: quantityChange,
       type: quantityChange > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
       notes: reason.trim(),
+      expectedCurrentQuantity: expectedCurrentQuantity,
     );
   }
 
@@ -143,6 +206,7 @@ class InventoryRepository {
     required String type,
     int? unitCostCentavos,
     String? notes,
+    int? expectedCurrentQuantity,
   }) async {
     if (quantityChange == 0 ||
         (type == 'STOCK_IN' && quantityChange < 0) ||
@@ -159,7 +223,7 @@ class InventoryRepository {
       if (products.isEmpty) {
         throw const InvalidInventoryOperation('Product not found.');
       }
-      if (type == 'STOCK_IN') {
+      if (type == 'STOCK_IN' || type.startsWith('ADJUSTMENT_')) {
         final consigned = await txn.rawQuery(
           '''SELECT 1 FROM product_inventory_groups m JOIN inventory_groups g ON g.id=m.inventory_group_id
              WHERE m.product_id=? AND m.archived_at IS NULL AND g.code='CONSIGNMENT' LIMIT 1''',
@@ -167,11 +231,17 @@ class InventoryRepository {
         );
         if (consigned.isNotEmpty) {
           throw const InvalidInventoryOperation(
-            'Use Receive Consignment for this product.',
+            'Use Consignment to manage supplier-owned stock.',
           );
         }
       }
       final before = products.single['current_quantity']! as int;
+      if (expectedCurrentQuantity != null &&
+          before != expectedCurrentQuantity) {
+        throw const InvalidInventoryOperation(
+          'Stock changed since this form opened. Close it and try again.',
+        );
+      }
       final after = before + quantityChange;
       if (after < 0) {
         throw const InvalidInventoryOperation('Insufficient stock.');

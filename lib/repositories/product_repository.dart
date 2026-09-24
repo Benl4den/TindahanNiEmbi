@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/product.dart';
 import '../models/product_unit.dart';
+import 'product_insights_repository.dart';
 import '../services/app_refresh_controller.dart';
 
 class InvalidProductException implements Exception {
@@ -66,6 +67,26 @@ class SqliteProductRepository implements ProductRepository {
   const SqliteProductRepository(this._database, {this.actorRole});
   final Database _database;
   final String? actorRole;
+
+  ProductInsightsRepository get insights =>
+      ProductInsightsRepository(_database);
+
+  Future<({String name, int baseQuantity})> defaultSellingOption(
+    Product product,
+  ) async {
+    final rows = await _database.rawQuery(
+      '''SELECT name,base_quantity FROM product_selling_options
+         WHERE product_id=? AND is_default=1 AND is_archived=0 LIMIT 1''',
+      [product.id],
+    );
+    if (rows.isEmpty) {
+      return (name: product.baseUnitLabel, baseQuantity: 1);
+    }
+    return (
+      name: rows.single['name']! as String,
+      baseQuantity: rows.single['base_quantity']! as int,
+    );
+  }
 
   @override
   Future<List<Product>> searchActive([String query = '']) async {

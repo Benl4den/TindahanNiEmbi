@@ -11,6 +11,7 @@ import '../../inventory/presentation/package_stock_in_dialog.dart';
 import '../../../repositories/special_inventory_repository.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../services/feature_access_service.dart';
+import '../../../widgets/feature_access_builder.dart';
 import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_search_field.dart';
 import '../../../widgets/status_badge.dart';
@@ -324,10 +325,11 @@ class _SelectaScreenState extends State<SelectaScreen> {
     ),
   );
 
-  Widget _brandOverview() => FutureBuilder<bool>(
-    future: widget.access.allows(ProFeature.managedBrandAnalytics),
-    builder: (_, gate) {
-      if (gate.data != true) return const SizedBox.shrink();
+  Widget _brandOverview() => FeatureAccessBuilder(
+    access: widget.access,
+    feature: ProFeature.managedBrandAnalytics,
+    builder: (_, allowed) {
+      if (!allowed) return const SizedBox.shrink();
       return FutureBuilder<Map<String, Object?>>(
         future: widget.analytics.summary(widget.groupCode),
         builder: (_, result) {

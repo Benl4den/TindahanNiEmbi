@@ -6,6 +6,7 @@ import '../../../repositories/loan_repository.dart';
 import '../../../services/feature_access_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../widgets/pro_feature_preview.dart';
+import '../../../widgets/feature_access_builder.dart';
 
 int? _moneyCentavos(String input) {
   final value = input.trim();
@@ -41,13 +42,11 @@ class LoanManagementScreen extends StatefulWidget {
 
 class _LoanManagementScreenState extends State<LoanManagementScreen> {
   bool completed = false;
-  late Future<bool> accessAllowed;
   late Future<List<Map<String, Object?>>> _loans;
 
   @override
   void initState() {
     super.initState();
-    accessAllowed = widget.access.allows(ProFeature.fiveSixLoanManagement);
     _loans = widget.repository.loans();
   }
 
@@ -768,18 +767,11 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('5/6 Loan Management')),
-    body: FutureBuilder<bool>(
-      future: accessAllowed,
-      builder: (_, g) {
-        if (g.hasError) {
-          return const Center(
-            child: Text('Could not check plan access. Reopen this section.'),
-          );
-        }
-        if (!g.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!g.data!) {
+    body: FeatureAccessBuilder(
+      access: widget.access,
+      feature: ProFeature.fiveSixLoanManagement,
+      builder: (_, allowed) {
+        if (!allowed) {
           return const ProFeaturePreview(
             title: '5/6 Loan Management',
             description: 'Track lender balances, daily or weekly collections, and payment history in one clear place.',

@@ -59,13 +59,14 @@ class StoreSummaryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  value,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.w700,
+                if (value.isNotEmpty)
+                  Text(
+                    value,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
                 if (caption != null)
                   Text(caption!, style: theme.textTheme.bodySmall),
               ],
@@ -93,6 +94,49 @@ class StoreSummaryHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    final summary = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: const Color(0xFFD9F3DE),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(icon, color: const Color(0xFF0F6B46), size: 34),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                value,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                caption,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFFE1F1E8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -103,55 +147,29 @@ class StoreSummaryHero extends StatelessWidget {
               : [const Color(0xFF086339), const Color(0xFF329C90)],
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (_, box) {
+          if (footer != null && box.maxWidth >= 800) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: summary),
+                const SizedBox(width: 24),
+                Container(width: 1, height: 86, color: const Color(0xFF85B9A2)),
+                const SizedBox(width: 24),
+                SizedBox(width: 440, child: footer!),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD9F3DE),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: const Color(0xFF0F6B46), size: 34),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      value,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      caption,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFE1F1E8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              summary,
+              if (footer != null) ...[const SizedBox(height: 16), footer!],
             ],
-          ),
-          if (footer != null) ...[const SizedBox(height: 16), footer!],
-        ],
+          );
+        },
       ),
     );
   }

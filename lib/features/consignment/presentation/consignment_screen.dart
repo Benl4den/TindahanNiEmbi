@@ -159,6 +159,162 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
   );
 }
 
+class _EditConsignorDialog extends StatefulWidget {
+  const _EditConsignorDialog({
+    required this.repository,
+    required this.categories,
+    required this.company,
+  });
+  final ConsignmentRepository repository;
+  final List<Category> categories;
+  final Map<String, Object?> company;
+  @override
+  State<_EditConsignorDialog> createState() => _EditConsignorDialogState();
+}
+
+class _EditConsignorDialogState extends State<_EditConsignorDialog> {
+  late final TextEditingController name;
+  late final TextEditingController contact;
+  int? categoryId;
+  bool archivedCategory = false;
+  bool saving = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: widget.company['name'] as String? ?? '');
+    contact = TextEditingController(
+      text: widget.company['contact_details'] as String? ?? '',
+    );
+    final previous = widget.company['default_category_id'] as int?;
+    archivedCategory =
+        previous != null && !widget.categories.any((c) => c.id == previous);
+    categoryId = archivedCategory ? null : previous;
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    contact.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    if (name.text.trim().isEmpty) {
+      setState(() => error = 'Company or consignor name is required.');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      await widget.repository.updateConsignor(
+        widget.company['id']! as int,
+        name: name.text,
+        contactDetails: contact.text,
+        defaultCategoryId: categoryId,
+      );
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          saving = false;
+          error = e is InvalidConsignmentOperation
+              ? e.message
+              : 'Could not save the consignor. Please try again.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PageBackGuard(
+    controllers: [name, contact],
+    changeToken: categoryId,
+    busy: saving,
+    child: AlertDialog(
+      scrollable: true,
+      title: const Text('Edit Consignor'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              onChanged: (_) => setState(() => error = null),
+              decoration: const InputDecoration(
+                labelText: 'Company / Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: contact,
+              decoration: const InputDecoration(
+                labelText: 'Contact details (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: categoryId,
+              decoration: const InputDecoration(
+                labelText: 'Default product category (optional)',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem<int>(
+                  value: null,
+                  child: Text('No default category'),
+                ),
+                ...widget.categories.map(
+                  (c) => DropdownMenuItem(
+                    value: c.id,
+                    child: Text(c.name, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: saving
+                  ? null
+                  : (value) => setState(() => categoryId = value),
+            ),
+            if (archivedCategory) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'The previous default category is archived. Saving without a new selection clears that default.',
+              ),
+            ],
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: saving ? null : () => Navigator.maybePop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: saving || name.text.trim().isEmpty ? null : save,
+          child: Text(saving ? 'Saving…' : 'Save'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _RemittanceDialog extends StatefulWidget {
   const _RemittanceDialog({
     required this.repository,
@@ -1274,82 +1430,15 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   Future<void> _editConsignor(Map<String, Object?> company) async {
     final categories = await widget.categories.getActive();
     if (!mounted) return;
-    final name = TextEditingController(text: company['name']! as String);
-    final contact = TextEditingController(
-      text: company['contact_details'] as String? ?? '',
-    );
-    var categoryId = company['default_category_id'] as int?;
-    String? error;
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (_, setDialog) => AlertDialog(
-          title: const Text('Edit Consignor'),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Company / Name',
-                    errorText: error,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: contact,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact details (optional)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int>(
-                  initialValue: categoryId,
-                  decoration: const InputDecoration(
-                    labelText: 'Default product category (optional)',
-                  ),
-                  items: categories
-                      .map(
-                        (x) =>
-                            DropdownMenuItem(value: x.id, child: Text(x.name)),
-                      )
-                      .toList(),
-                  onChanged: (value) => categoryId = value,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  await widget.repository.updateConsignor(
-                    company['id']! as int,
-                    name: name.text,
-                    contactDetails: contact.text,
-                    defaultCategoryId: categoryId,
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-                } on InvalidConsignmentOperation catch (e) {
-                  setDialog(() => error = e.message);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+      builder: (_) => _EditConsignorDialog(
+        repository: widget.repository,
+        categories: categories,
+        company: company,
       ),
     );
-    name.dispose();
-    contact.dispose();
     if (saved == true && mounted) setState(_reload);
   }
 

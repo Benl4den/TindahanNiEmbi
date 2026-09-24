@@ -4,6 +4,7 @@ import '../../../core/formatters/number_format.dart';
 import '../../../repositories/brand_analytics_repository.dart';
 import '../../../services/feature_access_service.dart';
 import '../../../widgets/pro_feature_preview.dart';
+import '../../../widgets/feature_access_builder.dart';
 
 class BrandAnalyticsScreen extends StatelessWidget {
   const BrandAnalyticsScreen({
@@ -19,18 +20,11 @@ class BrandAnalyticsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text('$groupName Analytics')),
-    body: FutureBuilder<bool>(
-      future: access.allows(ProFeature.managedBrandAnalytics),
-      builder: (_, gate) {
-        if (gate.hasError) {
-          return const Center(
-            child: Text('Could not check plan access. Reopen this section.'),
-          );
-        }
-        if (!gate.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!gate.data!) {
+    body: FeatureAccessBuilder(
+      access: access,
+      feature: ProFeature.managedBrandAnalytics,
+      builder: (_, allowed) {
+        if (!allowed) {
           return const ProFeaturePreview(
             title: 'Brand performance analytics',
             description: 'See sales, estimated profit, stock health, and the products that move your brand.',

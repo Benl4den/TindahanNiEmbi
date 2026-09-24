@@ -93,6 +93,23 @@ class _Repo extends ConsignmentRepository {
   }
 
   @override
+  Future<void> updateConsignor(
+    int id, {
+    required String name,
+    String? contactDetails,
+    int? defaultCategoryId,
+  }) async {
+    final index = parties.indexWhere((p) => p.id == id);
+    parties[index] = Consignor(
+      id: id,
+      name: name.trim(),
+      contactDetails: contactDetails,
+      defaultCategoryId: defaultCategoryId,
+      isArchived: false,
+    );
+  }
+
+  @override
   Future<int> receive(ConsignmentReceiptDraft d) async {
     lastReceipt = d;
     lastReceiptConsignorId = d.consignorId;
@@ -223,6 +240,31 @@ void main() {
     await t.tap(find.text('Save'));
     await t.pumpAndSettle();
     expect(repo.lastDefaultCategoryId, 7);
+  });
+
+  testWidgets('Edit Consignor remains usable with the keyboard open', (
+    t,
+  ) async {
+    repo.parties.add(const Consignor(id: 1, name: 'ABC', isArchived: false));
+    await pump(t);
+    await t.tap(find.text('ABC'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Edit Supplier'));
+    await t.pumpAndSettle();
+    t.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(() => t.view.resetViewInsets());
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    await t.enterText(
+      find.widgetWithText(TextField, 'Company / Name'),
+      'Updated',
+    );
+    await t.pump();
+    await t.ensureVisible(find.text('Save'));
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(repo.parties.single.name, 'Updated');
   });
   testWidgets(
     'company list is first and summary appears only after selection',

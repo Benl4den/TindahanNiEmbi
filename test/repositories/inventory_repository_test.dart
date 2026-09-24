@@ -86,12 +86,91 @@ void main() {
     expect(await inventory.inventoryValueCentavos(), 3500);
   });
 
+  test(
+    'owned health excludes consignment and counts recent posted sales only',
+    () async {
+      final second = await SqliteProductRepository(db).create(
+        ProductDraft(
+          categoryId: product.categoryId,
+          name: 'Second',
+          photoPath: '/second.jpg',
+          purchasePriceCentavos: 100,
+          sellingPriceCentavos: 200,
+          startingQuantity: 0,
+          minimumStockLevel: 2,
+        ),
+      );
+      final health = await inventory.ownedHealth(includeRecentSales: true);
+      expect(health.productIds, containsAll([product.id, second.id]));
+      expect(health.activeProducts, 1);
+      expect(health.outOfStock, 1);
+      expect(health.noRecentSales, 1);
+      final group = await db.query(
+        'inventory_groups',
+        columns: ['id'],
+        where: 'code=?',
+        whereArgs: ['CONSIGNMENT'],
+        limit: 1,
+      );
+      await db.insert('product_inventory_groups', {
+        'product_id': product.id,
+        'inventory_group_id': group.single['id'],
+        'assigned_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      final after = await inventory.ownedHealth(includeRecentSales: true);
+      expect(after.productIds, {second.id});
+      expect(after.activeProducts, 0);
+      expect(after.outOfStock, 1);
+      expect(after.noRecentSales, 0);
+    },
+  );
+
   test('negative-result adjustment rolls back cleanly', () async {
     await expectLater(
       inventory.adjust(
         productId: product.id,
         quantityChange: -6,
         reason: 'Sayop',
+      ),
+      throwsA(isA<InvalidInventoryOperation>()),
+    );
+    expect((await inventory.current()).single.currentQuantity, 5);
+    expect((await inventory.history()).length, 1);
+  });
+
+  test('stale stock preview is rejected without posting a movement', () async {
+    await inventory.stockIn(productId: product.id, quantity: 1);
+    await expectLater(
+      inventory.adjust(
+        productId: product.id,
+        quantityChange: -1,
+        reason: 'Physical Count Correction',
+        expectedCurrentQuantity: 5,
+      ),
+      throwsA(isA<InvalidInventoryOperation>()),
+    );
+    expect((await inventory.current()).single.currentQuantity, 6);
+    expect((await inventory.history()).length, 2);
+  });
+
+  test('consigned stock cannot be corrected through owned inventory', () async {
+    final group = await db.query(
+      'inventory_groups',
+      columns: ['id'],
+      where: 'code = ?',
+      whereArgs: ['CONSIGNMENT'],
+      limit: 1,
+    );
+    await db.insert('product_inventory_groups', {
+      'product_id': product.id,
+      'inventory_group_id': group.single['id'],
+      'assigned_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      inventory.adjust(
+        productId: product.id,
+        quantityChange: -1,
+        reason: 'Damaged',
       ),
       throwsA(isA<InvalidInventoryOperation>()),
     );

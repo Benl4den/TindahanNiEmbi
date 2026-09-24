@@ -255,7 +255,8 @@ class SpecialInventoryRepository {
       }
       await tx.insert('activity_logs', {
         'event_type': 'SPECIAL_INVENTORY_ASSIGNED',
-        'description': '${products.single['name']} assigned to $code',
+        'description':
+            '${products.single['name']} assigned to ${groups.single['name']}',
         'actor_role': actorRole,
         'related_entity_type': 'PRODUCT',
         'related_entity_id': productId,
