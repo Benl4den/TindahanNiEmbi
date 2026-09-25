@@ -5,8 +5,13 @@ import '../../../repositories/activity_log_repository.dart';
 import '../../../widgets/app_search_field.dart';
 
 class ActivityLogsScreen extends StatefulWidget {
-  const ActivityLogsScreen({super.key, required this.repository});
+  const ActivityLogsScreen({
+    super.key,
+    required this.repository,
+    this.walletServicesAllowed = true,
+  });
   final ActivityLogRepository repository;
+  final bool walletServicesAllowed;
   @override
   State<ActivityLogsScreen> createState() => _State();
 }
@@ -29,6 +34,7 @@ class _State extends State<ActivityLogsScreen> {
         ? 'UTANG'
         : category.toUpperCase(),
     query: query,
+    includeWalletServices: widget.walletServicesAllowed,
   );
   void select(DateTime value) => setState(() {
     date = value;

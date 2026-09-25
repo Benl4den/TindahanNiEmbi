@@ -68,6 +68,101 @@ void main() {
     expect(await operations.closingDates(), isNotEmpty);
   });
 
+  test('owner principal correction updates cash receipt but preserves payments and audit', () async {
+    final loans = LoanRepository(db, actorRole: 'OWNER');
+    final lender = await loans.createLender('Bombay');
+    final loanId = await loans.create(
+      lenderId: lender,
+      borrowed: 5000,
+      agreed: 5500000,
+      sourceKind: 'NEW',
+      start: DateTime.now(),
+      frequency: 'DAILY',
+      receivedMethod: PaymentMethod.cash,
+    );
+    await loans.pay(loanId: loanId, amount: 50000, method: PaymentMethod.cash);
+    final operations = OperationsRepository(db);
+    expect((await operations.daily(DateTime.now())).loanCashReceived, 5000);
+    await expectLater(
+      loans.correctBorrowedAmount(
+        loanId: loanId,
+        borrowed: 5000000,
+        reason: 'Missing zeroes',
+      ),
+      throwsStateError,
+    );
+    await loans.correctBorrowedAmount(
+      loanId: loanId,
+      borrowed: 5000000,
+      reason: 'Missing zeroes',
+      ownerPinAuthorized: true,
+    );
+    final row = (await loans.loans()).single;
+    expect(row['borrowed_amount_centavos'], 5000000);
+    expect(row['agreed_repayment_centavos'], 5500000);
+    expect(row['paid_centavos'], 50000);
+    final daily = await operations.daily(DateTime.now());
+    expect(daily.loanCashReceived, 5000000);
+    expect(daily.loanCashPayments, 50000);
+    final history = await db.query(
+      'activity_logs',
+      where: "event_type='LOAN_PRINCIPAL_CORRECTED'",
+    );
+    expect(history, hasLength(1));
+    expect(history.single['description'], contains('₱50.00 to ₱50,000.00'));
+    expect(history.single['description'], contains('Missing zeroes'));
+  });
+
+  test(
+    'principal correction cannot rewrite a closed cash day or wallet receipt',
+    () async {
+      final loans = LoanRepository(db, actorRole: 'OWNER');
+      final lender = await loans.createLender('Lender');
+      final cashId = await loans.create(
+        lenderId: lender,
+        borrowed: 5000,
+        agreed: 5500000,
+        sourceKind: 'NEW',
+        start: DateTime.now(),
+        frequency: 'DAILY',
+        receivedMethod: PaymentMethod.cash,
+      );
+      await OperationsRepository(db).closeDay(DateTime.now());
+      await expectLater(
+        loans.correctBorrowedAmount(
+          loanId: cashId,
+          borrowed: 5000000,
+          reason: 'Missing zeroes',
+          ownerPinAuthorized: true,
+        ),
+        throwsStateError,
+      );
+      final walletId = await loans.create(
+        lenderId: lender,
+        borrowed: 5000,
+        agreed: 5500000,
+        sourceKind: 'NEW',
+        start: DateTime.now(),
+        frequency: 'DAILY',
+        receivedMethod: PaymentMethod.gcash,
+      );
+      await expectLater(
+        loans.correctBorrowedAmount(
+          loanId: walletId,
+          borrowed: 5000000,
+          reason: 'Missing zeroes',
+          ownerPinAuthorized: true,
+        ),
+        throwsStateError,
+      );
+      final rows = await loans.loans();
+      expect(
+        rows.every((row) => row['borrowed_amount_centavos'] == 5000),
+        isTrue,
+      );
+    },
+  );
+
   test('GCash loan cancellation posts a linked reversal instead of a second adjustment', () async {
     final loans = LoanRepository(db, actorRole: 'OWNER');
     final lender = await loans.createLender('Lender');

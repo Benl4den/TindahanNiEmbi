@@ -77,6 +77,25 @@ void main() {
             .forDate(at.toLocal(), category: 'SALES'),
         hasLength(1),
       );
+      await ActivityLogRepository(db).add(
+        eventType: 'GCASH_CASH_IN',
+        description: 'GCash Cash-In 123400 centavos',
+        entityType: 'GCASH_SERVICE',
+        at: at,
+      );
+      await ActivityLogRepository(db).add(
+        eventType: 'MAYA_ADJUSTMENT_IN',
+        description: 'Maya adjustment 567800 centavos',
+        entityType: 'MAYA_LEDGER',
+        at: at,
+      );
+      expect(
+        await ActivityLogRepository(db).forDate(at.toLocal()),
+        hasLength(3),
+      );
+      final freeLogs = await ActivityLogRepository(db)
+          .forDate(at.toLocal(), includeWalletServices: false);
+      expect(freeLogs.map((x) => x.description), ['Cash sale completed']);
       await expectLater(
         db.update(
           'activity_logs',

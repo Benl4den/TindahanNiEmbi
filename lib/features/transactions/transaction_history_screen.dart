@@ -5,11 +5,17 @@ import '../../core/formatters/display_labels.dart';
 import '../../core/formatters/number_format.dart';
 
 import '../../repositories/transaction_history_repository.dart';
+import '../../services/feature_access_service.dart';
 import '../../widgets/app_state_view.dart';
 
 class TransactionHistoryScreen extends StatefulWidget {
-  const TransactionHistoryScreen({super.key, required this.repository});
+  const TransactionHistoryScreen({
+    super.key,
+    required this.repository,
+    required this.access,
+  });
   final TransactionHistoryRepository repository;
+  final FeatureAccessService access;
   @override
   State<TransactionHistoryScreen> createState() =>
       _TransactionHistoryScreenState();
@@ -23,15 +29,51 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    widget.access.planController.addListener(_planChanged);
     reload();
   }
 
-  void reload() => data = widget.repository.recent(
-    type: filter,
-    search: search,
-    limit: limit,
-    day: selectedDay,
-  );
+  @override
+  void didUpdateWidget(covariant TransactionHistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.access.planController != widget.access.planController) {
+      oldWidget.access.planController.removeListener(_planChanged);
+      widget.access.planController.addListener(_planChanged);
+      reload();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.access.planController.removeListener(_planChanged);
+    super.dispose();
+  }
+
+  void _planChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (!widget.access.allowsCurrent(ProFeature.gcashServices) &&
+          (filter == 'GCASH_SERVICE' || filter == 'MAYA_SERVICE')) {
+        filter = 'ALL';
+      }
+      expanded.clear();
+      reload();
+    });
+  }
+
+  void reload() => data = _load();
+
+  Future<List<TransactionHistoryEntry>> _load() async {
+    final allowed = await widget.access.allows(ProFeature.gcashServices);
+    return widget.repository.recent(
+      type: filter,
+      search: search,
+      limit: limit,
+      day: selectedDay,
+      includeWalletServices: allowed,
+    );
+  }
+
   final Set<String> expanded = {};
   String _key(DateTime value) {
     final d = value.toLocal();
@@ -68,7 +110,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             onAction: () => setState(reload),
           );
         }
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            !snapshot.hasData) {
           return const AppLoadingView(label: 'Loading transaction history…');
         }
         final entries = snapshot.data!
@@ -139,18 +182,20 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     ('GCASH_SERVICE', 'GCash Services'),
                     ('MAYA_SERVICE', 'Maya Services'),
                   ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(x.$2),
-                        selected: filter == x.$1,
-                        onSelected: (_) => setState(() {
-                          filter = x.$1;
-                          limit = 500;
-                          reload();
-                        }),
+                    if (widget.access.allowsCurrent(ProFeature.gcashServices) ||
+                        (x.$1 != 'GCASH_SERVICE' && x.$1 != 'MAYA_SERVICE'))
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(x.$2),
+                          selected: filter == x.$1,
+                          onSelected: (_) => setState(() {
+                            filter = x.$1;
+                            limit = 500;
+                            reload();
+                          }),
+                        ),
                       ),
-                    ),
                 ],
               ),
             ),

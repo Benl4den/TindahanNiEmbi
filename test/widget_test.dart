@@ -6,13 +6,168 @@ import 'package:tindahan_ni_embi/features/dashboard/presentation/dashboard_scree
 import 'package:tindahan_ni_embi/core/theme/app_theme.dart';
 import 'package:tindahan_ni_embi/services/app_refresh_controller.dart';
 import 'package:tindahan_ni_embi/features/operations/presentation/daily_closing_screen.dart';
+import 'package:tindahan_ni_embi/features/operations/presentation/daily_closing_overview.dart';
+import 'package:tindahan_ni_embi/features/reports/presentation/reports_screen.dart';
+import 'package:tindahan_ni_embi/repositories/reports_repository.dart';
+import 'package:tindahan_ni_embi/repositories/payment_accounting_repository.dart';
+import 'package:tindahan_ni_embi/repositories/gcash_service_repository.dart';
+import 'package:tindahan_ni_embi/services/feature_access_service.dart';
+import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/models/customer.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/operations_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 
+class _MutablePlanSource extends AppPlanSource {
+  AppPlan _plan = AppPlan.free;
+
+  @override
+  AppPlan get plan => _plan;
+
+  @override
+  Future<AppPlan> load() async => _plan;
+
+  void update(AppPlan plan) {
+    _plan = plan;
+    notifyListeners();
+  }
+}
+
 void main() {
   sqfliteFfiInit();
+  testWidgets('Free locks service analytics but keeps full Daily Closing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final source = _MutablePlanSource();
+    final controller = AppPlanController(source);
+    addTearDown(controller.dispose);
+    final db = await tester.runAsync(() async {
+      final database = await app.database;
+      source.update(AppPlan.pro);
+      for (final method in [PaymentMethod.gcash, PaymentMethod.maya]) {
+        await PaymentAccountingRepository(
+          database,
+          provider: method,
+          actorRole: 'OWNER',
+        ).addManual(
+          type: 'OPENING_BALANCE',
+          amountCentavos: method == PaymentMethod.gcash ? 123400 : 567800,
+          reason: 'Free visibility test',
+          ownerPinAuthorized: true,
+        );
+        await GCashServiceRepository(
+          database,
+          provider: method,
+        ).record(type: 'CASH_IN', principalCentavos: 10000, feeCentavos: 500);
+      }
+      return database;
+    });
+    final access = FeatureAccessService(db!, planController: controller);
+    expect(access.allowsCurrent(ProFeature.gcashServices), isTrue);
+    expect(access.allowsCurrent(ProFeature.mayaServices), isTrue);
+    final before = await tester.runAsync(
+      () => OperationsRepository(db).daily(DateTime.now()),
+    );
+    source.update(AppPlan.free);
+    expect(access.allowsCurrent(ProFeature.gcashServices), isFalse);
+    expect(access.allowsCurrent(ProFeature.mayaServices), isFalse);
+    final after = await tester.runAsync(
+      () => OperationsRepository(db).daily(DateTime.now()),
+    );
+    expect(after!.toJson(), before!.toJson());
+    expect(after.cashReceived, 21000);
+    expect(after.cashDifference, 21000);
+    expect(after.serviceFeeIncome + after.mayaServiceFeeIncome, 1000);
+    expect(after.totalEarnings, 1000);
+    expect(after.gcashEndingBalance, 113400);
+    expect(after.mayaEndingBalance, 557800);
+    source.update(AppPlan.pro);
+    final restored = await tester.runAsync(
+      () => OperationsRepository(db).daily(DateTime.now()),
+    );
+    expect(restored!.toJson(), before.toJson());
+    source.update(AppPlan.free);
+    final serviceRows = await tester.runAsync(
+      () async => [
+        await db.query('gcash_service_transactions'),
+        await db.query('maya_service_transactions'),
+      ],
+    );
+    expect(serviceRows![0], hasLength(1));
+    expect(serviceRows[1], hasLength(1));
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: DashboardScreen(
+            database: db,
+            navigate: (_) {},
+            walletServicesAllowed: false,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Current GCash Balance'), findsNothing);
+    expect(find.text('Current Maya Balance'), findsNothing);
+    expect(find.text('₱1,234.00'), findsNothing);
+    expect(find.text('₱5,678.00'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DailyClosingOverview(
+              summary: after,
+              walletServicesAllowed: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Payment Summary'), findsOneWidget);
+    expect(find.text('GCash Wallet'), findsOneWidget);
+    expect(find.text('Maya Wallet'), findsOneWidget);
+    expect(find.text('E-Wallet Fees Earned'), findsOneWidget);
+    expect(find.text('E-Wallet Services — Cash Received'), findsOneWidget);
+    expect(find.text('₱210.00'), findsWidgets);
+    expect(find.text('₱10.00'), findsWidgets);
+    expect(find.textContaining('Partial Free view'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReportsScreen(
+            repository: ReportsRepository(db),
+            walletServicesAllowed: false,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pump();
+    await tester.tap(find.text('Sales').last);
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pump();
+    expect(find.text('GCash Services • All Time'), findsNothing);
+    expect(find.text('Maya Services • All Time'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'dashboard preserves product names when labeling brand activity',
     (tester) async {

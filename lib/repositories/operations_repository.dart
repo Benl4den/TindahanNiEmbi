@@ -326,28 +326,45 @@ class OperationsRepository {
   Future<DailyClosingSummary> summaryForDate(DateTime day) async =>
       (await snapshotFor(day))?.summary ?? daily(day);
 
-  Future<DailyClosingSnapshot> closeDay(DateTime day) async {
-    final existing = await snapshotFor(day);
-    if (existing != null) return existing;
-    final summary = await daily(day);
-    final closedAt = DateTime.now();
-    try {
-      await db.insert('daily_closing_snapshots', {
-        'closing_date': _dayKey(day),
-        'summary_json': jsonEncode(summary.toJson()),
-        'closed_at': closedAt.toUtc().toIso8601String(),
-      });
-    } on DatabaseException {
-      final saved = await snapshotFor(day);
-      if (saved != null) return saved;
-      rethrow;
+  Future<DailyClosingSnapshot> closeDay(
+    DateTime day, {
+    DailyClosingSummary? expectedSummary,
+  }) => db.transaction((tx) async {
+    final rows = await tx.query(
+      'daily_closing_snapshots',
+      where: 'closing_date=?',
+      whereArgs: [_dayKey(day)],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      final row = rows.single;
+      return DailyClosingSnapshot(
+        day: DateTime(day.year, day.month, day.day),
+        summary: DailyClosingSummary.fromJson(
+          jsonDecode(row['summary_json']! as String) as Map<String, dynamic>,
+        ),
+        closedAt: DateTime.parse(row['closed_at']! as String).toLocal(),
+      );
     }
+    final summary = await _daily(tx, day);
+    if (expectedSummary != null &&
+        jsonEncode(summary.toJson()) != jsonEncode(expectedSummary.toJson())) {
+      throw StateError(
+        'Daily Closing changed. Review the updated summary before saving.',
+      );
+    }
+    final closedAt = DateTime.now();
+    await tx.insert('daily_closing_snapshots', {
+      'closing_date': _dayKey(day),
+      'summary_json': jsonEncode(summary.toJson()),
+      'closed_at': closedAt.toUtc().toIso8601String(),
+    });
     return DailyClosingSnapshot(
       day: DateTime(day.year, day.month, day.day),
       summary: summary,
       closedAt: closedAt,
     );
-  }
+  });
 
   Future<List<RestockItem>> restock({String filter = 'NEEDS'}) async {
     final rows = await db.rawQuery('''SELECT p.*,
@@ -392,41 +409,69 @@ class OperationsRepository {
     return result;
   }
 
-  Future<DailyClosingSummary> daily(DateTime date, {DateTime? endDate}) async {
+  Future<DailyClosingSummary> daily(DateTime date, {DateTime? endDate}) =>
+      db.transaction((tx) => _daily(tx, date, endDate: endDate));
+
+  Future<DailyClosingSummary> _daily(
+    DatabaseExecutor source,
+    DateTime date, {
+    DateTime? endDate,
+  }) async {
     final local = DateTime(date.year, date.month, date.day),
         start = local.toUtc().toIso8601String(),
         end = (endDate ?? DateTime(local.year, local.month, local.day + 1))
             .toUtc()
             .toIso8601String();
     Future<Map<String, Object?>> one(String sql) =>
-        db.rawQuery(sql, [start, end]).then((x) => x.single);
-    final cash = await one('''SELECT
-      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method,'CASH')='CASH' THEN s.total_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='GCASH' THEN s.total_centavos ELSE 0 END),0) gcash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='MAYA' THEN s.total_centavos ELSE 0 END),0) maya_total,
-      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method,'CASH')='CASH' THEN 1 ELSE 0 END) cash_count,
-      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='GCASH' THEN 1 ELSE 0 END) gcash_count,
-      SUM(CASE WHEN COALESCE(sp.payment_method_display,sp.payment_method)='MAYA' THEN 1 ELSE 0 END) maya_count
+        source.rawQuery(sql, [start, end]).then((x) => x.single);
+    final cash = await one('''WITH movements AS (
+      SELECT s.total_centavos amount,COALESCE(sp.payment_method_display,sp.payment_method,'CASH') method,s.occurred_at stamp
       FROM cash_sales s LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
-      WHERE s.status='POSTED' AND s.occurred_at>=? AND s.occurred_at<?''');
-    final utang = await one(
-      "SELECT COALESCE(SUM(total_centavos),0) total,COUNT(*) count FROM utang_transactions WHERE status='POSTED' AND COALESCE(is_existing_balance,0)=0 AND occurred_at>=? AND occurred_at<?",
-    );
-    final pay = await one(
-      '''SELECT COALESCE(SUM(amount_centavos),0) total,COUNT(*) count,
-      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total
-      FROM utang_payments WHERE status='POSTED' AND paid_at>=? AND paid_at<?''',
-    );
-    final expenses = await one(
-      '''SELECT COALESCE(SUM(e.amount_centavos),0) total,COUNT(*) count,
-      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method,'CASH')='CASH' THEN e.amount_centavos ELSE 0 END),0) cash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method)='GCASH' THEN e.amount_centavos ELSE 0 END),0) gcash_total,
-      COALESCE(SUM(CASE WHEN COALESCE(ep.payment_method_display,ep.payment_method)='MAYA' THEN e.amount_centavos ELSE 0 END),0) maya_total
+      WHERE s.status IN ('POSTED','REVERSED')
+      UNION ALL
+      SELECT -s.total_centavos,COALESCE(sp.payment_method_display,sp.payment_method,'CASH'),r.occurred_at
+      FROM transaction_reversals r JOIN cash_sales s ON s.id=r.cash_sale_id
+      LEFT JOIN sale_payments sp ON sp.cash_sale_id=s.id
+    ) SELECT
+      COALESCE(SUM(CASE WHEN method='CASH' THEN amount ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN method='GCASH' THEN amount ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN method='MAYA' THEN amount ELSE 0 END),0) maya_total,
+      COALESCE(SUM(CASE WHEN method='CASH' THEN 1 ELSE 0 END),0) cash_count,
+      COALESCE(SUM(CASE WHEN method='GCASH' THEN 1 ELSE 0 END),0) gcash_count,
+      COALESCE(SUM(CASE WHEN method='MAYA' THEN 1 ELSE 0 END),0) maya_count
+      FROM movements WHERE stamp>=? AND stamp<?''');
+    final utang = await one('''WITH movements AS (
+      SELECT total_centavos amount,occurred_at stamp FROM utang_transactions
+      WHERE status IN ('POSTED','REVERSED') AND COALESCE(is_existing_balance,0)=0
+      UNION ALL
+      SELECT -u.total_centavos,r.occurred_at FROM transaction_reversals r
+      JOIN utang_transactions u ON u.id=r.utang_transaction_id
+      WHERE COALESCE(u.is_existing_balance,0)=0
+    ) SELECT COALESCE(SUM(amount),0) total,COUNT(*) count FROM movements
+    WHERE stamp>=? AND stamp<?''');
+    final pay = await one('''WITH movements AS (
+      SELECT amount_centavos amount,COALESCE(payment_method_display,payment_method,'CASH') method,paid_at stamp
+      FROM utang_payments WHERE status IN ('POSTED','REVERSED')
+      UNION ALL
+      SELECT -p.amount_centavos,COALESCE(p.payment_method_display,p.payment_method,'CASH'),r.occurred_at
+      FROM transaction_reversals r JOIN utang_payments p ON p.id=r.payment_id
+      ) SELECT COALESCE(SUM(amount),0) total,COUNT(*) count,
+      COALESCE(SUM(CASE WHEN method='CASH' THEN amount ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN method='GCASH' THEN amount ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN method='MAYA' THEN amount ELSE 0 END),0) maya_total
+      FROM movements WHERE stamp>=? AND stamp<?''');
+    final expenses = await one('''WITH movements AS (
+      SELECT e.amount_centavos amount,COALESCE(ep.payment_method_display,ep.payment_method,'CASH') method,e.expense_datetime stamp
       FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id
-      WHERE e.status='POSTED' AND e.expense_datetime>=? AND e.expense_datetime<?''',
-    );
+      UNION ALL
+      SELECT -e.amount_centavos,COALESCE(ep.payment_method_display,ep.payment_method,'CASH'),r.occurred_at
+      FROM expense_reversals r JOIN expenses e ON e.id=r.expense_id
+      LEFT JOIN expense_payments ep ON ep.expense_id=e.id
+      ) SELECT COALESCE(SUM(amount),0) total,COUNT(*) count,
+      COALESCE(SUM(CASE WHEN method='CASH' THEN amount ELSE 0 END),0) cash_total,
+      COALESCE(SUM(CASE WHEN method='GCASH' THEN amount ELSE 0 END),0) gcash_total,
+      COALESCE(SUM(CASE WHEN method='MAYA' THEN amount ELSE 0 END),0) maya_total
+      FROM movements WHERE stamp>=? AND stamp<?''');
     final remittances = await one('''SELECT
       COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method,'CASH')='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,
       COALESCE(SUM(CASE WHEN COALESCE(payment_method_display,payment_method)='GCASH' THEN amount_centavos ELSE 0 END),0) gcash_total,
@@ -442,7 +487,7 @@ class OperationsRepository {
     final loanReversals = await one(
       '''SELECT COALESCE(SUM(CASE WHEN payment_method='CASH' THEN amount_centavos ELSE 0 END),0) cash_total,COALESCE(SUM(CASE WHEN payment_method='MAYA' THEN amount_centavos ELSE 0 END),0) maya_total,COUNT(*) count FROM loan_payments WHERE status='REVERSED' AND reversed_at>=? AND reversed_at<?''',
     );
-    final gcash = (await db.rawQuery(
+    final gcash = (await source.rawQuery(
       '''SELECT
       COALESCE(SUM(CASE WHEN occurred_at<? THEN amount_change_centavos ELSE 0 END),0) opening,
       COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) money_in,
@@ -450,7 +495,7 @@ class OperationsRepository {
       FROM gcash_ledger_entries''',
       [start, start, end, start, end],
     )).single;
-    final maya = (await db.rawQuery(
+    final maya = (await source.rawQuery(
       '''SELECT
       COALESCE(SUM(CASE WHEN occurred_at<? THEN amount_change_centavos ELSE 0 END),0) opening,
       COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) money_in,
@@ -479,12 +524,28 @@ class OperationsRepository {
       COALESCE(SUM(CASE WHEN physical_cash_change_centavos<0 THEN -physical_cash_change_centavos ELSE 0 END),0) cash_paid
       FROM maya_service_transactions WHERE created_at>=? AND created_at<?''');
     final con = await one(
-      '''SELECT COALESCE(SUM(COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity)),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
+      '''WITH movements AS (
+      SELECT COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity) sales,
+      a.payable_centavos payable,COALESCE(a.actual_margin_centavos,a.margin_centavos) margin,a.occurred_at stamp
+      FROM consignment_allocations a
+      UNION ALL
+      SELECT -COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity),
+      r.payable_change_centavos,r.margin_change_centavos,r.occurred_at
+      FROM consignment_allocation_reversals r JOIN consignment_allocations a ON a.id=r.allocation_id
+      ) SELECT COALESCE(SUM(sales),0) sales,COALESCE(SUM(payable),0) payable,
+      COALESCE(SUM(margin),0) margin FROM movements WHERE stamp>=? AND stamp<?''',
     );
-    final stock = (await db.rawQuery(
+    final stock = (await source.rawQuery(
       '''SELECT SUM(CASE WHEN current_quantity>0 AND current_quantity<=minimum_stock_level THEN 1 ELSE 0 END) low,SUM(CASE WHEN current_quantity=0 THEN 1 ELSE 0 END) out FROM products WHERE is_archived=0''',
     )).single;
-    final top = await productSalesRanking(db, start: start, end: end, limit: 5);
+    final top = await productSalesRanking(
+      source,
+      start: start,
+      end: end,
+      limit: 5,
+      includeReversed: true,
+      useSaleSnapshots: true,
+    );
     return DailyClosingSummary(
       cashSales: (cash['cash_total'] as int?) ?? 0,
       gcashSales: (cash['gcash_total'] as int?) ?? 0,
@@ -558,10 +619,12 @@ class OperationsRepository {
 
   Future<List<DateTime>> closingDates() async {
     final rows = await db.rawQuery('''
-      SELECT occurred_at stamp FROM cash_sales WHERE status='POSTED'
-      UNION ALL SELECT occurred_at FROM utang_transactions WHERE status='POSTED'
-      UNION ALL SELECT paid_at FROM utang_payments WHERE status='POSTED'
-      UNION ALL SELECT expense_datetime FROM expenses WHERE status='POSTED'
+      SELECT occurred_at stamp FROM cash_sales WHERE status IN ('POSTED','REVERSED')
+      UNION ALL SELECT occurred_at FROM utang_transactions WHERE status IN ('POSTED','REVERSED') AND COALESCE(is_existing_balance,0)=0
+      UNION ALL SELECT paid_at FROM utang_payments WHERE status IN ('POSTED','REVERSED')
+      UNION ALL SELECT expense_datetime FROM expenses
+      UNION ALL SELECT occurred_at FROM transaction_reversals
+      UNION ALL SELECT occurred_at FROM expense_reversals
       UNION ALL SELECT remitted_at FROM consignor_remittances
       UNION ALL SELECT created_at FROM gcash_service_transactions
       UNION ALL SELECT created_at FROM maya_service_transactions

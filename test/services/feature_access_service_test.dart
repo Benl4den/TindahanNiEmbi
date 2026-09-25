@@ -52,6 +52,8 @@ void main() {
       expect(await access.allows(ProFeature.managedBrandAnalytics), isFalse);
       expect(await access.allows(ProFeature.fiveSixLoanManagement), isFalse);
       expect(await access.allows(ProFeature.productInsights), isFalse);
+      expect(await access.allows(ProFeature.gcashServices), isFalse);
+      expect(await access.allows(ProFeature.mayaServices), isFalse);
       expect(await access.canAccess(AppFeature.inventoryAnalytics), isTrue);
       expect(await access.canAccess(AppFeature.consignment), isFalse);
 
@@ -61,6 +63,8 @@ void main() {
       expect(await access.allows(ProFeature.consignment), isTrue);
       expect(await access.allows(ProFeature.fiveSixLoanManagement), isTrue);
       expect(await access.allows(ProFeature.productInsights), isTrue);
+      expect(await access.allows(ProFeature.gcashServices), isTrue);
+      expect(await access.allows(ProFeature.mayaServices), isTrue);
       expect(changes, greaterThanOrEqualTo(2));
 
       final restarted = AppPlanController(
@@ -108,6 +112,8 @@ void main() {
       expect(await access.currentPlan(), AppPlan.pro);
       expect(await access.allows(ProFeature.fiveSixLoanManagement), isTrue);
       expect(await access.allows(ProFeature.managedBrandAnalytics), isTrue);
+      expect(await access.allows(ProFeature.gcashServices), isTrue);
+      expect(await access.allows(ProFeature.mayaServices), isTrue);
       await expectLater(
         access.setLocalPlanForTesting(AppPlan.free),
         throwsStateError,

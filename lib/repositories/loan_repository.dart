@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
 import '../models/payment_method.dart';
 import '../services/app_refresh_controller.dart';
 import 'payment_accounting_repository.dart';
@@ -108,6 +109,86 @@ class LoanRepository {
     });
     AppRefreshController.instance.dataChanged();
     return id;
+  }
+
+  /// Corrects an incorrectly entered principal without changing repayments.
+  /// Cash receipts are derived from this value, so a closed day cannot be
+  /// rewritten. Wallet receipts need a separate compensating ledger flow.
+  Future<void> correctBorrowedAmount({
+    required int loanId,
+    required int borrowed,
+    required String reason,
+    bool ownerPinAuthorized = false,
+  }) async {
+    if (actorRole != 'OWNER' || !ownerPinAuthorized) {
+      throw StateError('Owner PIN authorization is required.');
+    }
+    if (reason.trim().isEmpty) throw ArgumentError('A reason is required.');
+    if (borrowed <= 0) throw ArgumentError('Borrowed amount must be positive.');
+    await db.transaction((tx) async {
+      final rows = await tx.query(
+        'loans',
+        columns: [
+          'reference',
+          'source_kind',
+          'received_payment_method',
+          'borrowed_amount_centavos',
+          'agreed_repayment_centavos',
+          'created_at',
+        ],
+        where: 'id=?',
+        whereArgs: [loanId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Loan not found.');
+      final loan = rows.single;
+      final oldBorrowed = loan['borrowed_amount_centavos']! as int;
+      final agreed = loan['agreed_repayment_centavos']! as int;
+      if (borrowed == oldBorrowed) {
+        throw ArgumentError('Enter a different borrowed amount.');
+      }
+      if (borrowed > agreed) {
+        throw ArgumentError('Borrowed amount cannot exceed total to repay.');
+      }
+      if (loan['source_kind'] == 'NEW') {
+        if (loan['received_payment_method'] != 'CASH') {
+          throw StateError(
+            'Wallet-funded loan amounts cannot be edited here because the original wallet entry must be preserved.',
+          );
+        }
+        final created = DateTime.parse(loan['created_at']! as String).toLocal();
+        final day =
+            '${created.year.toString().padLeft(4, '0')}-${created.month.toString().padLeft(2, '0')}-${created.day.toString().padLeft(2, '0')}';
+        final closed = await tx.query(
+          'daily_closing_snapshots',
+          columns: ['id'],
+          where: 'closing_date=?',
+          whereArgs: [day],
+          limit: 1,
+        );
+        if (closed.isNotEmpty) {
+          throw StateError(
+            'This loan belongs to a closed day. Its original cash receipt cannot be changed.',
+          );
+        }
+      }
+      await tx.update(
+        'loans',
+        {'borrowed_amount_centavos': borrowed},
+        where: 'id=? AND borrowed_amount_centavos=?',
+        whereArgs: [loanId, oldBorrowed],
+      );
+      await tx.insert('activity_logs', {
+        'event_type': 'LOAN_PRINCIPAL_CORRECTED',
+        'description':
+            '5/6 loan ${loan['reference'] ?? loanId} borrowed amount corrected from ${standardMoney(oldBorrowed)} to ${standardMoney(borrowed)}. Reason: ${reason.trim()}',
+        'actor_role': actorRole,
+        'related_entity_type': 'LOAN',
+        'related_entity_id': loanId,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+    AppRefreshController.instance.dataChanged();
   }
 
   Future<void> pay({

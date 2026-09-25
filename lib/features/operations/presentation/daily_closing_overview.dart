@@ -8,8 +8,13 @@ import '../../../widgets/product_image.dart';
 import '../../../widgets/balanced_card_grid.dart';
 
 class DailyClosingOverview extends StatelessWidget {
-  const DailyClosingOverview({super.key, required this.summary});
+  const DailyClosingOverview({
+    super.key,
+    required this.summary,
+    this.walletServicesAllowed = true,
+  });
   final DailyClosingSummary summary;
+  final bool walletServicesAllowed;
   @override
   Widget build(BuildContext context) {
     final x = summary;
@@ -41,8 +46,8 @@ class DailyClosingOverview extends StatelessWidget {
       children: [
         StoreSummaryHero(
           title: 'Store Day Summary',
-          value: '${x.transactionCount} recorded transactions',
-          caption: 'A summary of this day’s store activity • Simple to run. Built for your store.',
+          value: '${x.transactionCount} recorded events',
+          caption: 'Activity on this date, including recorded corrections and reversals.',
           icon: Icons.fact_check_outlined,
         ),
         const SizedBox(height: 16),
@@ -52,7 +57,7 @@ class DailyClosingOverview extends StatelessWidget {
             value: m(x.totalSales + x.newUtang),
             icon: Icons.bar_chart,
             accent: green,
-            caption: 'Cash, GCash and new UTANG sales',
+            caption: 'Cash, GCash, Maya and new UTANG • net of corrections',
           ),
           StoreSummaryCard(
             title: 'New UTANG',
@@ -62,59 +67,83 @@ class DailyClosingOverview extends StatelessWidget {
             caption: 'Payments are separate collections',
           ),
           StoreSummaryCard(
-            title: 'Total Expenses',
+            title: 'Operating Expenses',
             value: m(x.operatingExpenses),
             icon: Icons.account_balance_wallet_outlined,
             accent: red,
-            caption: x.expenseCount == null
-                ? 'Cash, GCash and Maya expenses'
-                : '${x.expenseCount} expenses',
+            caption: 'Net of corrections • excludes supplier and loan payouts',
           ),
         ]),
         const SizedBox(height: 16),
         grid([
-          panel('Money In • Physical Cash', Icons.south_west, green, [
+          panel('Recorded Cash In', Icons.south_west, green, [
             row('Cash Sales', x.cashSales),
             row('UTANG Payments in Cash', x.cashPayments),
-            row('GCash Services — Cash Received', x.gcashServiceCashReceived),
-            row('Maya Services — Cash Received', x.mayaServiceCashReceived),
+            if (walletServicesAllowed) ...[
+              row('GCash Services — Cash Received', x.gcashServiceCashReceived),
+              row('Maya Services — Cash Received', x.mayaServiceCashReceived),
+            ] else
+              row(
+                'E-Wallet Services — Cash Received',
+                x.gcashServiceCashReceived + x.mayaServiceCashReceived,
+              ),
             row('5/6 Loans Received in Cash', x.loanCashReceived),
             const Divider(),
-            row(
-              'Total Cash Received',
-              x.cashReceived,
-              color: green,
-              strong: true,
-            ),
+            row('Net Cash In', x.cashReceived, color: green, strong: true),
           ]),
-          panel('Money Out • Physical Cash', Icons.north_east, red, [
+          panel('Recorded Cash Out', Icons.north_east, red, [
             row('Operating Expenses in Cash', x.cashExpenses),
-            row('GCash Services — Cash Paid Out', x.gcashServiceCashPaid),
-            row('Maya Services — Cash Paid Out', x.mayaServiceCashPaid),
+            if (walletServicesAllowed) ...[
+              row('GCash Services — Cash Paid Out', x.gcashServiceCashPaid),
+              row('Maya Services — Cash Paid Out', x.mayaServiceCashPaid),
+            ] else
+              row(
+                'E-Wallet Services — Cash Paid Out',
+                x.gcashServiceCashPaid + x.mayaServiceCashPaid,
+              ),
             row('Supplier Payments in Cash', x.cashRemittances),
             row('5/6 Loan Payments in Cash', x.loanCashPayments),
             if (x.loanCashPaymentReversals != 0)
               row('Reversed 5/6 Loan Payments', -x.loanCashPaymentReversals),
             const Divider(),
-            row('Total Cash Paid Out', x.cashPaid, color: red, strong: true),
+            row('Net Cash Out', x.cashPaid, color: red, strong: true),
           ]),
           panel('Net Recorded Cash', Icons.payments_outlined, green, [
             const SizedBox(height: 12),
             Text(
-              m(x.netRecordedCash),
+              m(x.cashDifference),
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: green,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 10),
-            const Text('Physical cash received minus physical cash paid out.'),
+            const Text(
+              'Recorded cash in minus recorded cash out, net of corrections.',
+            ),
             const SizedBox(height: 10),
-            const Text('Recorded movement—not a cash-drawer count or profit.'),
+            const Text(
+              'Reversals correct records; they do not prove cash physically moved. This is not a cash-drawer count or profit.',
+            ),
           ]),
         ]),
         const SizedBox(height: 16),
         grid([
+          panel('Payment Summary', Icons.credit_card_outlined, green, [
+            const Text(
+              'Product sales and UTANG collections, by payment method.',
+            ),
+            row('Cash', x.cashSales + x.cashPayments),
+            row('GCash', x.gcashSales + x.gcashPayments),
+            row('Maya', x.mayaSales + x.mayaPayments),
+            const Divider(),
+            row(
+              'Total Customer Payments',
+              x.totalSales + x.payments,
+              color: green,
+              strong: true,
+            ),
+          ]),
           panel('UTANG', Icons.people_outline, orange, [
             row('New UTANG', x.newUtang),
             row('UTANG Payments', x.payments),
@@ -140,7 +169,8 @@ class DailyClosingOverview extends StatelessWidget {
               color: blue,
               strong: true,
             ),
-            row('Service Fee Income', x.serviceFeeIncome),
+            if (walletServicesAllowed)
+              row('Service Fee Income', x.serviceFeeIncome),
             const Text('Includes recorded cancellations and fixes.'),
           ]),
           panel('Maya Wallet', Icons.account_balance_wallet_outlined, blue, [
@@ -155,21 +185,25 @@ class DailyClosingOverview extends StatelessWidget {
               color: blue,
               strong: true,
             ),
-            row('Service Fee Income', x.mayaServiceFeeIncome),
-            row('Maya Sales', x.mayaSales),
-            row('UTANG Payments with Maya', x.mayaPayments),
-            row('Expenses paid with Maya', x.mayaExpenses),
-            row('Supplier Payments with Maya', x.mayaRemittances),
-            row('5/6 Loans Received with Maya', x.loanMayaReceived),
-            row('5/6 Loan Payments with Maya', x.loanMayaPayments),
-            if (x.loanMayaPaymentReversals != 0)
-              row('Reversed 5/6 Loan Payments', -x.loanMayaPaymentReversals),
+            if (walletServicesAllowed) ...[
+              row('Service Fee Income', x.mayaServiceFeeIncome),
+              row('Maya Sales', x.mayaSales),
+              row('UTANG Payments with Maya', x.mayaPayments),
+              row('Expenses paid with Maya', x.mayaExpenses),
+              row('Supplier Payments with Maya', x.mayaRemittances),
+              row('5/6 Loans Received with Maya', x.loanMayaReceived),
+              row('5/6 Loan Payments with Maya', x.loanMayaPayments),
+              if (x.loanMayaPaymentReversals != 0)
+                row('Reversed 5/6 Loan Payments', -x.loanMayaPaymentReversals),
+            ],
             const Text('Maya is separate from physical cash and GCash.'),
           ]),
           panel('E-Wallet Fees Earned', Icons.payments_outlined, green, [
-            row('GCash Fees', x.serviceFeeIncome),
-            row('Maya Fees', x.mayaServiceFeeIncome),
-            const Divider(),
+            if (walletServicesAllowed) ...[
+              row('GCash Fees', x.serviceFeeIncome),
+              row('Maya Fees', x.mayaServiceFeeIncome),
+              const Divider(),
+            ],
             row(
               'Total Fees',
               x.serviceFeeIncome + x.mayaServiceFeeIncome,
@@ -205,7 +239,7 @@ class DailyClosingOverview extends StatelessWidget {
                   (
                     Icons.receipt_long,
                     '${x.transactionCount}',
-                    'Transactions',
+                    'Events',
                     green,
                   ),
                   (Icons.warning_amber, '${x.lowStock}', 'Low Stock', orange),
@@ -213,7 +247,7 @@ class DailyClosingOverview extends StatelessWidget {
                   (
                     Icons.description_outlined,
                     x.expenseCount?.toString() ?? '—',
-                    'Expenses',
+                    'Expense entries',
                     blue,
                   ),
                 ];
@@ -283,14 +317,23 @@ class DailyClosingOverview extends StatelessWidget {
         const SizedBox(height: 16),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
-          title: const Text('Additional Expense & GCash Details'),
+          title: Text(
+            walletServicesAllowed
+                ? 'Additional Expense & GCash Details'
+                : 'Additional Expense Details',
+          ),
           children: [
             row('Expenses Paid in Cash', x.cashExpenses),
             row('Expenses Paid with GCash', x.gcashExpenses),
-            StoreValueRow('Cash-In Transactions', '${x.cashInServiceCount}'),
-            StoreValueRow('Cash-Out Transactions', '${x.cashOutServiceCount}'),
-            row('Cash-In Fees', x.cashInServiceFees),
-            row('Cash-Out Fees', x.cashOutServiceFees),
+            if (walletServicesAllowed) ...[
+              StoreValueRow('Cash-In Transactions', '${x.cashInServiceCount}'),
+              StoreValueRow(
+                'Cash-Out Transactions',
+                '${x.cashOutServiceCount}',
+              ),
+              row('Cash-In Fees', x.cashInServiceFees),
+              row('Cash-Out Fees', x.cashOutServiceFees),
+            ],
           ],
         ),
       ],

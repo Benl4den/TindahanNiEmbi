@@ -139,7 +139,10 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
     builder: (context, allowed) => allowed
         ? _buildPro(context)
         : Scaffold(
-            appBar: AppBar(title: const Text('Brands')),
+            appBar: AppBar(
+              title: _headerTitle,
+              actions: const [HelpButton(topic: HelpTopicId.brands)],
+            ),
             body: const ProFeaturePreview(
               title: 'Understand your brands better',
               description: 'Organize products by brand and see how each brand contributes to your store.',
@@ -156,18 +159,20 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
           ),
   );
 
+  static const _headerTitle = Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Brands'),
+      Text(
+        'Track each brand’s products, stock, and sales in one place',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+      ),
+    ],
+  );
+
   Widget _buildPro(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Brands'),
-          Text(
-            'Track each brand’s products, stock, and sales in one place',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-          ),
-        ],
-      ),
+      title: _headerTitle,
       actions: [
         const HelpButton(topic: HelpTopicId.brands),
         Padding(
@@ -357,42 +362,8 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
-                    itemCount: brands.length + 1,
+                    itemCount: brands.length,
                     itemBuilder: (_, index) {
-                      if (index == brands.length) {
-                        return Card(
-                          color: Theme.of(context).colorScheme.primaryContainer
-                              .withValues(alpha: .32),
-                          child: InkWell(
-                            onTap: _add,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.add_circle_outline,
-                                  size: 36,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Add Brand',
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'Build your next product collection',
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
                       final summary = brands[index], group = summary.group;
                       return Card(
                         child: InkWell(
@@ -444,7 +415,6 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                                     Text(
                                       'Profit  ${standardMoney(totals[group.id]?.profit ?? 0)}',
                                     ),
-                                    Text('${summary.productCount} products'),
                                   ],
                                 ),
                                 const SizedBox(height: 10),

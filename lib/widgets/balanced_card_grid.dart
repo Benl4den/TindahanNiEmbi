@@ -104,12 +104,14 @@ class _RenderEqualCardRow extends RenderBox
       child =
           (child.parentData! as ContainerBoxParentData<RenderBox>).nextSibling;
     }
-    size = constraints.constrain(Size(constraints.maxWidth, height));
+    // A second tight layout can reflow a nested Wrap/Text by a few pixels.
+    // Leave a small safety inset so equal-height cards do not overflow.
+    size = constraints.constrain(Size(constraints.maxWidth, height + 8));
     var x = 0.0;
     child = firstChild;
     while (child != null) {
       child.layout(
-        BoxConstraints.tight(Size(width, height)),
+        BoxConstraints.tight(Size(width, size.height)),
         parentUsesSize: true,
       );
       final data = child.parentData! as ContainerBoxParentData<RenderBox>;

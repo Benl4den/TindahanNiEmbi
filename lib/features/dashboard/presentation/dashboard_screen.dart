@@ -19,10 +19,12 @@ class DashboardScreen extends StatefulWidget {
     required this.database,
     required this.navigate,
     this.refreshRevision = 0,
+    this.walletServicesAllowed = true,
   });
   final Database database;
   final void Function(int) navigate;
   final int refreshRevision;
+  final bool walletServicesAllowed;
   @override
   State<DashboardScreen> createState() => _DashboardState();
 }
@@ -48,7 +50,8 @@ class _DashboardState extends State<DashboardScreen> {
   void didUpdateWidget(covariant DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshRevision != widget.refreshRevision ||
-        oldWidget.database != widget.database) {
+        oldWidget.database != widget.database ||
+        oldWidget.walletServicesAllowed != widget.walletServicesAllowed) {
       reload();
     }
   }
@@ -73,12 +76,16 @@ class _DashboardState extends State<DashboardScreen> {
         Future.wait<Object>([
           OperationsRepository(widget.database).daily(start, endDate: end),
           DashboardRepository(widget.database).summary(),
-          widget.database.rawQuery(
-            'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM gcash_ledger_entries',
-          ),
-          widget.database.rawQuery(
-            'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM maya_ledger_entries',
-          ),
+          widget.walletServicesAllowed
+              ? widget.database.rawQuery(
+                  'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM gcash_ledger_entries',
+                )
+              : Future<List<Map<String, Object?>>>.value(const []),
+          widget.walletServicesAllowed
+              ? widget.database.rawQuery(
+                  'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM maya_ledger_entries',
+                )
+              : Future<List<Map<String, Object?>>>.value(const []),
           widget.database.rawQuery(
             'SELECT name,photo_path,current_quantity,base_unit_code,base_unit_label FROM products WHERE is_archived=0 AND current_quantity<=minimum_stock_level ORDER BY current_quantity ASC,name COLLATE NOCASE LIMIT 5',
           ),
@@ -91,7 +98,9 @@ class _DashboardState extends State<DashboardScreen> {
             ELSE a.description END description,
             a.created_at,a.actor_name FROM
               (SELECT id,event_type,description,created_at,actor_name
-               FROM activity_logs ORDER BY created_at DESC,id DESC LIMIT 5) a
+               FROM activity_logs
+               WHERE ${widget.walletServicesAllowed ? '1=1' : "COALESCE(related_entity_type,'') NOT IN ('GCASH_SERVICE','MAYA_SERVICE','GCASH_LEDGER','MAYA_LEDGER') AND event_type NOT LIKE 'GCASH_%' AND event_type NOT LIKE 'MAYA_%'"}
+               ORDER BY created_at DESC,id DESC LIMIT 5) a
             ORDER BY a.created_at DESC,a.id DESC'''),
           widget.database.rawQuery(
             'SELECT COUNT(*) count FROM cash_sales WHERE status=\'POSTED\' AND occurred_at>=? AND occurred_at<? UNION ALL SELECT COUNT(*) FROM utang_transactions WHERE status=\'POSTED\' AND COALESCE(is_existing_balance,0)=0 AND occurred_at>=? AND occurred_at<?',
@@ -378,31 +387,34 @@ class _DashboardState extends State<DashboardScreen> {
                         Icons.receipt_long_outlined,
                         accent('expense'),
                       ),
-                      metric(
-                        'Current GCash Balance',
-                        standardMoney(wallet.single['balance']! as int),
-                        Icons.account_balance_wallet_outlined,
-                        accent('gcash'),
-                      ),
-                      metric(
-                        'Current Maya Balance',
-                        standardMoney(mayaWallet.single['balance']! as int),
-                        Icons.account_balance_wallet_outlined,
-                        accent('gcash'),
-                      ),
+                      if (widget.walletServicesAllowed) ...[
+                        metric(
+                          'Current GCash Balance',
+                          standardMoney(wallet.single['balance']! as int),
+                          Icons.account_balance_wallet_outlined,
+                          accent('gcash'),
+                        ),
+                        metric(
+                          'Current Maya Balance',
+                          standardMoney(mayaWallet.single['balance']! as int),
+                          Icons.account_balance_wallet_outlined,
+                          accent('gcash'),
+                        ),
+                      ],
                       metric(
                         'Amount Owed to Suppliers',
                         standardMoney(current.supplierPayableCentavos),
                         Icons.handshake_outlined,
                         accent('consignment'),
                       ),
-                      metric(
-                        '${x.transactionCount} ${x.transactionCount == 1 ? 'transaction' : 'transactions'} $periodDescription',
-                        '',
-                        Icons.history,
-                        accent(''),
-                        caption: 'Includes sales, payments, expenses, supplier payments, e-wallet services, and loan activity.',
-                      ),
+                      if (widget.walletServicesAllowed)
+                        metric(
+                          '${x.transactionCount} ${x.transactionCount == 1 ? 'transaction' : 'transactions'} $periodDescription',
+                          '',
+                          Icons.history,
+                          accent(''),
+                          caption: 'Includes sales, payments, expenses, supplier payments, e-wallet services, and loan activity.',
+                        ),
                     ];
                     return BalancedCardGrid(children: cards);
                   },

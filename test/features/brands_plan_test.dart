@@ -72,10 +72,53 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Private Brand'), findsOneWidget);
+    expect(find.text('Build your next product collection'), findsNothing);
+    expect(find.text('Add Brand'), findsOneWidget);
 
     source.change(AppPlan.free);
     await tester.pumpAndSettle();
     expect(find.text('Private Brand'), findsNothing);
     expect((await tester.runAsync(() => special.managedBrands()))?.length, 1);
+  });
+
+  testWidgets('an empty Pro brand list offers Add Brand', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = await tester.runAsync(() => app.database);
+    if (db == null) throw StateError('Test database did not open.');
+    final source = _PlanSource()..current = AppPlan.pro;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ManagedBrandsScreen(
+          special: SpecialInventoryRepository(db),
+          products: SqliteProductRepository(db),
+          inventory: InventoryRepository(db),
+          categories: SqliteCategoryRepository(db),
+          photoService: LocalProductPhotoService(),
+          analytics: BrandAnalyticsRepository(db),
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(source),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No brands yet'), findsOneWidget);
+    expect(find.text('Add Brand'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
   });
 }

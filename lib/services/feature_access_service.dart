@@ -13,6 +13,8 @@ enum ProFeature {
   fiveSixLoanManagement,
   productInsights,
   inventoryInsights,
+  gcashServices,
+  mayaServices,
 }
 
 /// Identifiers for later plan decisions. Unapproved boundaries stay open.
@@ -26,6 +28,8 @@ enum AppFeature {
   consignment,
   selecta,
   loanManagement,
+  gcashServices,
+  mayaServices,
 }
 
 /// A replaceable source of plan state. Screens listen to [AppPlanController],
@@ -167,7 +171,9 @@ class FeatureAccessService {
       AppFeature.managedBrandsAnalytics ||
       AppFeature.consignment ||
       AppFeature.loanManagement ||
-      AppFeature.productInsights => await currentPlan() == AppPlan.pro,
+      AppFeature.productInsights ||
+      AppFeature.gcashServices ||
+      AppFeature.mayaServices => await currentPlan() == AppPlan.pro,
       AppFeature.inventoryInsights => await currentPlan() == AppPlan.pro,
       _ => true,
     };
@@ -179,6 +185,8 @@ class FeatureAccessService {
     ProFeature.fiveSixLoanManagement => AppFeature.loanManagement,
     ProFeature.productInsights => AppFeature.productInsights,
     ProFeature.inventoryInsights => AppFeature.inventoryInsights,
+    ProFeature.gcashServices => AppFeature.gcashServices,
+    ProFeature.mayaServices => AppFeature.mayaServices,
   });
 
   Future<void> setLocalPlanForTesting(AppPlan plan) =>

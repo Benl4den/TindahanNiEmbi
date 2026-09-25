@@ -13,6 +13,18 @@ import 'package:tindahan_ni_embi/repositories/product_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 import 'package:tindahan_ni_embi/repositories/transaction_history_repository.dart';
+import 'package:tindahan_ni_embi/repositories/operations_repository.dart';
+import 'package:tindahan_ni_embi/models/payment_method.dart';
+import 'package:tindahan_ni_embi/services/feature_access_service.dart';
+import 'package:tindahan_ni_embi/repositories/payment_repository.dart';
+
+class _FreePlanSource extends AppPlanSource {
+  @override
+  AppPlan get plan => AppPlan.free;
+
+  @override
+  Future<AppPlan> load() async => AppPlan.free;
+}
 
 void main() {
   sqfliteFfiInit();
@@ -39,6 +51,105 @@ void main() {
     );
   });
   tearDown(() => app.close());
+  test(
+    'Free plan still accepts GCash and Maya for sales and UTANG payments',
+    () async {
+      final access = FeatureAccessService(
+        db,
+        planController: AppPlanController(_FreePlanSource()),
+      );
+      expect(await access.allows(ProFeature.gcashServices), isFalse);
+      expect(await access.allows(ProFeature.mayaServices), isFalse);
+      final sales = CashSaleRepository(db);
+      await sales.save(
+        [UtangItemDraft(productId: p.id, quantity: 1)],
+        paymentMethod: PaymentMethod.gcash,
+        gcashReference: 'GC-1',
+      );
+      await sales.save(
+        [UtangItemDraft(productId: p.id, quantity: 1)],
+        paymentMethod: PaymentMethod.maya,
+        gcashReference: 'MY-1',
+      );
+      await sales.save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      final posted = await db.query('sale_payments', orderBy: 'id');
+      expect(posted, hasLength(3));
+      expect(posted[0]['payment_method'], PaymentMethod.gcash.dbValue);
+      expect(posted[1]['payment_method_display'], PaymentMethod.maya.dbValue);
+      expect(posted[2]['payment_method'], PaymentMethod.cash.dbValue);
+
+      final customer = await SqliteCustomerRepository(db)
+          .create(const CustomerDraft(fullName: 'Wallet customer'));
+      await UtangRepository(db).save(
+        UtangDraft(
+          customerId: customer.id,
+          items: [UtangItemDraft(productId: p.id, quantity: 2)],
+        ),
+      );
+      final payments = PaymentRepository(db);
+      await payments.record(
+        customerId: customer.id,
+        amountCentavos: 900,
+        paymentMethod: PaymentMethod.gcash,
+        gcashReference: 'GC-UTANG',
+      );
+      await payments.record(
+        customerId: customer.id,
+        amountCentavos: 900,
+        paymentMethod: PaymentMethod.maya,
+        gcashReference: 'MY-UTANG',
+      );
+      final utangPayments = await db.query('utang_payments', orderBy: 'id');
+      expect(utangPayments, hasLength(2));
+      expect(utangPayments[0]['payment_method'], PaymentMethod.gcash.dbValue);
+      expect(
+        utangPayments[1]['payment_method_display'],
+        PaymentMethod.maya.dbValue,
+      );
+      expect(await payments.balanceFor(customer.id), 0);
+      final closing = await OperationsRepository(db).daily(DateTime.now());
+      expect(closing.cashSales, 900);
+      expect(closing.gcashSales, 900);
+      expect(closing.mayaSales, 900);
+      expect(closing.gcashPayments, 900);
+      expect(closing.mayaPayments, 900);
+      expect(closing.payments, 1800);
+      expect(closing.totalSales, 2700);
+      final stamp = DateTime.now().toUtc().toIso8601String();
+      await db.insert('gcash_service_transactions', {
+        'reference': 'FREE-GCASH-SERVICE',
+        'service_type': 'CASH_IN',
+        'status': 'POSTED',
+        'principal_centavos': 100,
+        'fee_centavos': 0,
+        'customer_total_centavos': 100,
+        'physical_cash_change_centavos': 100,
+        'gcash_change_centavos': -100,
+        'created_at': stamp,
+      });
+      await db.insert('maya_service_transactions', {
+        'reference': 'FREE-MAYA-SERVICE',
+        'service_type': 'CASH_IN',
+        'status': 'POSTED',
+        'principal_centavos': 100,
+        'fee_centavos': 0,
+        'fee_option': 'ADDED',
+        'customer_total_centavos': 100,
+        'physical_cash_change_centavos': 100,
+        'wallet_change_centavos': -100,
+        'created_at': stamp,
+      });
+      final history = TransactionHistoryRepository(db);
+      final proEntries = await history.recent();
+      expect(proEntries.any((x) => x.type == 'GCASH_SERVICE'), isTrue);
+      expect(proEntries.any((x) => x.type == 'MAYA_SERVICE'), isTrue);
+      final freeEntries = await history.recent(includeWalletServices: false);
+      expect(freeEntries.where((x) => x.type == 'CASH'), hasLength(3));
+      expect(freeEntries.where((x) => x.type == 'PAYMENT'), hasLength(2));
+      expect(freeEntries.any((x) => x.type == 'GCASH_SERVICE'), isFalse);
+      expect(freeEntries.any((x) => x.type == 'MAYA_SERVICE'), isFalse);
+    },
+  );
   test('completed sale clears draft in the same transaction', () async {
     final now = DateTime.now().toUtc().toIso8601String();
     await db.insert('active_sale_draft', {

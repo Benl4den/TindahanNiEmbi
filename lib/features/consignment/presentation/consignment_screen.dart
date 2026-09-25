@@ -1544,7 +1544,10 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     builder: (context, allowed) => allowed
         ? _buildPro(context)
         : Scaffold(
-            appBar: AppBar(title: const Text('Consignment')),
+            appBar: AppBar(
+              title: _headerTitle,
+              actions: const [HelpButton(topic: HelpTopicId.consignment)],
+            ),
             body: const ProFeaturePreview(
               title: 'Manage consigned stock with confidence',
               description: 'Track supplier-owned products, what has sold, and how much you still owe each supplier.',
@@ -1564,6 +1567,17 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               ],
             ),
           ),
+  );
+
+  static const _headerTitle = Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Consignment'),
+      Text(
+        'Track supplier-owned products separately from your inventory',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+      ),
+    ],
   );
 
   Widget _buildPro(BuildContext context) => SectionBackHandler(
@@ -1590,16 +1604,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 _reload();
               }),
             ),
-      title: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Consignment'),
-          Text(
-            'Track supplier-owned products separately from your inventory',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-          ),
-        ],
-      ),
+      title: _headerTitle,
       actions: const [HelpButton(topic: HelpTopicId.consignment)],
     ),
     body: FutureBuilder(

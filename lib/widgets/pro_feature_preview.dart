@@ -7,12 +7,14 @@ class ProFeaturePreview extends StatelessWidget {
     required this.title,
     required this.description,
     this.icon = Icons.workspace_premium_outlined,
+    this.leading,
     this.metrics = const [],
     this.benefits = const [],
   });
 
   final String title, description;
   final IconData icon;
+  final Widget? leading;
   final List<String> metrics, benefits;
 
   @override
@@ -21,9 +23,16 @@ class ProFeaturePreview extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final gold = dark ? const Color(0xFFFFCC63) : const Color(0xFF805300);
     final panel = Color.alphaBlend(
-      colors.primary.withValues(alpha: dark ? .10 : .055),
+      colors.primary.withValues(alpha: dark ? .10 : .075),
       colors.surface,
     );
+    final metricSurface = dark ? colors.surfaceContainerLow : colors.surface;
+    final metricBorder = dark
+        ? colors.outlineVariant
+        : Color.alphaBlend(
+            colors.primary.withValues(alpha: .18),
+            colors.outlineVariant,
+          );
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Center(
@@ -44,7 +53,9 @@ class ProFeaturePreview extends StatelessWidget {
                     CircleAvatar(
                       radius: 29,
                       backgroundColor: colors.primary.withValues(alpha: .17),
-                      child: Icon(icon, color: colors.primary, size: 29),
+                      child:
+                          leading ??
+                          Icon(icon, color: colors.primary, size: 29),
                     ),
                     const SizedBox(width: 16),
                     Container(
@@ -69,7 +80,7 @@ class ProFeaturePreview extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 11),
                 Text(
                   title,
                   style: Theme.of(context).textTheme.headlineSmall
@@ -82,7 +93,13 @@ class ProFeaturePreview extends StatelessWidget {
                   LayoutBuilder(
                     builder: (context, space) {
                       const gap = 12.0;
-                      final columns = space.maxWidth >= 660 ? 3 : 1;
+                      final columns = metrics.length == 4
+                          ? (space.maxWidth >= 760
+                                ? 4
+                                : space.maxWidth >= 420
+                                ? 2
+                                : 1)
+                          : (space.maxWidth >= 660 ? 3 : 1);
                       final cardWidth =
                           (space.maxWidth - gap * (columns - 1)) / columns;
                       return Wrap(
@@ -93,27 +110,29 @@ class ProFeaturePreview extends StatelessWidget {
                             SizedBox(
                               width: cardWidth,
                               child: Container(
-                                constraints: const BoxConstraints(
-                                  minHeight: 91,
-                                ),
+                                height:
+                                    104 *
+                                    MediaQuery.textScalerOf(context).scale(1),
                                 padding: const EdgeInsets.all(15),
                                 decoration: BoxDecoration(
-                                  color: colors.surfaceContainerLow,
+                                  color: metricSurface,
                                   borderRadius: BorderRadius.circular(13),
-                                  border: Border.all(
-                                    color: colors.outlineVariant,
-                                  ),
+                                  border: Border.all(color: metricBorder),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       metric,
                                       style: Theme.of(context)
                                           .textTheme
-                                          .labelLarge,
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                          ),
                                     ),
-                                    const SizedBox(height: 11),
                                     Row(
                                       children: [
                                         Icon(
@@ -126,7 +145,10 @@ class ProFeaturePreview extends StatelessWidget {
                                           '--',
                                           style: Theme.of(context)
                                               .textTheme
-                                              .titleLarge,
+                                              .titleLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                         ),
                                       ],
                                     ),

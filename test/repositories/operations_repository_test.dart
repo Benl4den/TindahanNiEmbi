@@ -3,15 +3,18 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/models/consignment.dart';
 import 'package:tindahan_ni_embi/models/customer.dart';
+import 'package:tindahan_ni_embi/models/expense.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
 import 'package:tindahan_ni_embi/repositories/cash_sale_repository.dart';
 import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/consignment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
+import 'package:tindahan_ni_embi/repositories/expense_repository.dart';
 import 'package:tindahan_ni_embi/repositories/operations_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/reversal_repository.dart';
 import 'package:tindahan_ni_embi/repositories/gcash_service_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_accounting_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
@@ -147,6 +150,149 @@ void main() {
       expect((await operations.daily(DateTime.now())).totalSales, 400);
       expect((await operations.summaryForDate(DateTime.now())).totalSales, 200);
       expect(await operations.snapshotFor(DateTime.now()), isNotNull);
+    },
+  );
+  test('cross-day reversals keep original activity on its date', () async {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final yesterdayStamp = DateTime(
+      yesterday.year,
+      yesterday.month,
+      yesterday.day,
+      12,
+    ).toUtc().toIso8601String();
+    final saleId = await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+    await db.update(
+      'cash_sales',
+      {'occurred_at': yesterdayStamp},
+      where: 'id=?',
+      whereArgs: [saleId],
+    );
+    await ReversalRepository(db)
+        .reverseCashSale(saleId, 'Wrong sale', ownerPinAuthorized: true);
+    final category = (await ExpenseRepository(db).categories()).first.id;
+    final expense = await ExpenseRepository(db).add(
+      ExpenseDraft(
+        categoryId: category,
+        amountCentavos: 300,
+        description: 'Correction test',
+        expenseDateTime: yesterday,
+      ),
+    );
+    await ExpenseRepository(db)
+        .reverse(expense.id, reason: 'Wrong expense', ownerPinAuthorized: true);
+    await db.update('products', {'name': 'Renamed later'},
+        where: 'id=?', whereArgs: [p.id]);
+    final operations = OperationsRepository(db);
+    final oldDay = await operations.daily(yesterday);
+    final today = await operations.daily(DateTime.now());
+    expect(oldDay.cashSales, 200);
+    expect(oldDay.operatingExpenses, 300);
+    expect(oldDay.topProducts.single['name'], 'P');
+    expect(today.cashSales, -200);
+    expect(today.operatingExpenses, -300);
+    final dates = await operations.closingDates();
+    expect(
+      dates,
+      contains(DateTime(yesterday.year, yesterday.month, yesterday.day)),
+    );
+    expect(
+      dates,
+      contains(
+        DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+      ),
+    );
+  });
+
+  test('closing rejects stale displayed totals without saving', () async {
+    final operations = OperationsRepository(db);
+    final day = DateTime.now();
+    final displayed = await operations.daily(day);
+    await CashSaleRepository(db)
+        .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+    await expectLater(
+      operations.closeDay(day, expectedSummary: displayed),
+      throwsA(isA<StateError>()),
+    );
+    expect(await operations.snapshotFor(day), isNull);
+    final current = await operations.daily(day);
+    final saved = await operations.closeDay(day, expectedSummary: current);
+    expect(saved.summary.cashSales, 200);
+  });
+  test(
+    'UTANG and payment reversals stay dated; consignment nets out',
+    () async {
+      final previous = DateTime.now().subtract(const Duration(days: 1));
+      final stamp = DateTime(
+        previous.year,
+        previous.month,
+        previous.day,
+        12,
+      ).toUtc().toIso8601String();
+      final customer = await SqliteCustomerRepository(db)
+          .create(const CustomerDraft(fullName: 'Closing customer'));
+      final utangId = await UtangRepository(db).save(
+        UtangDraft(
+          customerId: customer.id,
+          items: [UtangItemDraft(productId: p.id, quantity: 1)],
+        ),
+      );
+      final paymentId = await PaymentRepository(db)
+          .record(customerId: customer.id, amountCentavos: 100);
+      await db.update(
+        'utang_transactions',
+        {'occurred_at': stamp},
+        where: 'id=?',
+        whereArgs: [utangId],
+      );
+      await db.update(
+        'utang_payments',
+        {'paid_at': stamp},
+        where: 'id=?',
+        whereArgs: [paymentId],
+      );
+      final reversal = ReversalRepository(db);
+      await reversal.reversePayment(
+        paymentId,
+        'Wrong payment',
+        ownerPinAuthorized: true,
+      );
+      await reversal.reverseUtang(
+        utangId,
+        'Wrong credit',
+        ownerPinAuthorized: true,
+      );
+
+      final consignments = ConsignmentRepository(db);
+      final supplier = await consignments.createConsignor('Closing supplier');
+      await consignments.receive(
+        ConsignmentReceiptDraft(
+          consignorId: supplier,
+          productId: p.id,
+          boxes: 1,
+          unitsPerBox: 1,
+          unitCostCentavos: 150,
+          sellingPriceCentavos: 200,
+        ),
+      );
+      final saleId = await CashSaleRepository(db)
+          .save([UtangItemDraft(productId: p.id, quantity: 1)]);
+      await reversal.reverseCashSale(
+        saleId,
+        'Wrong supplier sale',
+        ownerPinAuthorized: true,
+      );
+
+      final operations = OperationsRepository(db);
+      final oldDay = await operations.daily(previous);
+      final today = await operations.daily(DateTime.now());
+      expect(oldDay.newUtang, 200);
+      expect(oldDay.payments, 100);
+      expect(today.newUtang, -200);
+      expect(today.payments, -100);
+      expect(today.consignmentSales, 0);
+      expect(today.supplierPayable, 0);
+      expect(today.consignmentMargin, 0);
     },
   );
   test(

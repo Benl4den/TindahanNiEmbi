@@ -9,8 +9,13 @@ import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 
 class DailyClosingScreen extends StatefulWidget {
-  const DailyClosingScreen({super.key, required this.repository});
+  const DailyClosingScreen({
+    super.key,
+    required this.repository,
+    this.walletServicesAllowed = true,
+  });
   final OperationsRepository repository;
+  final bool walletServicesAllowed;
   @override
   State<DailyClosingScreen> createState() => _State();
 }
@@ -107,7 +112,10 @@ class _State extends State<DailyClosingScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            DailyClosingOverview(summary: x),
+            DailyClosingOverview(
+              summary: x,
+              walletServicesAllowed: widget.walletServicesAllowed,
+            ),
             const Divider(height: 40),
             Row(
               children: [
@@ -185,7 +193,9 @@ class _State extends State<DailyClosingScreen> {
   );
 
   Future<void> _confirmCloseDay() async {
-    final saved = await widget.repository.snapshotFor(date);
+    final closingDate = date;
+    final displayed = data;
+    final saved = await widget.repository.snapshotFor(closingDate);
     if (!mounted) return;
     if (saved != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,13 +205,26 @@ class _State extends State<DailyClosingScreen> {
       );
       return;
     }
+    DailyClosingSummary expected;
+    try {
+      expected = await displayed;
+    } catch (_) {
+      if (mounted) setState(reload);
+      return;
+    }
+    if (!mounted || closingDate != date) return;
+    final today = DateTime.now();
+    final isToday =
+        closingDate.year == today.year &&
+        closingDate.month == today.month &&
+        closingDate.day == today.day;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_clock_outlined),
         title: const Text('Close this day?'),
-        content: const Text(
-          'This saves the displayed Daily Closing summary as a read-only record. Later cancellations or fixes remain visible in transaction history, but will not change this closed record.',
+        content: Text(
+          'This saves the full Daily Closing summary as a read-only record, including all posted cash and wallet movements. Later cancellations or fixes remain visible in transaction history, but will not change this closed record.${isToday ? ' You are closing today before midnight. Any sales or expenses entered later today will not appear in this saved closing. Finish today’s entries first.' : ''}',
         ),
         actions: [
           TextButton(
@@ -215,8 +238,21 @@ class _State extends State<DailyClosingScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    await widget.repository.closeDay(date);
+    if (confirmed != true || !mounted || closingDate != date) return;
+    try {
+      await widget.repository.closeDay(closingDate, expectedSummary: expected);
+    } catch (_) {
+      if (!mounted) return;
+      setState(reload);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Daily Closing changed or could not be saved. Review the refreshed summary and try again.',
+          ),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(reload);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -261,7 +297,10 @@ class _State extends State<DailyClosingScreen> {
                   style: Theme.of(c).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
-                DailyClosingOverview(summary: summary),
+                DailyClosingOverview(
+                  summary: summary,
+                  walletServicesAllowed: widget.walletServicesAllowed,
+                ),
               ],
             ),
           ),

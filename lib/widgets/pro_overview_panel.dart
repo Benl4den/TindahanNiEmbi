@@ -22,6 +22,7 @@ class ProOverviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -59,9 +60,18 @@ class ProOverviewPanel extends StatelessWidget {
                         constraints: const BoxConstraints(minHeight: 90),
                         padding: const EdgeInsets.all(13),
                         decoration: BoxDecoration(
-                          color: colors.surfaceContainerLow,
+                          color: dark
+                              ? colors.surfaceContainerLow
+                              : colors.surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colors.outlineVariant),
+                          border: Border.all(
+                            color: dark
+                                ? colors.outlineVariant
+                                : Color.alphaBlend(
+                                    colors.primary.withValues(alpha: .16),
+                                    colors.outlineVariant,
+                                  ),
+                          ),
                         ),
                         child: Row(
                           children: [

@@ -264,7 +264,7 @@ const helpArticles = <HelpArticle>[
   HelpArticle(
     id: HelpTopicId.gcash,
     group: 'GCash & Money',
-    title: 'GCash',
+    title: 'GCash Services',
     icon: Icons.account_balance_wallet_outlined,
     description: 'Track your store GCash balance, services, and adjustments.',
     steps: [
@@ -287,7 +287,7 @@ const helpArticles = <HelpArticle>[
   HelpArticle(
     id: HelpTopicId.maya,
     group: 'GCash & Money',
-    title: 'Maya',
+    title: 'Maya Services',
     icon: Icons.account_balance_wallet_outlined,
     description: 'Track your Maya balance, customer services, and adjustments separately from GCash.',
     steps: [

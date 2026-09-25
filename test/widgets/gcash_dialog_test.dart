@@ -8,8 +8,14 @@ import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/repositories/gcash_service_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_accounting_repository.dart';
 import 'package:tindahan_ni_embi/services/auth_service.dart';
+import 'package:tindahan_ni_embi/services/feature_access_service.dart';
 
 class StubDb extends Fake implements Database {}
+
+FeatureAccessService proAccess() => FeatureAccessService(
+  StubDb(),
+  planController: AppPlanController(OpenAccessPlanSource()),
+);
 
 class Wallet extends PaymentAccountingRepository {
   Wallet() : super(StubDb());
@@ -74,23 +80,129 @@ class DistinctWallet extends PaymentAccountingRepository {
   DistinctWallet(PaymentMethod provider, this.balance)
     : super(StubDb(), provider: provider);
   final int balance;
+  int summaryReads = 0;
+  int historyReads = 0;
   @override
-  Future<GCashSummary> summary([DateTime? selectedDay]) async =>
-      GCashSummary(balance: balance, todayIn: 0, todayOut: 0);
+  Future<GCashSummary> summary([DateTime? selectedDay]) async {
+    summaryReads++;
+    return GCashSummary(balance: balance, todayIn: 1200, todayOut: 3400);
+  }
+
   @override
-  Future<List<GCashLedgerEntry>> history({int limit = 100}) async => [];
+  Future<List<GCashLedgerEntry>> history({int limit = 100}) async {
+    historyReads++;
+    return [];
+  }
 }
 
 class DistinctServices extends GCashServiceRepository {
   DistinctServices(PaymentMethod provider)
     : super(StubDb(), provider: provider);
+  int feeReads = 0;
+  int historyReads = 0;
   @override
-  Future<int> totalFeeIncome() async => 0;
+  Future<int> totalFeeIncome() async {
+    feeReads++;
+    return 5300;
+  }
+
   @override
-  Future<List<GCashServiceTransaction>> recent({int limit = 50}) async => [];
+  Future<List<GCashServiceTransaction>> recent({int limit = 50}) async {
+    historyReads++;
+    return [];
+  }
+}
+
+class MutablePlanSource extends AppPlanSource {
+  AppPlan _plan = AppPlan.free;
+  @override
+  AppPlan get plan => _plan;
+  @override
+  Future<AppPlan> load() async => _plan;
+  void update(AppPlan plan) {
+    _plan = plan;
+    notifyListeners();
+  }
 }
 
 void main() {
+  for (final provider in [PaymentMethod.gcash, PaymentMethod.maya]) {
+    testWidgets('${provider.name} Free preview hides data and switches live', (
+      tester,
+    ) async {
+      final walletName = provider == PaymentMethod.maya ? 'Maya' : 'GCash';
+      final wallet = DistinctWallet(provider, 123400);
+      final services = DistinctServices(provider);
+      final source = MutablePlanSource();
+      final controller = AppPlanController(source);
+      final access = FeatureAccessService(StubDb(), planController: controller);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GCashScreen(
+            repository: wallet,
+            services: services,
+            auth: Auth(),
+            access: access,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Manage $walletName services in one place'),
+        findsOneWidget,
+      );
+      expect(find.text('$walletName Services'), findsOneWidget);
+      expect(find.text('PRO FEATURE'), findsOneWidget);
+      expect(find.text('Current $walletName Balance'), findsOneWidget);
+      expect(find.text('Cash-In Today'), findsOneWidget);
+      expect(find.text('Cash-Out Today'), findsOneWidget);
+      expect(find.text('Service Fees'), findsOneWidget);
+      expect(
+        find.text('Use owner-authorized wallet adjustments'),
+        findsOneWidget,
+      );
+      expect(find.text('Preview Pro'), findsOneWidget);
+      expect(find.text('₱1,234.00'), findsNothing);
+      expect(find.text('₱12.00'), findsNothing);
+      expect(find.text('₱34.00'), findsNothing);
+      expect(find.text('₱53.00'), findsNothing);
+      expect(find.text('Transaction History'), findsNothing);
+      expect(find.text('Add Adjustment'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Cash-In'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Cash-Out'), findsNothing);
+      expect(wallet.summaryReads, 0);
+      expect(wallet.historyReads, 0);
+      expect(services.feeReads, 0);
+      expect(services.historyReads, 0);
+
+      source.update(AppPlan.pro);
+      await tester.pumpAndSettle();
+      expect(find.text('₱1,234.00'), findsOneWidget);
+      expect(find.text('₱53.00'), findsOneWidget);
+      expect(find.text('Transaction History'), findsOneWidget);
+      expect(find.text('Add Adjustment'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Cash-In'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Cash-Out'), findsOneWidget);
+      expect(wallet.summaryReads, greaterThan(0));
+      expect(services.feeReads, greaterThan(0));
+
+      final readsBeforeDowngrade = wallet.summaryReads;
+      source.update(AppPlan.free);
+      await tester.pumpAndSettle();
+      expect(find.text('₱1,234.00'), findsNothing);
+      expect(find.text('Transaction History'), findsNothing);
+      expect(find.text('Preview Pro'), findsOneWidget);
+      expect(wallet.summaryReads, readsBeforeDowngrade);
+
+      source.update(AppPlan.pro);
+      await tester.pumpAndSettle();
+      expect(find.text('₱1,234.00'), findsOneWidget);
+      expect(wallet.summaryReads, greaterThan(readsBeforeDowngrade));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('switching from GCash to Maya reloads the independent balance', (
     tester,
   ) async {
@@ -101,6 +213,7 @@ void main() {
             repository: DistinctWallet(provider, balance),
             services: DistinctServices(provider),
             auth: Auth(),
+            access: proAccess(),
           ),
         ),
       );
@@ -110,7 +223,7 @@ void main() {
     await show(PaymentMethod.gcash, 123400);
     expect(find.text('₱1,234.00'), findsOneWidget);
     await show(PaymentMethod.maya, 567800);
-    expect(find.text('Maya'), findsOneWidget);
+    expect(find.text('Maya Services'), findsWidgets);
     expect(find.text('₱5,678.00'), findsOneWidget);
     expect(find.text('₱1,234.00'), findsNothing);
     await show(PaymentMethod.gcash, 123400);
@@ -140,6 +253,7 @@ void main() {
             repository: Wallet(),
             services: services,
             auth: Auth(),
+            access: proAccess(),
           ),
         ),
       );
@@ -179,6 +293,7 @@ void main() {
             repository: wallet,
             services: services,
             auth: Auth(),
+            access: proAccess(),
           ),
         ),
       );
@@ -228,6 +343,7 @@ void main() {
             repository: Wallet(),
             services: services,
             auth: Auth(),
+            access: proAccess(),
           ),
         ),
       );
@@ -270,6 +386,7 @@ void main() {
           repository: Wallet(),
           services: Services(),
           auth: Auth(),
+          access: proAccess(),
         ),
       ),
     );

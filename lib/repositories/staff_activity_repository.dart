@@ -21,7 +21,10 @@ class StaffActivityRepository {
   const StaffActivityRepository(this.db);
   final Database db;
 
-  Future<List<StaffActivitySummary>> forDay(DateTime day) async {
+  Future<List<StaffActivitySummary>> forDay(
+    DateTime day, {
+    bool includeWalletServices = true,
+  }) async {
     final start = DateTime(
       day.year,
       day.month,
@@ -93,6 +96,7 @@ class StaffActivityRepository {
       );
       summary.expenses = expenses.$1;
       summary.expensesAmount = expenses.$2;
+      if (!includeWalletServices) continue;
       final actorWhere = _actorWhere(summary.name);
       final actorArgs = _actorArgs(summary.name);
       final services = await db.rawQuery(

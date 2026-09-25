@@ -109,6 +109,9 @@ class _State extends State<AppShell> {
   String? _developmentPlanError;
   Future<AppPlan>? _developmentPlanLoad;
   String get role => widget.role == UserRole.owner ? 'OWNER' : 'STAFF';
+  bool get _walletServicesAllowed =>
+      FeatureAccessService(widget.database)
+          .allowsCurrent(ProFeature.gcashServices);
 
   Widget _developerPlanSection() {
     final controller = AppPlanController.instance;
@@ -459,7 +462,7 @@ class _State extends State<AppShell> {
       ),
       const NavigationDestination(
         icon: WalletNavLogo(maya: false),
-        label: 'GCash',
+        label: 'GCash Services',
       ),
     ];
     bodyDestinations.add(
@@ -481,7 +484,7 @@ class _State extends State<AppShell> {
     bodyDestinations.add(
       const NavigationDestination(
         icon: WalletNavLogo(maya: true),
-        label: 'Maya',
+        label: 'Maya Services',
       ),
     );
     const navTargets = [
@@ -558,6 +561,7 @@ class _State extends State<AppShell> {
           ? DashboardScreen(
               refreshRevision: dashboardRevision,
               database: widget.database,
+              walletServicesAllowed: _walletServicesAllowed,
               navigate: (target) {
                 dashboardAddExpense = target == 7;
                 _select(target);
@@ -696,11 +700,15 @@ class _State extends State<AppShell> {
       widget.role == UserRole.owner
           ? DailyClosingScreen(
               repository: OperationsRepository(widget.database),
+              walletServicesAllowed: _walletServicesAllowed,
             )
           : _denied(),
     9 =>
       widget.role == UserRole.owner
-          ? ReportsScreen(repository: ReportsRepository(widget.database))
+          ? ReportsScreen(
+              repository: ReportsRepository(widget.database),
+              walletServicesAllowed: _walletServicesAllowed,
+            )
           : _denied(),
     14 =>
       widget.role == UserRole.owner
@@ -717,12 +725,14 @@ class _State extends State<AppShell> {
           : _denied(),
     11 => TransactionHistoryScreen(
       repository: TransactionHistoryRepository(widget.database),
+      access: FeatureAccessService(widget.database),
     ),
     12 => GCashScreen(
       key: const ValueKey('gcash-wallet-screen'),
       repository: PaymentAccountingRepository(widget.database, actorRole: role),
       services: GCashServiceRepository(widget.database, actorRole: role),
       auth: AuthService(widget.database),
+      access: FeatureAccessService(widget.database),
     ),
     16 => GCashScreen(
       key: const ValueKey('maya-wallet-screen'),
@@ -737,6 +747,7 @@ class _State extends State<AppShell> {
         provider: PaymentMethod.maya,
       ),
       auth: AuthService(widget.database),
+      access: FeatureAccessService(widget.database),
     ),
     _ => _more(),
   };
@@ -813,7 +824,7 @@ class _State extends State<AppShell> {
                       final proLocked =
                           widget.role == UserRole.owner &&
                           AppPlanController.instance.plan == AppPlan.free &&
-                          const {1, 2, 15}.contains(target);
+                          const {1, 2, 12, 15, 16}.contains(target);
                       final sectionStart =
                           i == 0 ||
                           _navSection(navTargets[i - 1]) != _navSection(target);
@@ -1125,6 +1136,7 @@ class _State extends State<AppShell> {
               icon: Icons.today,
               page: DailyClosingScreen(
                 repository: OperationsRepository(widget.database),
+                walletServicesAllowed: _walletServicesAllowed,
               ),
               action: null,
             ),
@@ -1177,6 +1189,7 @@ class _State extends State<AppShell> {
               icon: Icons.assessment,
               page: ReportsScreen(
                 repository: ReportsRepository(widget.database),
+                walletServicesAllowed: _walletServicesAllowed,
               ),
               action: null,
             ),
@@ -1186,6 +1199,7 @@ class _State extends State<AppShell> {
               icon: Icons.history,
               page: ActivityLogsScreen(
                 repository: ActivityLogRepository(widget.database),
+                walletServicesAllowed: _walletServicesAllowed,
               ),
               action: null,
             ),
@@ -1195,6 +1209,7 @@ class _State extends State<AppShell> {
               icon: Icons.groups_2_outlined,
               page: StaffActivityScreen(
                 repository: StaffActivityRepository(widget.database),
+                walletServicesAllowed: _walletServicesAllowed,
               ),
               action: null,
             ),

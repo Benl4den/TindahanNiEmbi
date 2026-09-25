@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../widgets/app_back_navigation.dart';
+import '../../../widgets/feature_access_builder.dart';
+import '../../../widgets/pro_feature_preview.dart';
+import '../../../widgets/wallet_nav_logo.dart';
 
 import '../../../core/formatters/display_labels.dart';
 
@@ -12,6 +15,7 @@ import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/gcash_service_repository.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/app_refresh_controller.dart';
+import '../../../services/feature_access_service.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 
@@ -21,10 +25,12 @@ class GCashScreen extends StatefulWidget {
     required this.repository,
     required this.services,
     required this.auth,
+    required this.access,
   });
   final PaymentAccountingRepository repository;
   final GCashServiceRepository services;
   final AuthService auth;
+  final FeatureAccessService access;
 
   @override
   State<GCashScreen> createState() => _GCashScreenState();
@@ -36,12 +42,12 @@ class _GCashScreenState extends State<GCashScreen> {
   late Future<(GCashSummary, List<GCashLedgerEntry>)> data;
   late Future<int> feeTotal;
   late Future<List<GCashServiceTransaction>> serviceHistory;
+  bool _loaded = false;
   int historyLimit = 100;
 
   @override
   void initState() {
     super.initState();
-    _reload();
     AppRefreshController.instance.addListener(_changed);
   }
 
@@ -51,7 +57,7 @@ class _GCashScreenState extends State<GCashScreen> {
     if (oldWidget.repository.provider != widget.repository.provider ||
         oldWidget.repository.db != widget.repository.db) {
       historyLimit = 100;
-      _reload();
+      _loaded = false;
     }
   }
 
@@ -66,11 +72,12 @@ class _GCashScreenState extends State<GCashScreen> {
     // while its review dialog is still being popped; rebuilding inherited
     // widgets at that exact moment causes Flutter's _dependents assertion.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(_reload);
+      if (mounted && _loaded) setState(_reload);
     });
   }
 
   void _reload() {
+    _loaded = true;
     feeTotal = widget.services.totalFeeIncome();
     serviceHistory = widget.services.recent(limit: historyLimit);
     data =
@@ -84,318 +91,368 @@ class _GCashScreenState extends State<GCashScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(wallet),
-          const Text(
-            'Manage Cash-In, Cash-Out, and service fees in one place',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
-          ),
-        ],
-      ),
-      actions: [
-        HelpButton(
-          topic: widget.repository.provider == PaymentMethod.maya
-              ? HelpTopicId.maya
-              : HelpTopicId.gcash,
-        ),
-      ],
-    ),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _adjust,
-      icon: const Icon(Icons.add_card),
-      label: const Text('Add Adjustment'),
-    ),
-    body: FutureBuilder<(GCashSummary, List<GCashLedgerEntry>)>(
-      future: data,
-      builder: (_, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: TextButton(
-              onPressed: () => setState(_reload),
-              child: Text('$wallet records could not be loaded. Tap to retry.'),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final (summary, entries) = snapshot.data!;
-        return RefreshIndicator(
-          onRefresh: () async {
-            setState(_reload);
-            await Future.wait([data, feeTotal, serviceHistory]);
-          },
-          child: ListView(
-            padding: const EdgeInsets.all(24),
+  Widget build(BuildContext context) => FeatureAccessBuilder(
+    access: widget.access,
+    feature: widget.repository.provider == PaymentMethod.maya
+        ? ProFeature.mayaServices
+        : ProFeature.gcashServices,
+    builder: (context, allowed) {
+      if (allowed) {
+        if (!_loaded) _reload();
+      } else {
+        // A downgrade removes the live dashboard and forces a fresh read on
+        // the next upgrade. The ledger itself is never changed.
+        _loaded = false;
+      }
+      return Scaffold(
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Colors.blue.shade700,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'CURRENT ${wallet.toUpperCase()} BALANCE',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          Text(
-                            standardMoney(summary.balance),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 30,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .16),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.receipt_long_outlined,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          Text(
-                            '${summary.todayTransactions}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            summary.todayTransactions == 1
-                                ? 'Transaction today'
-                                : 'Transactions today',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              Text('$wallet Services'),
+              const Text(
+                'Manage Cash-In, Cash-Out, and service fees in one place',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
               ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (_, constraints) {
-                  final columns = constraints.maxWidth >= 640
-                      ? 4
-                      : constraints.maxWidth >= 300
-                      ? 2
-                      : 1;
-                  final width =
-                      (constraints.maxWidth - 12 * (columns - 1)) / columns;
-                  return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: width,
-                        child: _metric(
-                          'Money in · Today',
-                          summary.todayIn,
-                          Colors.green,
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _metric(
-                          'Money out · Today',
-                          summary.todayOut,
-                          Colors.red,
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: _metric(
-                          'Net change · Today',
-                          summary.todayNet,
-                          summary.todayNet < 0 ? Colors.red : Colors.blue,
-                        ),
-                      ),
-                      SizedBox(
-                        width: width,
-                        child: FutureBuilder<int>(
-                          future: feeTotal,
-                          builder: (_, fees) => fees.hasError
-                              ? _retryHistory()
-                              : !fees.hasData
-                              ? const LinearProgressIndicator()
-                              : _metric(
-                                  'Service fees • All time',
-                                  fees.data!,
-                                  Colors.green.shade800,
-                                ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '$wallet Services',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () => _service('CASH_IN'),
-                    icon: const Icon(Icons.call_made),
-                    label: const Text('Cash-In'),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _service('CASH_OUT'),
-                    icon: const Icon(Icons.call_received),
-                    label: const Text('Cash-Out'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Transaction History',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              if (entries.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(child: Text('No $wallet activity yet.')),
-                  ),
-                )
-              else
-                FutureBuilder<List<GCashServiceTransaction>>(
-                  future: serviceHistory,
-                  builder: (_, services) {
-                    if (services.hasError) return _retryHistory();
-                    if (!services.hasData) {
-                      return const LinearProgressIndicator();
-                    }
-                    final byId = {
-                      for (final service
-                          in services.data ?? <GCashServiceTransaction>[])
-                        service.id: service,
-                    };
-                    return DayHistory<GCashLedgerEntry>(
-                      storageKey: '${wallet.toLowerCase()}-wallet',
-                      items: entries,
-                      date: (e) => e.occurredAt,
-                      itemBuilder: (entry) => Card(
-                        key: ValueKey(
-                          '${wallet.toLowerCase()}-row-${entry.id}',
-                        ),
-                        child: ExpansionTile(
-                          key: PageStorageKey(
-                            '${wallet.toLowerCase()}-entry-${entry.id}',
-                          ),
-                          leading: CircleAvatar(
-                            backgroundColor: entry.amountChangeCentavos > 0
-                                ? Colors.green.shade50
-                                : Colors.red.shade50,
-                            child: Icon(
-                              entry.amountChangeCentavos > 0
-                                  ? Icons.south_west
-                                  : Icons.north_east,
-                              color: entry.amountChangeCentavos > 0
-                                  ? Colors.green.shade800
-                                  : Colors.red.shade800,
-                            ),
-                          ),
-                          title: Text(
-                            entry.loanId != null
-                                ? '5/6 Loan Received'
-                                : entry.loanPaymentId != null
-                                ? entry.reversalOfEntryId != null
-                                      ? '5/6 Loan Payment Reversed'
-                                      : '5/6 Loan Payment'
-                                : _label(entry.type),
-                          ),
-                          subtitle: Text(
-                            '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: entry.amountChangeCentavos > 0
-                                  ? Colors.green.shade800
-                                  : Colors.red.shade800,
-                            ),
-                          ),
-                          children: [
-                            if (byId[entry.gcashServiceTransactionId]
-                                case final service?)
-                              _serviceDetails(service),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '${_when(entry.occurredAt.toLocal())}'
-                                  '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
-                                  '${entry.notes == null ? '' : '\n${entry.notes}'}',
-                                ),
-                              ),
-                            ),
-                          ],
+            ],
+          ),
+          actions: [
+            HelpButton(
+              topic: widget.repository.provider == PaymentMethod.maya
+                  ? HelpTopicId.maya
+                  : HelpTopicId.gcash,
+            ),
+          ],
+        ),
+        floatingActionButton: allowed
+            ? FloatingActionButton.extended(
+                onPressed: _adjust,
+                icon: const Icon(Icons.add_card),
+                label: const Text('Add Adjustment'),
+              )
+            : null,
+        body: allowed
+            ? FutureBuilder<(GCashSummary, List<GCashLedgerEntry>)>(
+                future: data,
+                builder: (_, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: TextButton(
+                        onPressed: () => setState(_reload),
+                        child: Text(
+                          '$wallet records could not be loaded. Tap to retry.',
                         ),
                       ),
                     );
-                  },
-                ),
-              Text(
-                'Showing up to $historyLimit latest transactions. Service fees include all dates.',
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final (summary, entries) = snapshot.data!;
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(_reload);
+                      await Future.wait([data, feeTotal, serviceHistory]);
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Theme.of(context).colorScheme.primary,
+                                Colors.blue.shade700,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'CURRENT ${wallet.toUpperCase()} BALANCE',
+                                      style: TextStyle(color: Colors.white70),
+                                    ),
+                                    Text(
+                                      standardMoney(summary.balance),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .16),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Icon(
+                                      Icons.receipt_long_outlined,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    Text(
+                                      '${summary.todayTransactions}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      summary.todayTransactions == 1
+                                          ? 'Transaction today'
+                                          : 'Transactions today',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        LayoutBuilder(
+                          builder: (_, constraints) {
+                            final columns = constraints.maxWidth >= 640
+                                ? 4
+                                : constraints.maxWidth >= 300
+                                ? 2
+                                : 1;
+                            final width =
+                                (constraints.maxWidth - 12 * (columns - 1)) /
+                                columns;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                SizedBox(
+                                  width: width,
+                                  child: _metric(
+                                    'Money in · Today',
+                                    summary.todayIn,
+                                    Colors.green,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: width,
+                                  child: _metric(
+                                    'Money out · Today',
+                                    summary.todayOut,
+                                    Colors.red,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: width,
+                                  child: _metric(
+                                    'Net change · Today',
+                                    summary.todayNet,
+                                    summary.todayNet < 0
+                                        ? Colors.red
+                                        : Colors.blue,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: width,
+                                  child: FutureBuilder<int>(
+                                    future: feeTotal,
+                                    builder: (_, fees) => fees.hasError
+                                        ? _retryHistory()
+                                        : !fees.hasData
+                                        ? const LinearProgressIndicator()
+                                        : _metric(
+                                            'Service fees • All time',
+                                            fees.data!,
+                                            Colors.green.shade800,
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          '$wallet Services',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () => _service('CASH_IN'),
+                              icon: const Icon(Icons.call_made),
+                              label: const Text('Cash-In'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: () => _service('CASH_OUT'),
+                              icon: const Icon(Icons.call_received),
+                              label: const Text('Cash-Out'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Transaction History',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        if (entries.isEmpty)
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Center(
+                                child: Text('No $wallet activity yet.'),
+                              ),
+                            ),
+                          )
+                        else
+                          FutureBuilder<List<GCashServiceTransaction>>(
+                            future: serviceHistory,
+                            builder: (_, services) {
+                              if (services.hasError) return _retryHistory();
+                              if (!services.hasData) {
+                                return const LinearProgressIndicator();
+                              }
+                              final byId = {
+                                for (final service
+                                    in services.data ??
+                                        <GCashServiceTransaction>[])
+                                  service.id: service,
+                              };
+                              return DayHistory<GCashLedgerEntry>(
+                                storageKey: '${wallet.toLowerCase()}-wallet',
+                                items: entries,
+                                date: (e) => e.occurredAt,
+                                itemBuilder: (entry) => Card(
+                                  key: ValueKey(
+                                    '${wallet.toLowerCase()}-row-${entry.id}',
+                                  ),
+                                  child: ExpansionTile(
+                                    key: PageStorageKey(
+                                      '${wallet.toLowerCase()}-entry-${entry.id}',
+                                    ),
+                                    leading: CircleAvatar(
+                                      backgroundColor:
+                                          entry.amountChangeCentavos > 0
+                                          ? Colors.green.shade50
+                                          : Colors.red.shade50,
+                                      child: Icon(
+                                        entry.amountChangeCentavos > 0
+                                            ? Icons.south_west
+                                            : Icons.north_east,
+                                        color: entry.amountChangeCentavos > 0
+                                            ? Colors.green.shade800
+                                            : Colors.red.shade800,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      entry.loanId != null
+                                          ? '5/6 Loan Received'
+                                          : entry.loanPaymentId != null
+                                          ? entry.reversalOfEntryId != null
+                                                ? '5/6 Loan Payment Reversed'
+                                                : '5/6 Loan Payment'
+                                          : _label(entry.type),
+                                    ),
+                                    subtitle: Text(
+                                      '${entry.amountChangeCentavos > 0 ? '+' : '-'}${standardMoney(entry.amountChangeCentavos.abs())}',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: entry.amountChangeCentavos > 0
+                                            ? Colors.green.shade800
+                                            : Colors.red.shade800,
+                                      ),
+                                    ),
+                                    children: [
+                                      if (byId[entry.gcashServiceTransactionId]
+                                          case final service?)
+                                        _serviceDetails(service),
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          0,
+                                          16,
+                                          16,
+                                        ),
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            '${_when(entry.occurredAt.toLocal())}'
+                                            '${entry.gcashReference == null ? '' : '\nReference: ${entry.gcashReference}'}'
+                                            '${entry.notes == null ? '' : '\n${entry.notes}'}',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        Text(
+                          'Showing up to $historyLimit latest transactions. Service fees include all dates.',
+                        ),
+                        TextButton.icon(
+                          onPressed: () => setState(() {
+                            historyLimit += 100;
+                            _reload();
+                          }),
+                          icon: const Icon(Icons.expand_more),
+                          label: const Text('Load older transactions'),
+                        ),
+                        if (summary.balance < 0)
+                          Text(
+                            'Recorded $wallet is negative. Reconcile it against your actual wallet before making further payments.',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        const SizedBox(height: 90),
+                      ],
+                    ),
+                  );
+                },
+              )
+            : ProFeaturePreview(
+                leading: WalletNavLogo(maya: wallet == 'Maya'),
+                title: 'Manage $wallet services in one place',
+                description: 'Track your wallet balance, Cash-In, Cash-Out, service fees, and transaction history.',
+                metrics: [
+                  'Current $wallet Balance',
+                  'Cash-In Today',
+                  'Cash-Out Today',
+                  'Service Fees',
+                ],
+                benefits: [
+                  'Record $wallet Cash-In and Cash-Out',
+                  'Track service fees automatically',
+                  'Monitor your $wallet wallet balance',
+                  'View service transaction history',
+                  'Use owner-authorized wallet adjustments',
+                ],
               ),
-              TextButton.icon(
-                onPressed: () => setState(() {
-                  historyLimit += 100;
-                  _reload();
-                }),
-                icon: const Icon(Icons.expand_more),
-                label: const Text('Load older transactions'),
-              ),
-              if (summary.balance < 0)
-                Text(
-                  'Recorded $wallet is negative. Reconcile it against your actual wallet before making further payments.',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              const SizedBox(height: 90),
-            ],
-          ),
-        );
-      },
-    ),
+      );
+    },
   );
 
   Widget _metric(String label, int amount, Color color) => SizedBox(
@@ -488,7 +545,14 @@ class _GCashScreenState extends State<GCashScreen> {
     child: const Text('Could not load records. Tap to retry.'),
   );
 
+  Future<bool> _canManageServices() => widget.access.allows(
+    widget.repository.provider == PaymentMethod.maya
+        ? ProFeature.mayaServices
+        : ProFeature.gcashServices,
+  );
+
   Future<void> _adjust() async {
+    if (!await _canManageServices()) return;
     bool hasOpening;
     try {
       hasOpening = await widget.repository.hasOpeningBalance();
@@ -632,6 +696,11 @@ class _GCashScreenState extends State<GCashScreen> {
                               'Incorrect Owner PIN.',
                             );
                           }
+                          if (!await _canManageServices()) {
+                            throw const PaymentAccountingException(
+                              'Wallet services require Pro access.',
+                            );
+                          }
                           await widget.repository.addManual(
                             type: type,
                             amountCentavos: cents,
@@ -670,6 +739,7 @@ class _GCashScreenState extends State<GCashScreen> {
   }
 
   Future<void> _service(String type) async {
+    if (!await _canManageServices() || !mounted) return;
     final requestId = GCashServiceRepository.newRequestId();
     final principal = TextEditingController();
     final fee = TextEditingController(text: '0');
@@ -882,6 +952,11 @@ class _GCashScreenState extends State<GCashScreen> {
                         }
                         setDialog(() => saving = true);
                         try {
+                          if (!await _canManageServices()) {
+                            throw const GCashServiceException(
+                              'Wallet services require Pro access.',
+                            );
+                          }
                           await widget.services.record(
                             type: type,
                             requestId: requestId,
@@ -936,6 +1011,7 @@ class _GCashScreenState extends State<GCashScreen> {
   }
 
   Future<void> _reverseService(GCashServiceTransaction service) async {
+    if (!await _canManageServices() || !mounted) return;
     final reason = TextEditingController();
     final pin = TextEditingController();
     String? error;
@@ -1003,6 +1079,11 @@ class _GCashScreenState extends State<GCashScreen> {
                               UserRole.owner) {
                             throw const GCashServiceException(
                               'Incorrect Owner PIN.',
+                            );
+                          }
+                          if (!await _canManageServices()) {
+                            throw const GCashServiceException(
+                              'Wallet services require Pro access.',
                             );
                           }
                           await widget.services.reverse(

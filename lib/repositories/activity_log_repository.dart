@@ -26,6 +26,7 @@ class ActivityLogRepository {
     DateTime date, {
     String? category,
     String query = '',
+    bool includeWalletServices = true,
   }) async {
     final localStart = DateTime(date.year, date.month, date.day);
     final start = localStart.toUtc().toIso8601String();
@@ -36,6 +37,14 @@ class ActivityLogRepository {
     final q = query.trim();
     final conditions = ['created_at>=?', 'created_at<?'];
     final args = <Object?>[start, end];
+    if (!includeWalletServices) {
+      conditions.add(
+        "COALESCE(related_entity_type,'') NOT IN ('GCASH_SERVICE','MAYA_SERVICE','GCASH_LEDGER','MAYA_LEDGER')",
+      );
+      conditions.add(
+        "event_type NOT LIKE 'GCASH_%' AND event_type NOT LIKE 'MAYA_%'",
+      );
+    }
     switch (category) {
       case 'SECURITY':
         conditions.add(

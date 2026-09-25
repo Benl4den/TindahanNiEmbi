@@ -9,15 +9,7 @@ import '../../../widgets/pro_feature_preview.dart';
 import '../../../widgets/feature_access_builder.dart';
 import '../../../widgets/pro_overview_panel.dart';
 
-int? _moneyCentavos(String input) {
-  final value = input.trim();
-  if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(value)) return null;
-  final parts = value.split('.');
-  final whole = int.tryParse(parts.first);
-  if (whole == null) return null;
-  final cents = parts.length == 1 ? 0 : int.parse(parts.last.padRight(2, '0'));
-  return whole * 100 + cents;
-}
+int? _moneyCentavos(String input) => parseMoneyCentavos(input);
 
 Widget _loanMetric(BuildContext context, String label, int amount) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,6 +121,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     final loanId = loan['id']! as int;
     Map<String, Object?>? paymentToCancel;
     var recordPayment = false;
+    var correctBorrowed = false;
     await _showLoanDialog<void>(
       (dialog) => AlertDialog(
         title: Row(
@@ -228,7 +221,10 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 20),
-                                Row(
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 4,
+                                  alignment: WrapAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       'Repayment progress',
@@ -236,7 +232,6 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                                           .textTheme
                                           .titleSmall,
                                     ),
-                                    const Spacer(),
                                     Text(
                                       '${standardMoney(paid)} of ${standardMoney(total)} paid',
                                     ),
@@ -309,6 +304,17 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
           ),
         ),
         actions: [
+          if (widget.repository.actorRole == 'OWNER' &&
+              (loan['source_kind'] != 'NEW' ||
+                  loan['received_payment_method'] == 'CASH'))
+            OutlinedButton.icon(
+              onPressed: () {
+                correctBorrowed = true;
+                Navigator.pop(dialog);
+              },
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Edit Loan'),
+            ),
           if (loan['status'] == 'ACTIVE')
             FilledButton.icon(
               onPressed: () async {
@@ -324,9 +330,147 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     if (!mounted) return;
     if (paymentToCancel != null) {
       await _cancelPayment(paymentToCancel!);
+    } else if (correctBorrowed) {
+      await _correctBorrowedAmount(loan);
     } else if (recordPayment) {
       await _pay(loan);
     }
+  }
+
+  Future<void> _correctBorrowedAmount(Map<String, Object?> loan) async {
+    final oldBorrowed = loan['borrowed_amount_centavos']! as int;
+    final agreed = loan['agreed_repayment_centavos']! as int;
+    final amount = TextEditingController(
+      text:
+          '${oldBorrowed ~/ 100}.${(oldBorrowed % 100).toString().padLeft(2, '0')}',
+    );
+    final reason = TextEditingController();
+    final pin = TextEditingController();
+    var busy = false;
+    var corrected = false;
+    String? error;
+    await _showLoanDialog<void>(
+      (dialog) => StatefulBuilder(
+        builder: (_, update) => AlertDialog(
+          scrollable: true,
+          title: const Text('Correct Borrowed Amount'),
+          content: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Currently recorded: ${standardMoney(oldBorrowed)}'),
+                Text('Total to repay: ${standardMoney(agreed)}'),
+                Text(
+                  'Payments already made: ${standardMoney(loan['paid_centavos']! as int)}',
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Correct amount borrowed',
+                    prefixText: '₱ ',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason for correction',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pin,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Owner PIN'),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  loan['source_kind'] == 'NEW'
+                      ? 'This also corrects the original cash received total. Payments and total to repay stay unchanged. Closed days and wallet-funded loans cannot be corrected here.'
+                      : 'Payments and total to repay stay unchanged. The original amount and correction reason remain in activity history.',
+                  style: Theme.of(dialog).textTheme.bodySmall,
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style: TextStyle(color: Theme.of(dialog).colorScheme.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      if (busy) return;
+                      final cents = _moneyCentavos(amount.text);
+                      if (cents == null ||
+                          cents <= 0 ||
+                          cents > agreed ||
+                          cents == oldBorrowed ||
+                          reason.text.trim().isEmpty ||
+                          pin.text.trim().isEmpty) {
+                        update(
+                          () => error = 'Enter a different valid amount (no more than total to repay), a reason, and your Owner PIN.',
+                        );
+                        return;
+                      }
+                      update(() {
+                        busy = true;
+                        error = null;
+                      });
+                      try {
+                        final role = await AuthService(widget.repository.db)
+                            .verify(pin.text);
+                        if (role != UserRole.owner) {
+                          throw StateError('Incorrect Owner PIN.');
+                        }
+                        await widget.repository.correctBorrowedAmount(
+                          loanId: loan['id']! as int,
+                          borrowed: cents,
+                          reason: reason.text,
+                          ownerPinAuthorized: true,
+                        );
+                        corrected = true;
+                        if (dialog.mounted) Navigator.pop(dialog);
+                      } catch (e) {
+                        if (dialog.mounted) {
+                          update(
+                            () => error = e is StateError
+                                ? e.message
+                                : e is ArgumentError
+                                ? e.message?.toString() ?? 'Check the amount.'
+                                : 'Could not correct the loan. Please try again.',
+                          );
+                        }
+                      } finally {
+                        if (dialog.mounted) update(() => busy = false);
+                      }
+                    },
+              child: const Text('Save Correction'),
+            ),
+          ],
+        ),
+      ),
+    );
+    amount.dispose();
+    reason.dispose();
+    pin.dispose();
+    if (corrected) _reload();
   }
 
   Future<void> _cancelPayment(Map<String, Object?> payment) async {
@@ -768,6 +912,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
               onPressed: busy
                   ? null
                   : () async {
+                      if (busy) return;
                       final borrowedCents = _moneyCentavos(borrowed.text);
                       final agreedCents = _moneyCentavos(agreed.text);
                       final scheduledCents = scheduled.text.trim().isEmpty
@@ -789,6 +934,36 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                         busy = true;
                         error = null;
                       });
+                      if (agreedCents > borrowedCents * 3) {
+                        final confirmed = await showDialog<bool>(
+                          context: x,
+                          builder: (warningContext) => AlertDialog(
+                            title: const Text('Check these loan amounts'),
+                            content: Text(
+                              'Amount borrowed: ${standardMoney(borrowedCents)}\n'
+                              'Total to repay: ${standardMoney(agreedCents)}\n\n'
+                              'The repayment is more than three times the borrowed amount. Check for a missing digit before saving.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(warningContext, false),
+                                child: const Text('Edit Amounts'),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.pop(warningContext, true),
+                                child: const Text('Amounts Are Correct'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (!x.mounted) return;
+                        if (confirmed != true) {
+                          set(() => busy = false);
+                          return;
+                        }
+                      }
                       try {
                         await widget.repository.create(
                           lenderId: lender,

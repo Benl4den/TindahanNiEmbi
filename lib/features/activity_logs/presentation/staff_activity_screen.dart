@@ -5,8 +5,13 @@ import '../../../repositories/staff_activity_repository.dart';
 import '../../../services/app_refresh_controller.dart';
 
 class StaffActivityScreen extends StatefulWidget {
-  const StaffActivityScreen({super.key, required this.repository});
+  const StaffActivityScreen({
+    super.key,
+    required this.repository,
+    this.walletServicesAllowed = true,
+  });
   final StaffActivityRepository repository;
+  final bool walletServicesAllowed;
 
   @override
   State<StaffActivityScreen> createState() => _StaffActivityScreenState();
@@ -29,7 +34,10 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
     super.dispose();
   }
 
-  void _reload() => data = widget.repository.forDay(day);
+  void _reload() => data = widget.repository.forDay(
+    day,
+    includeWalletServices: widget.walletServicesAllowed,
+  );
 
   void _changed() {
     if (mounted) setState(_reload);
@@ -128,19 +136,22 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
                             'Payments collected',
                             '${s.payments} • ${standardMoney(s.paymentsAmount)}',
                           ),
-                          _metric(
-                            'GCash services',
-                            '${s.cashIn} Cash-In • ${s.cashOut} Cash-Out',
-                          ),
-                          _metric(
-                            'GCash fees earned',
-                            standardMoney(s.serviceFees),
-                          ),
+                          if (widget.walletServicesAllowed) ...[
+                            _metric(
+                              'GCash services',
+                              '${s.cashIn} Cash-In • ${s.cashOut} Cash-Out',
+                            ),
+                            _metric(
+                              'GCash fees earned',
+                              standardMoney(s.serviceFees),
+                            ),
+                          ],
                           _metric(
                             'Expenses recorded',
                             '${s.expenses} • ${standardMoney(s.expensesAmount)}',
                           ),
-                          _metric('Adjustments recorded', '${s.adjustments}'),
+                          if (widget.walletServicesAllowed)
+                            _metric('Adjustments recorded', '${s.adjustments}'),
                         ],
                       ),
                     ],

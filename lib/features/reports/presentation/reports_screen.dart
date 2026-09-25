@@ -7,8 +7,13 @@ import '../../../repositories/reports_repository.dart';
 import '../../../widgets/app_state_view.dart';
 
 class ReportsScreen extends StatelessWidget {
-  const ReportsScreen({super.key, required this.repository});
+  const ReportsScreen({
+    super.key,
+    required this.repository,
+    this.walletServicesAllowed = true,
+  });
   final ReportsRepository repository;
+  final bool walletServicesAllowed;
   @override
   Widget build(BuildContext context) => DefaultTabController(
     length: 4,
@@ -216,91 +221,94 @@ class ReportsScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            Text(
-              'GCash Services • All Time',
-              style: Theme.of(c).textTheme.titleLarge,
-            ),
-            FutureBuilder<Map<String, Object?>>(
-              future: repository.gcashServiceSummary(),
-              builder: (_, services) {
-                if (services.hasError) {
-                  return const Text(
-                    'Could not load GCash service totals. Reopen Reports to try again.',
+            if (walletServicesAllowed) ...[
+              Text(
+                'GCash Services • All Time',
+                style: Theme.of(c).textTheme.titleLarge,
+              ),
+              FutureBuilder<Map<String, Object?>>(
+                future: repository.gcashServiceSummary(),
+                builder: (_, services) {
+                  if (services.hasError) {
+                    return const Text(
+                      'Could not load GCash service totals. Reopen Reports to try again.',
+                    );
+                  }
+                  if (!services.hasData) return const LinearProgressIndicator();
+                  final g = services.data!;
+                  final fees =
+                      (g['cash_in_fees']! as int) +
+                      (g['cash_out_fees']! as int);
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      SizedBox(
+                        width: 280,
+                        child: _total(
+                          'Cash-In (${g['cash_in_count']})',
+                          g['cash_in_principal']! as int,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 280,
+                        child: _total(
+                          'Cash-Out (${g['cash_out_count']})',
+                          g['cash_out_principal']! as int,
+                        ),
+                      ),
+                      SizedBox(width: 280, child: _total('Fees Earned', fees)),
+                    ],
                   );
-                }
-                if (!services.hasData) return const LinearProgressIndicator();
-                final g = services.data!;
-                final fees =
-                    (g['cash_in_fees']! as int) + (g['cash_out_fees']! as int);
-                return Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    SizedBox(
-                      width: 280,
-                      child: _total(
-                        'Cash-In (${g['cash_in_count']})',
-                        g['cash_in_principal']! as int,
+                },
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Maya Services • All Time',
+                style: Theme.of(c).textTheme.titleLarge,
+              ),
+              FutureBuilder<Map<String, Object?>>(
+                future: repository.gcashServiceSummary(maya: true),
+                builder: (_, services) {
+                  if (services.hasError) {
+                    return const Text(
+                      'Could not load Maya service totals. Reopen Reports to try again.',
+                    );
+                  }
+                  if (!services.hasData) return const LinearProgressIndicator();
+                  final m = services.data!;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      SizedBox(
+                        width: 280,
+                        child: _total(
+                          'Cash-In (${m['cash_in_count']})',
+                          m['cash_in_principal']! as int,
+                        ),
                       ),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: _total(
-                        'Cash-Out (${g['cash_out_count']})',
-                        g['cash_out_principal']! as int,
+                      SizedBox(
+                        width: 280,
+                        child: _total(
+                          'Cash-Out (${m['cash_out_count']})',
+                          m['cash_out_principal']! as int,
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 280, child: _total('Fees Earned', fees)),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Maya Services • All Time',
-              style: Theme.of(c).textTheme.titleLarge,
-            ),
-            FutureBuilder<Map<String, Object?>>(
-              future: repository.gcashServiceSummary(maya: true),
-              builder: (_, services) {
-                if (services.hasError) {
-                  return const Text(
-                    'Could not load Maya service totals. Reopen Reports to try again.',
+                      SizedBox(
+                        width: 280,
+                        child: _total(
+                          'Fees Earned',
+                          (m['cash_in_fees']! as int) +
+                              (m['cash_out_fees']! as int),
+                        ),
+                      ),
+                    ],
                   );
-                }
-                if (!services.hasData) return const LinearProgressIndicator();
-                final m = services.data!;
-                return Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    SizedBox(
-                      width: 280,
-                      child: _total(
-                        'Cash-In (${m['cash_in_count']})',
-                        m['cash_in_principal']! as int,
-                      ),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: _total(
-                        'Cash-Out (${m['cash_out_count']})',
-                        m['cash_out_principal']! as int,
-                      ),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: _total(
-                        'Fees Earned',
-                        (m['cash_in_fees']! as int) +
-                            (m['cash_out_fees']! as int),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 20),
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
             Text(
               'Frequently Sold Products',
               style: Theme.of(c).textTheme.titleLarge,
