@@ -68,6 +68,7 @@ void main() {
         24,
         25,
         26,
+        27,
       ],
     );
     expect(await db.query('transaction_reversals'), isEmpty);

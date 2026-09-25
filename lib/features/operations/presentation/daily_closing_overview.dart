@@ -77,6 +77,7 @@ class DailyClosingOverview extends StatelessWidget {
             row('Cash Sales', x.cashSales),
             row('UTANG Payments in Cash', x.cashPayments),
             row('GCash Services — Cash Received', x.gcashServiceCashReceived),
+            row('Maya Services — Cash Received', x.mayaServiceCashReceived),
             row('5/6 Loans Received in Cash', x.loanCashReceived),
             const Divider(),
             row(
@@ -89,6 +90,7 @@ class DailyClosingOverview extends StatelessWidget {
           panel('Money Out • Physical Cash', Icons.north_east, red, [
             row('Operating Expenses in Cash', x.cashExpenses),
             row('GCash Services — Cash Paid Out', x.gcashServiceCashPaid),
+            row('Maya Services — Cash Paid Out', x.mayaServiceCashPaid),
             row('Supplier Payments in Cash', x.cashRemittances),
             row('5/6 Loan Payments in Cash', x.loanCashPayments),
             if (x.loanCashPaymentReversals != 0)
@@ -141,31 +143,40 @@ class DailyClosingOverview extends StatelessWidget {
             row('Service Fee Income', x.serviceFeeIncome),
             const Text('Includes recorded cancellations and fixes.'),
           ]),
-          if (x.mayaSales != 0 ||
-              x.mayaPayments != 0 ||
-              x.mayaExpenses != 0 ||
-              x.mayaRemittances != 0 ||
-              x.loanMayaReceived != 0 ||
-              x.loanMayaPayments != 0)
-            panel(
-              'Maya Activity',
-              Icons.account_balance_wallet_outlined,
-              blue,
-              [
-                row('Maya Sales', x.mayaSales),
-                row('UTANG Payments with Maya', x.mayaPayments),
-                row('Expenses paid with Maya', x.mayaExpenses),
-                row('Supplier Payments with Maya', x.mayaRemittances),
-                row('5/6 Loans Received with Maya', x.loanMayaReceived),
-                row('5/6 Loan Payments with Maya', x.loanMayaPayments),
-                if (x.loanMayaPaymentReversals != 0)
-                  row(
-                    'Reversed 5/6 Loan Payments',
-                    -x.loanMayaPaymentReversals,
-                  ),
-                const Text('Maya is separate from physical cash and GCash.'),
-              ],
+          panel('Maya Wallet', Icons.account_balance_wallet_outlined, blue, [
+            row('Starting Balance', x.mayaOpeningBalance),
+            row('Maya Money In', x.mayaMoneyIn),
+            row('Maya Money Out', x.mayaMoneyOut),
+            row('Net Change', x.mayaMoneyIn - x.mayaMoneyOut),
+            const Divider(),
+            row(
+              'Ending Balance',
+              x.mayaEndingBalance,
+              color: blue,
+              strong: true,
             ),
+            row('Service Fee Income', x.mayaServiceFeeIncome),
+            row('Maya Sales', x.mayaSales),
+            row('UTANG Payments with Maya', x.mayaPayments),
+            row('Expenses paid with Maya', x.mayaExpenses),
+            row('Supplier Payments with Maya', x.mayaRemittances),
+            row('5/6 Loans Received with Maya', x.loanMayaReceived),
+            row('5/6 Loan Payments with Maya', x.loanMayaPayments),
+            if (x.loanMayaPaymentReversals != 0)
+              row('Reversed 5/6 Loan Payments', -x.loanMayaPaymentReversals),
+            const Text('Maya is separate from physical cash and GCash.'),
+          ]),
+          panel('E-Wallet Fees Earned', Icons.payments_outlined, green, [
+            row('GCash Fees', x.serviceFeeIncome),
+            row('Maya Fees', x.mayaServiceFeeIncome),
+            const Divider(),
+            row(
+              'Total Fees',
+              x.serviceFeeIncome + x.mayaServiceFeeIncome,
+              color: green,
+              strong: true,
+            ),
+          ]),
           panel('Consignment', Icons.inventory_2_outlined, purple, [
             row('Consignment Sales', x.consignmentSales),
             row('Amount Owed from These Sales', x.supplierPayable),

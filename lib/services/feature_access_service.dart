@@ -9,6 +9,7 @@ enum AppPlan { free, pro }
 /// Explicit Pro boundaries; all unlisted future features remain open.
 enum ProFeature {
   managedBrandAnalytics,
+  consignment,
   fiveSixLoanManagement,
   productInsights,
   inventoryInsights,
@@ -164,6 +165,7 @@ class FeatureAccessService {
   Future<bool> canAccess(AppFeature feature) async {
     return switch (feature) {
       AppFeature.managedBrandsAnalytics ||
+      AppFeature.consignment ||
       AppFeature.loanManagement ||
       AppFeature.productInsights => await currentPlan() == AppPlan.pro,
       AppFeature.inventoryInsights => await currentPlan() == AppPlan.pro,
@@ -173,6 +175,7 @@ class FeatureAccessService {
 
   Future<bool> allows(ProFeature feature) => canAccess(switch (feature) {
     ProFeature.managedBrandAnalytics => AppFeature.managedBrandsAnalytics,
+    ProFeature.consignment => AppFeature.consignment,
     ProFeature.fiveSixLoanManagement => AppFeature.loanManagement,
     ProFeature.productInsights => AppFeature.productInsights,
     ProFeature.inventoryInsights => AppFeature.inventoryInsights,

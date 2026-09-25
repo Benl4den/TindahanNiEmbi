@@ -175,10 +175,14 @@ class ReportsRepository {
   Future<Map<String, Object?>> gcashServiceSummary({
     DateTime? from,
     DateTime? to,
+    bool maya = false,
   }) {
+    final table = maya
+        ? 'maya_service_transactions'
+        : 'gcash_service_transactions';
     final clauses = <String>[
       'status=\'POSTED\'',
-      'NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id)',
+      'NOT EXISTS(SELECT 1 FROM $table r WHERE r.reversal_of_service_id=$table.id)',
     ];
     final args = <Object?>[];
     if (from != null) {
@@ -197,7 +201,7 @@ class ReportsRepository {
       COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN principal_centavos ELSE 0 END),0) cash_out_principal,
       COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN fee_centavos ELSE 0 END),0) cash_in_fees,
       COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN fee_centavos ELSE 0 END),0) cash_out_fees
-      FROM gcash_service_transactions WHERE ${clauses.join(' AND ')}''', args)
+      FROM $table WHERE ${clauses.join(' AND ')}''', args)
         .then((rows) => rows.single);
   }
 }

@@ -137,6 +137,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     ('EXPENSE', 'Expenses'),
                     ('CONSIGNMENT', 'Consignment'),
                     ('GCASH_SERVICE', 'GCash Services'),
+                    ('MAYA_SERVICE', 'Maya Services'),
                   ])
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
@@ -284,6 +285,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     'PAYMENT' => Icons.account_balance_wallet_outlined,
     'EXPENSE' => Icons.receipt_long_outlined,
     'GCASH_SERVICE' => Icons.phone_android_outlined,
+    'MAYA_SERVICE' => Icons.phone_android_outlined,
     _ => Icons.inventory_2_outlined,
   };
 
@@ -291,6 +293,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     'EXPENSE' => Theme.of(context).colorScheme.error,
     'UTANG' => const Color(0xFFF39C4A),
     'GCASH_SERVICE' => Theme.of(context).colorScheme.primary,
+    'MAYA_SERVICE' => Theme.of(context).colorScheme.primary,
     _ => Theme.of(context).colorScheme.primary,
   };
 
@@ -360,7 +363,9 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   Text('From ${details['consignor_name']}'),
                   Text('${details['units_received']} units received'),
                 ],
-                if (entry.type == 'GCASH_SERVICE') ...[
+                if (entry.type == 'GCASH_SERVICE' ||
+                    entry.type == 'MAYA_SERVICE') ...[
+                  if (entry.type == 'MAYA_SERVICE') Text('Wallet: Maya'),
                   Text('Reference: ${details['reference']}'),
                   Text(
                     'Amount: ${standardMoney(details['principal_centavos']! as int)}',
@@ -372,16 +377,18 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     'Fee Option: ${details['fee_option'] == 'ADDED' ? 'Fee Added' : 'Fee Deducted'}',
                   ),
                   Text(
-                    '${entry.title.contains('Cash-In') ? 'Customer Pays Cash' : 'Customer Sends GCash'}: ${standardMoney(details['customer_total_centavos']! as int)}',
+                    '${entry.title.contains('Cash-In') ? 'Customer Pays Cash' : 'Customer Sends ${entry.type == 'MAYA_SERVICE' ? 'Maya' : 'GCash'}'}: ${standardMoney(details['customer_total_centavos']! as int)}',
                   ),
                   Text(
                     'Cash Movement: ${standardMoney(details['physical_cash_change_centavos']! as int)}',
                   ),
                   Text(
-                    'GCash Movement: ${standardMoney(details['gcash_change_centavos']! as int)}',
+                    '${entry.type == 'MAYA_SERVICE' ? 'Maya' : 'GCash'} Movement: ${standardMoney(details[entry.type == 'MAYA_SERVICE' ? 'wallet_change_centavos' : 'gcash_change_centavos']! as int)}',
                   ),
                   if (details['gcash_reference'] != null)
                     Text('GCash reference: ${details['gcash_reference']}'),
+                  if (details['wallet_reference'] != null)
+                    Text('Maya reference: ${details['wallet_reference']}'),
                   if (details['notes'] != null) Text('${details['notes']}'),
                 ],
                 if (items.isNotEmpty) ...[

@@ -7,6 +7,7 @@ import '../../../core/formatters/display_labels.dart';
 import '../../../widgets/day_history.dart';
 
 import '../../../core/formatters/number_format.dart';
+import '../../../models/payment_method.dart';
 import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/gcash_service_repository.dart';
 import '../../../services/auth_service.dart';
@@ -30,6 +31,8 @@ class GCashScreen extends StatefulWidget {
 }
 
 class _GCashScreenState extends State<GCashScreen> {
+  String get wallet =>
+      widget.repository.provider == PaymentMethod.maya ? 'Maya' : 'GCash';
   late Future<(GCashSummary, List<GCashLedgerEntry>)> data;
   late Future<int> feeTotal;
   late Future<List<GCashServiceTransaction>> serviceHistory;
@@ -40,6 +43,16 @@ class _GCashScreenState extends State<GCashScreen> {
     super.initState();
     _reload();
     AppRefreshController.instance.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(covariant GCashScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository.provider != widget.repository.provider ||
+        oldWidget.repository.db != widget.repository.db) {
+      historyLimit = 100;
+      _reload();
+    }
   }
 
   @override
@@ -73,17 +86,23 @@ class _GCashScreenState extends State<GCashScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Column(
+      title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('GCash'),
-          Text(
+          Text(wallet),
+          const Text(
             'Manage Cash-In, Cash-Out, and service fees in one place',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
           ),
         ],
       ),
-      actions: const [HelpButton(topic: HelpTopicId.gcash)],
+      actions: [
+        HelpButton(
+          topic: widget.repository.provider == PaymentMethod.maya
+              ? HelpTopicId.maya
+              : HelpTopicId.gcash,
+        ),
+      ],
     ),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: _adjust,
@@ -97,9 +116,7 @@ class _GCashScreenState extends State<GCashScreen> {
           return Center(
             child: TextButton(
               onPressed: () => setState(_reload),
-              child: const Text(
-                'GCash records could not be loaded. Tap to retry.',
-              ),
+              child: Text('$wallet records could not be loaded. Tap to retry.'),
             ),
           );
         }
@@ -132,8 +149,8 @@ class _GCashScreenState extends State<GCashScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'CURRENT GCASH BALANCE',
+                          Text(
+                            'CURRENT ${wallet.toUpperCase()} BALANCE',
                             style: TextStyle(color: Colors.white70),
                           ),
                           Text(
@@ -246,7 +263,7 @@ class _GCashScreenState extends State<GCashScreen> {
               ),
               const SizedBox(height: 20),
               Text(
-                'GCash Services',
+                '$wallet Services',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
@@ -273,10 +290,10 @@ class _GCashScreenState extends State<GCashScreen> {
               ),
               const SizedBox(height: 8),
               if (entries.isEmpty)
-                const Card(
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: Text('No GCash activity yet.')),
+                    padding: const EdgeInsets.all(32),
+                    child: Center(child: Text('No $wallet activity yet.')),
                   ),
                 )
               else
@@ -293,13 +310,17 @@ class _GCashScreenState extends State<GCashScreen> {
                         service.id: service,
                     };
                     return DayHistory<GCashLedgerEntry>(
-                      storageKey: 'gcash-wallet',
+                      storageKey: '${wallet.toLowerCase()}-wallet',
                       items: entries,
                       date: (e) => e.occurredAt,
                       itemBuilder: (entry) => Card(
-                        key: ValueKey('gcash-row-${entry.id}'),
+                        key: ValueKey(
+                          '${wallet.toLowerCase()}-row-${entry.id}',
+                        ),
                         child: ExpansionTile(
-                          key: PageStorageKey('gcash-entry-${entry.id}'),
+                          key: PageStorageKey(
+                            '${wallet.toLowerCase()}-entry-${entry.id}',
+                          ),
                           leading: CircleAvatar(
                             backgroundColor: entry.amountChangeCentavos > 0
                                 ? Colors.green.shade50
@@ -365,9 +386,9 @@ class _GCashScreenState extends State<GCashScreen> {
                 label: const Text('Load older transactions'),
               ),
               if (summary.balance < 0)
-                const Text(
-                  'Recorded GCash is negative. Reconcile it against your actual wallet before making further payments.',
-                  style: TextStyle(color: Colors.red),
+                Text(
+                  'Recorded $wallet is negative. Reconcile it against your actual wallet before making further payments.',
+                  style: const TextStyle(color: Colors.red),
                 ),
               const SizedBox(height: 90),
             ],
@@ -431,8 +452,8 @@ class _GCashScreenState extends State<GCashScreen> {
         ),
         Text(
           service.type == 'CASH_IN'
-              ? 'Customer paid cash: ${standardMoney(service.physicalCashChangeCentavos.abs())} • Customer received GCash: ${standardMoney(service.gcashChangeCentavos.abs())}'
-              : 'Customer sent GCash: ${standardMoney(service.gcashChangeCentavos.abs())} • Customer received cash: ${standardMoney(service.physicalCashChangeCentavos.abs())}',
+              ? 'Customer paid cash: ${standardMoney(service.physicalCashChangeCentavos.abs())} • Customer received $wallet: ${standardMoney(service.gcashChangeCentavos.abs())}'
+              : 'Customer sent $wallet: ${standardMoney(service.gcashChangeCentavos.abs())} • Customer received cash: ${standardMoney(service.physicalCashChangeCentavos.abs())}',
         ),
         if (service.status == 'POSTED')
           TextButton.icon(
@@ -496,7 +517,7 @@ class _GCashScreenState extends State<GCashScreen> {
           changeToken: type,
           busy: busy,
           child: AlertDialog(
-            title: const Text('GCash Adjustment'),
+            title: Text('$wallet Adjustment'),
             content: SizedBox(
               width: 520,
               child: SingleChildScrollView(
@@ -554,8 +575,8 @@ class _GCashScreenState extends State<GCashScreen> {
                     TextField(
                       controller: reference,
                       enabled: !busy,
-                      decoration: const InputDecoration(
-                        labelText: 'GCash Reference (optional)',
+                      decoration: InputDecoration(
+                        labelText: '$wallet Reference (optional)',
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -680,10 +701,10 @@ class _GCashScreenState extends State<GCashScreen> {
               children: [
                 Text(
                   reviewing
-                      ? 'Review GCash Service'
+                      ? 'Review $wallet Service'
                       : type == 'CASH_IN'
-                      ? 'GCash Cash-In'
-                      : 'GCash Cash-Out',
+                      ? '$wallet Cash-In'
+                      : '$wallet Cash-Out',
                 ),
                 if (error != null)
                   Text(
@@ -768,8 +789,8 @@ class _GCashScreenState extends State<GCashScreen> {
                           const SizedBox(height: 16),
                           TextField(
                             controller: reference,
-                            decoration: const InputDecoration(
-                              labelText: 'GCash Reference (optional)',
+                            decoration: InputDecoration(
+                              labelText: '$wallet Reference (optional)',
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -830,7 +851,8 @@ class _GCashScreenState extends State<GCashScreen> {
                               if (dialog.mounted) {
                                 setDialog(() {
                                   saving = false;
-                                  error = 'Could not check GCash balance. Please retry.';
+                                  error =
+                                      'Could not check $wallet balance. Please retry.';
                                 });
                               }
                               return;
@@ -842,7 +864,7 @@ class _GCashScreenState extends State<GCashScreen> {
                               if (dialog.mounted) {
                                 setDialog(
                                   () => error =
-                                      'Insufficient GCash Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(needed)}\nShort: ${standardMoney(needed - available)}',
+                                      'Insufficient $wallet Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(needed)}\nShort: ${standardMoney(needed - available)}',
                                 );
                               }
                               return;
@@ -909,8 +931,8 @@ class _GCashScreenState extends State<GCashScreen> {
     final sent = feeOption == 'ADDED' ? amount + fee : amount;
     final received = feeOption == 'ADDED' ? amount : amount - fee;
     return type == 'CASH_IN'
-        ? 'Customer pays cash: ${standardMoney(sent)}\nCustomer receives GCash: ${standardMoney(received)}\nCash movement: +${standardMoney(sent)} • GCash movement: -${standardMoney(received)}\nFee income: ${standardMoney(fee)}'
-        : 'Customer sends GCash: ${standardMoney(sent)}\nCustomer receives cash: ${standardMoney(received)}\nCash movement: -${standardMoney(received)} • GCash movement: +${standardMoney(sent)}\nFee income: ${standardMoney(fee)}';
+        ? 'Customer pays cash: ${standardMoney(sent)}\nCustomer receives $wallet: ${standardMoney(received)}\nCash movement: +${standardMoney(sent)} • $wallet movement: -${standardMoney(received)}\nFee income: ${standardMoney(fee)}'
+        : 'Customer sends $wallet: ${standardMoney(sent)}\nCustomer receives cash: ${standardMoney(received)}\nCash movement: -${standardMoney(received)} • $wallet movement: +${standardMoney(sent)}\nFee income: ${standardMoney(fee)}';
   }
 
   Future<void> _reverseService(GCashServiceTransaction service) async {
@@ -925,7 +947,7 @@ class _GCashScreenState extends State<GCashScreen> {
         builder: (_, setDialog) => PopScope(
           canPop: !busy,
           child: AlertDialog(
-            title: const Text('Cancel GCash Service Record'),
+            title: Text('Cancel $wallet Service Record'),
             content: SizedBox(
               width: 460,
               child: SingleChildScrollView(
@@ -936,8 +958,8 @@ class _GCashScreenState extends State<GCashScreen> {
                       '${service.reference} • ${service.type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'}',
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'This cancels the record in TindaSari PH. It does not send, receive, or refund actual GCash money.',
+                    Text(
+                      'This cancels the record in TindaSari PH. It does not send, receive, or refund actual $wallet money.',
                     ),
                     const SizedBox(height: 16),
                     TextField(

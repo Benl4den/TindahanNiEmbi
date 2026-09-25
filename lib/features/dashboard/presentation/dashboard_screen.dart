@@ -77,6 +77,9 @@ class _DashboardState extends State<DashboardScreen> {
             'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM gcash_ledger_entries',
           ),
           widget.database.rawQuery(
+            'SELECT COALESCE(SUM(amount_change_centavos),0) balance FROM maya_ledger_entries',
+          ),
+          widget.database.rawQuery(
             'SELECT name,photo_path,current_quantity,base_unit_code,base_unit_label FROM products WHERE is_archived=0 AND current_quantity<=minimum_stock_level ORDER BY current_quantity ASC,name COLLATE NOCASE LIMIT 5',
           ),
           widget.database.rawQuery('''SELECT a.event_type,
@@ -301,9 +304,10 @@ class _DashboardState extends State<DashboardScreen> {
         final x = snapshot.data![0] as DailyClosingSummary;
         final current = snapshot.data![1] as DashboardSummary;
         final wallet = snapshot.data![2] as List<Map<String, Object?>>;
-        final alerts = snapshot.data![3] as List<Map<String, Object?>>;
-        final activity = snapshot.data![4] as List<Map<String, Object?>>;
-        final counts = snapshot.data![5] as List<Map<String, Object?>>;
+        final mayaWallet = snapshot.data![3] as List<Map<String, Object?>>;
+        final alerts = snapshot.data![4] as List<Map<String, Object?>>;
+        final activity = snapshot.data![5] as List<Map<String, Object?>>;
+        final counts = snapshot.data![6] as List<Map<String, Object?>>;
         final salesCount = counts.fold<int>(
           0,
           (sum, row) => sum + (row['count']! as int),
@@ -381,6 +385,12 @@ class _DashboardState extends State<DashboardScreen> {
                         accent('gcash'),
                       ),
                       metric(
+                        'Current Maya Balance',
+                        standardMoney(mayaWallet.single['balance']! as int),
+                        Icons.account_balance_wallet_outlined,
+                        accent('gcash'),
+                      ),
+                      metric(
                         'Amount Owed to Suppliers',
                         standardMoney(current.supplierPayableCentavos),
                         Icons.handshake_outlined,
@@ -391,7 +401,7 @@ class _DashboardState extends State<DashboardScreen> {
                         '',
                         Icons.history,
                         accent(''),
-                        caption: 'Includes sales, payments, expenses, supplier payments, GCash services, and loan activity.',
+                        caption: 'Includes sales, payments, expenses, supplier payments, e-wallet services, and loan activity.',
                       ),
                     ];
                     return BalancedCardGrid(children: cards);

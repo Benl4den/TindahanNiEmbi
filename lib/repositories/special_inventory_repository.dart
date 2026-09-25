@@ -78,8 +78,8 @@ class SpecialInventoryRepository {
   Future<List<InventoryGroup>> managedBrands() async =>
       (await db.query(
             'inventory_groups',
-            where: "is_archived=0 AND code<>'CONSIGNMENT'",
-            orderBy: "CASE code WHEN 'SELECTA' THEN 0 ELSE 1 END,name COLLATE NOCASE",
+            where: "is_archived=0 AND code NOT IN('CONSIGNMENT','SELECTA')",
+            orderBy: 'name COLLATE NOCASE',
           ))
           .map(
             (x) => InventoryGroup(
@@ -91,8 +91,7 @@ class SpecialInventoryRepository {
           .toList(growable: false);
 
   Future<List<ManagedBrandSummary>> managedBrandSummaries() async {
-    final rows = await db.rawQuery(
-      '''SELECT g.id,g.code,g.name,
+    final rows = await db.rawQuery('''SELECT g.id,g.code,g.name,
       COUNT(p.id) product_count,
       COALESCE(SUM(CASE WHEN p.id IS NOT NULL AND p.current_quantity>0
         AND p.current_quantity<=p.minimum_stock_level THEN 1 ELSE 0 END),0) low_count,
@@ -102,10 +101,9 @@ class SpecialInventoryRepository {
       LEFT JOIN product_inventory_groups m ON m.inventory_group_id=g.id
         AND m.archived_at IS NULL
       LEFT JOIN products p ON p.id=m.product_id AND p.is_archived=0
-      WHERE g.is_archived=0 AND g.code<>'CONSIGNMENT'
+      WHERE g.is_archived=0 AND g.code NOT IN('CONSIGNMENT','SELECTA')
       GROUP BY g.id
-      ORDER BY CASE g.code WHEN 'SELECTA' THEN 0 ELSE 1 END,g.name COLLATE NOCASE''',
-    );
+      ORDER BY g.name COLLATE NOCASE''');
     return rows
         .map(
           (row) => ManagedBrandSummary(

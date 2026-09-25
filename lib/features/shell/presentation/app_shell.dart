@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../../../widgets/app_back_navigation.dart';
 
-import '../../../widgets/gcash_icon.dart';
+import '../../../widgets/wallet_nav_logo.dart';
 
 import 'package:sqflite/sqflite.dart';
 
@@ -23,6 +23,7 @@ import '../../../repositories/expense_repository.dart';
 import '../../../repositories/payment_repository.dart';
 import '../../../repositories/payment_accounting_repository.dart';
 import '../../../repositories/gcash_service_repository.dart';
+import '../../../models/payment_method.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/reports_repository.dart';
 import '../../../repositories/operations_repository.dart';
@@ -321,7 +322,13 @@ class _State extends State<AppShell> {
   void initState() {
     super.initState();
     AppRefreshController.instance.addListener(_dataChanged);
+    AppPlanController.instance.addListener(_planChanged);
+    AppPlanController.instance.load();
     _refreshRestockCount();
+  }
+
+  void _planChanged() {
+    if (mounted) setState(() {});
   }
 
   void _dataChanged() {
@@ -357,6 +364,7 @@ class _State extends State<AppShell> {
   @override
   void dispose() {
     AppRefreshController.instance.removeListener(_dataChanged);
+    AppPlanController.instance.removeListener(_planChanged);
     super.dispose();
   }
 
@@ -449,7 +457,10 @@ class _State extends State<AppShell> {
         icon: Icon(Icons.history),
         label: 'Transaction History',
       ),
-      const NavigationDestination(icon: GCashIcon(), label: 'GCash'),
+      const NavigationDestination(
+        icon: WalletNavLogo(maya: false),
+        label: 'GCash',
+      ),
     ];
     bodyDestinations.add(
       const NavigationDestination(
@@ -467,11 +478,37 @@ class _State extends State<AppShell> {
         label: '5/6 Loan Management',
       ),
     ]);
-    const navTargets = [13, 0, 6, 12, 5, 3, 4, 1, 2, 14, 11, 7, 8, 9, 15, 10];
+    bodyDestinations.add(
+      const NavigationDestination(
+        icon: WalletNavLogo(maya: true),
+        label: 'Maya',
+      ),
+    );
+    const navTargets = [
+      13,
+      0,
+      6,
+      12,
+      16,
+      5,
+      3,
+      4,
+      1,
+      2,
+      14,
+      11,
+      7,
+      8,
+      9,
+      15,
+      10,
+    ];
     final allowedTargets = widget.role == UserRole.owner
         ? navTargets
         : navTargets
-              .where((target) => const {0, 3, 4, 6, 7, 11, 12}.contains(target))
+              .where(
+                (target) => const {0, 3, 4, 6, 7, 11, 12, 16}.contains(target),
+              )
               .toList();
     final destinations = [
       for (final target in allowedTargets) bodyDestinations[target],
@@ -682,8 +719,23 @@ class _State extends State<AppShell> {
       repository: TransactionHistoryRepository(widget.database),
     ),
     12 => GCashScreen(
+      key: const ValueKey('gcash-wallet-screen'),
       repository: PaymentAccountingRepository(widget.database, actorRole: role),
       services: GCashServiceRepository(widget.database, actorRole: role),
+      auth: AuthService(widget.database),
+    ),
+    16 => GCashScreen(
+      key: const ValueKey('maya-wallet-screen'),
+      repository: PaymentAccountingRepository(
+        widget.database,
+        actorRole: role,
+        provider: PaymentMethod.maya,
+      ),
+      services: GCashServiceRepository(
+        widget.database,
+        actorRole: role,
+        provider: PaymentMethod.maya,
+      ),
       auth: AuthService(widget.database),
     ),
     _ => _more(),
@@ -758,6 +810,10 @@ class _State extends State<AppShell> {
                       final destination = destinations[i];
                       final target = navTargets[i];
                       final active = selected == target;
+                      final proLocked =
+                          widget.role == UserRole.owner &&
+                          AppPlanController.instance.plan == AppPlan.free &&
+                          const {1, 2, 15}.contains(target);
                       final sectionStart =
                           i == 0 ||
                           _navSection(navTargets[i - 1]) != _navSection(target);
@@ -783,7 +839,9 @@ class _State extends State<AppShell> {
                           Padding(
                             padding: const EdgeInsets.only(bottom: 5),
                             child: Tooltip(
-                              message: expanded ? '' : destination.label,
+                              message: expanded
+                                  ? ''
+                                  : '${destination.label}${proLocked ? ' • PRO' : ''}',
                               decoration: BoxDecoration(
                                 color: colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(10),
@@ -815,7 +873,23 @@ class _State extends State<AppShell> {
                                                 ? colors.primary
                                                 : colors.onSurface,
                                           ),
-                                          child: destination.icon,
+                                          child: !expanded && proLocked
+                                              ? Badge(
+                                                  label: const Text(
+                                                    'PRO',
+                                                    style: TextStyle(
+                                                      fontSize: 8,
+                                                    ),
+                                                  ),
+                                                  backgroundColor: const Color(
+                                                    0xFFFFD879,
+                                                  ),
+                                                  textColor: const Color(
+                                                    0xFF312100,
+                                                  ),
+                                                  child: destination.icon,
+                                                )
+                                              : destination.icon,
                                         ),
                                         if (expanded) ...[
                                           const SizedBox(width: 16),
@@ -833,6 +907,27 @@ class _State extends State<AppShell> {
                                               ),
                                             ),
                                           ),
+                                          if (proLocked)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFD879),
+                                                borderRadius:
+                                                    BorderRadius.circular(7),
+                                              ),
+                                              child: const Text(
+                                                'PRO',
+                                                style: TextStyle(
+                                                  color: Color(0xFF312100),
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                            ),
                                           if (active)
                                             Icon(
                                               Icons.chevron_right,
@@ -924,7 +1019,7 @@ class _State extends State<AppShell> {
   }
 
   String _navSection(int target) => switch (target) {
-    13 || 0 || 6 || 12 => 'Daily Selling',
+    13 || 0 || 6 || 12 || 16 => 'Daily Selling',
     5 || 3 || 4 => 'Stock & Products',
     1 || 2 || 14 => 'Supplier Products',
     11 || 7 || 8 || 9 || 15 => 'Store Records',

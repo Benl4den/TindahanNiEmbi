@@ -38,6 +38,7 @@ class TransactionHistoryRepository {
       UNION ALL SELECT p.id,'PAYMENT','UTANG Payment • '||COALESCE(p.payment_method_display,p.payment_method)||' • '||c.full_name,p.amount_centavos,p.paid_at,p.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM utang_payments p JOIN customers c ON c.id=p.customer_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='PAYMENT' AND related_entity_id=p.id)
       UNION ALL SELECT e.id,'EXPENSE',e.description||' • '||COALESCE(ep.payment_method_display,ep.payment_method,'CASH'),e.amount_centavos,e.expense_datetime,e.status,COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM expenses e LEFT JOIN expense_payments ep ON ep.expense_id=e.id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='EXPENSE' AND related_entity_id=e.id)
       UNION ALL SELECT g.id,'GCASH_SERVICE','GCash '||CASE WHEN g.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN g.status='REVERSAL' THEN ' Cancelled' ELSE '' END,g.customer_total_centavos,g.created_at,g.status,COALESCE(g.created_by_name_snapshot,a.actor_name,CASE COALESCE(g.created_by_role_snapshot,a.actor_role) WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM gcash_service_transactions g LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='GCASH_SERVICE' AND related_entity_id=g.id)
+      UNION ALL SELECT m.id,'MAYA_SERVICE','Maya '||CASE WHEN m.service_type='CASH_IN' THEN 'Cash-In' ELSE 'Cash-Out' END||CASE WHEN m.status='REVERSAL' THEN ' Cancelled' ELSE '' END,m.customer_total_centavos,m.created_at,m.status,COALESCE(m.created_by_name_snapshot,CASE m.created_by_role_snapshot WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM maya_service_transactions m
       UNION ALL SELECT b.id,'CONSIGNMENT','Received • '||p.name,b.units_received*b.unit_cost_centavos,b.received_at,'POSTED',COALESCE(a.actor_name,CASE a.actor_role WHEN 'OWNER' THEN 'Owner' WHEN 'STAFF' THEN 'Staff' ELSE 'Not recorded' END) FROM consignment_batches b JOIN products p ON p.id=b.product_id LEFT JOIN activity_logs a ON a.id=(SELECT MIN(id) FROM activity_logs WHERE related_entity_type='CONSIGNMENT_BATCH' AND related_entity_id=b.id)
     ) WHERE (?='ALL' OR type=?) AND instr(lower(title),lower(?))>0${day == null ? '' : ' AND occurred>=? AND occurred<?'} ORDER BY occurred DESC,type,id DESC LIMIT ?''',
       [
@@ -117,6 +118,12 @@ class TransactionHistoryRepository {
       case 'GCASH_SERVICE':
         return (await db.query(
           'gcash_service_transactions',
+          where: 'id=?',
+          whereArgs: [entry.id],
+        )).single;
+      case 'MAYA_SERVICE':
+        return (await db.query(
+          'maya_service_transactions',
           where: 'id=?',
           whereArgs: [entry.id],
         )).single;

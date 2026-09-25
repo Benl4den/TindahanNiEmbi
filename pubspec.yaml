@@ -61,6 +61,8 @@ dev_dependencies:
 flutter:
   assets:
     - assets/branding/gcash.png
+    - assets/branding/gcash_nav_logo.png
+    - assets/branding/maya_nav_logo.png
     - assets/branding/tindasari_logo.png
     - assets/branding/tindasari_icon.png
     - assets/branding/tindasari_icon_dark.png

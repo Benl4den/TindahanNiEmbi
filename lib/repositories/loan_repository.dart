@@ -83,9 +83,12 @@ class LoanRepository {
         where: 'id=?',
         whereArgs: [i],
       );
-      if (sourceKind == 'NEW' && receivedMethod == PaymentMethod.gcash) {
+      if (sourceKind == 'NEW' &&
+          receivedMethod != null &&
+          receivedMethod != PaymentMethod.cash) {
         await PaymentAccountingRepository.postLoanGCashMovement(
           tx,
+          wallet: receivedMethod,
           amountChangeCentavos: borrowed,
           loanId: i,
           actorRole: actorRole,
@@ -143,9 +146,10 @@ class LoanRepository {
         where: 'id=?',
         whereArgs: [id],
       );
-      if (method == PaymentMethod.gcash) {
+      if (method != PaymentMethod.cash) {
         await PaymentAccountingRepository.postLoanGCashMovement(
           tx,
+          wallet: method,
           amountChangeCentavos: -amount,
           loanPaymentId: id,
           gcashReference: reference,
@@ -213,9 +217,13 @@ class LoanRepository {
         where: 'id=?',
         whereArgs: [payment['loan_id']],
       );
-      if (payment['payment_method'] == 'GCASH') {
+      if (payment['payment_method'] == 'GCASH' ||
+          payment['payment_method'] == 'MAYA') {
         await PaymentAccountingRepository.reverseLoanGCashPayment(
           tx,
+          wallet: payment['payment_method'] == 'MAYA'
+              ? PaymentMethod.maya
+              : PaymentMethod.gcash,
           paymentId: paymentId,
           actorRole: actorRole,
           occurredAt: now,

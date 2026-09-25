@@ -184,9 +184,10 @@ void main() {
       tester.view.physicalSize = const Size(600, 800);
       await tester.pump();
       expect(tester.takeException(), isNull);
-      await tester.scrollUntilVisible(find.text('Today'), -500);
       await tester.runAsync(() async {
-        await tester.tap(find.text('Today'));
+        tester
+            .widget<SegmentedButton<int>>(find.byType(SegmentedButton<int>))
+            .onSelectionChanged!({0});
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 150));
       });

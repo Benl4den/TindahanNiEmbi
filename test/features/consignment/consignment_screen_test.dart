@@ -11,6 +11,7 @@ import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/consignment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
 import 'package:tindahan_ni_embi/services/product_photo_service.dart';
+import 'package:tindahan_ni_embi/services/feature_access_service.dart';
 
 class _Repo extends ConsignmentRepository {
   _Repo(super.db);
@@ -130,6 +131,18 @@ class _Repo extends ConsignmentRepository {
   }
 }
 
+class _MutablePlanSource extends AppPlanSource {
+  AppPlan current = AppPlan.free;
+  @override
+  AppPlan get plan => current;
+  @override
+  Future<AppPlan> load() async => current;
+  void change(AppPlan value) {
+    current = value;
+    notifyListeners();
+  }
+}
+
 class _Products implements ProductRepository {
   final p = Product(
     id: 1,
@@ -191,6 +204,12 @@ void main() {
   });
   tearDown(() => db.close());
   Future<void> pump(WidgetTester t) async {
+    t.view.physicalSize = const Size(1400, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
     await t.pumpWidget(
       MaterialApp(
         home: ConsignmentScreen(
@@ -198,11 +217,59 @@ void main() {
           products: _Products(),
           categories: _Categories(),
           photoService: _Photo(),
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(OpenAccessPlanSource()),
+          ),
         ),
       ),
     );
     await t.pumpAndSettle();
   }
+
+  testWidgets(
+    'Free preview hides supplier data and switching Pro restores it',
+    (t) async {
+      t.view.physicalSize = const Size(1400, 900);
+      t.view.devicePixelRatio = 1;
+      addTearDown(() {
+        t.view.resetPhysicalSize();
+        t.view.resetDevicePixelRatio();
+      });
+      repo.parties.add(
+        const Consignor(id: 1, name: 'Private Supplier', isArchived: false),
+      );
+      repo.payable = 123456;
+      final source = _MutablePlanSource();
+      final controller = AppPlanController(source);
+      await t.pumpWidget(
+        MaterialApp(
+          home: ConsignmentScreen(
+            repository: repo,
+            products: _Products(),
+            categories: _Categories(),
+            photoService: _Photo(),
+            access: FeatureAccessService(db, planController: controller),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('PRO FEATURE'), findsOneWidget);
+      expect(find.text('Preview Pro'), findsOneWidget);
+      expect(find.text('Private Supplier'), findsNothing);
+      expect(find.text('₱1,234.56'), findsNothing);
+
+      source.change(AppPlan.pro);
+      await t.pumpAndSettle();
+      expect(find.text('Private Supplier'), findsOneWidget);
+      expect(repo.parties, hasLength(1));
+
+      source.change(AppPlan.free);
+      await t.pumpAndSettle();
+      expect(find.text('Private Supplier'), findsNothing);
+      expect(repo.parties, hasLength(1));
+    },
+  );
 
   testWidgets(
     'Add Consignor persists, closes, refreshes, and enables receipt',

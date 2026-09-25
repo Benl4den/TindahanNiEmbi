@@ -7,6 +7,7 @@ import '../../../services/feature_access_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../widgets/pro_feature_preview.dart';
 import '../../../widgets/feature_access_builder.dart';
+import '../../../widgets/pro_overview_panel.dart';
 
 int? _moneyCentavos(String input) {
   final value = input.trim();
@@ -42,6 +43,8 @@ class LoanManagementScreen extends StatefulWidget {
 
 class _LoanManagementScreenState extends State<LoanManagementScreen> {
   bool completed = false;
+  String _search = '';
+  String _sort = 'Recent';
   late Future<List<Map<String, Object?>>> _loans;
 
   @override
@@ -56,6 +59,62 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
         _loans = widget.repository.loans(completed: completed);
       });
     }
+  }
+
+  List<Map<String, Object?>> _visibleLoans(List<Map<String, Object?>> loans) {
+    final visible = loans
+        .where(
+          (loan) =>
+              (loan['lender_name']! as String).toLowerCase().contains(_search),
+        )
+        .toList();
+    if (_sort == 'Name') {
+      visible.sort(
+        (a, b) => (a['lender_name']! as String).toLowerCase().compareTo(
+          (b['lender_name']! as String).toLowerCase(),
+        ),
+      );
+    } else if (_sort == 'Remaining') {
+      int remaining(Map<String, Object?> loan) =>
+          (loan['agreed_repayment_centavos']! as int) -
+          (loan['paid_centavos']! as int);
+      visible.sort((a, b) => remaining(b).compareTo(remaining(a)));
+    }
+    return visible;
+  }
+
+  String _nextCollectionLabel(List<Map<String, Object?>> loans) {
+    DateTime? next;
+    int? amount;
+    final today = DateUtils.dateOnly(DateTime.now());
+    for (final loan in loans) {
+      final rawDate = loan['first_collection_date'] as String?;
+      final scheduled = loan['scheduled_amount_centavos'] as int?;
+      final first = rawDate == null
+          ? null
+          : DateTime.tryParse(rawDate)?.toLocal();
+      if (first == null || scheduled == null) continue;
+      final remaining =
+          ((loan['agreed_repayment_centavos']! as int) -
+                  (loan['paid_centavos']! as int))
+              .clamp(0, 1 << 62);
+      if (remaining == 0) continue;
+      final step = loan['collection_frequency'] == 'WEEKLY' ? 7 : 1;
+      var due = DateUtils.dateOnly(first);
+      if (due.isBefore(today)) {
+        final elapsed = today.difference(due).inDays;
+        due = due.add(Duration(days: ((elapsed + step - 1) ~/ step) * step));
+      }
+      if (next == null || due.isBefore(next)) {
+        next = due;
+        amount = scheduled.clamp(0, remaining);
+      }
+    }
+    if (next == null || amount == null) return 'Not scheduled';
+    final when = DateUtils.isSameDay(next, today)
+        ? 'Today'
+        : '${next.month}/${next.day}/${next.year}';
+    return '${standardMoney(amount)} • $when';
   }
 
   // Wait until the dialog has left the overlay before disposing its text
@@ -773,9 +832,17 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
       builder: (_, allowed) {
         if (!allowed) {
           return const ProFeaturePreview(
-            title: '5/6 Loan Management',
-            description: 'Track lender balances, daily or weekly collections, and payment history in one clear place.',
+            title: 'Manage your 5/6 loans in one place',
+            description: 'Track the money you borrowed, scheduled collections, remaining balance, and every payment you make.',
             icon: Icons.account_balance_outlined,
+            metrics: ['Total Borrowed', 'Remaining Balance', 'Next Collection'],
+            benefits: [
+              'Manage lenders',
+              'Daily or weekly collection schedules',
+              'Record partial and full payments',
+              'Track remaining balances',
+              'View complete payment history',
+            ],
           );
         }
         return FutureBuilder<List<Map<String, Object?>>>(
@@ -786,6 +853,51 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 )
               : Column(
                   children: [
+                    if (!completed && s.hasData)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                        child: ProOverviewPanel(
+                          title: 'Loan Overview',
+                          subtitle: 'Your total loans, remaining balance, and upcoming collections.',
+                          metrics: [
+                            ProOverviewMetric(
+                              'Total Borrowed',
+                              standardMoney(
+                                s.data!.fold<int>(
+                                  0,
+                                  (n, r) =>
+                                      n +
+                                      (r['borrowed_amount_centavos']! as int),
+                                ),
+                              ),
+                              Icons.account_balance_wallet_outlined,
+                              Theme.of(c).colorScheme.primary,
+                            ),
+                            ProOverviewMetric(
+                              'Remaining Balance',
+                              standardMoney(
+                                s.data!.fold<int>(
+                                  0,
+                                  (n, r) =>
+                                      n +
+                                      ((r['agreed_repayment_centavos']!
+                                                  as int) -
+                                              (r['paid_centavos']! as int))
+                                          .clamp(0, 1 << 62),
+                                ),
+                              ),
+                              Icons.bar_chart_outlined,
+                              Theme.of(c).colorScheme.error,
+                            ),
+                            ProOverviewMetric(
+                              'Next Collection',
+                              _nextCollectionLabel(s.data!),
+                              Icons.calendar_month_outlined,
+                              Theme.of(c).colorScheme.tertiary,
+                            ),
+                          ],
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
                       child: Row(
@@ -823,6 +935,49 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 340,
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.search),
+                                hintText: 'Search lenders...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (value) => setState(
+                                () => _search = value.trim().toLowerCase(),
+                              ),
+                            ),
+                          ),
+                          DropdownButton<String>(
+                            value: _sort,
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'Recent',
+                                child: Text('Sort: Recent'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'Name',
+                                child: Text('Sort: Name'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'Remaining',
+                                child: Text('Sort: Remaining'),
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _sort = value ?? 'Recent'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
                       child: Row(
                         children: [
                           SegmentedButton<bool>(
@@ -853,17 +1008,19 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                     Expanded(
                       child: !s.hasData
                           ? const Center(child: CircularProgressIndicator())
-                          : s.data!.isEmpty
+                          : _visibleLoans(s.data!).isEmpty
                           ? Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    completed
+                                    _search.isNotEmpty
+                                        ? 'No lenders match your search.'
+                                        : completed
                                         ? 'No completed loans yet.'
                                         : 'No active loans yet.',
                                   ),
-                                  if (!completed)
+                                  if (!completed && _search.isEmpty)
                                     TextButton.icon(
                                       onPressed: _add,
                                       icon: const Icon(Icons.add),
@@ -874,7 +1031,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                             )
                           : ListView(
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                              children: s.data!.map((r) {
+                              children: _visibleLoans(s.data!).map((r) {
                                 final borrowed =
                                     r['borrowed_amount_centavos']! as int;
                                 final agreed =

@@ -1,52 +1,195 @@
 import 'package:flutter/material.dart';
 
+/// Shared, data-free preview for modules unavailable on the current plan.
 class ProFeaturePreview extends StatelessWidget {
   const ProFeaturePreview({
     super.key,
     required this.title,
     required this.description,
     this.icon = Icons.workspace_premium_outlined,
+    this.metrics = const [],
+    this.benefits = const [],
   });
+
   final String title, description;
   final IconData icon;
+  final List<String> metrics, benefits;
+
   @override
-  Widget build(BuildContext context) => Center(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 560),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(radius: 34, child: Icon(icon, size: 36)),
-              const SizedBox(height: 18),
-              const Chip(
-                avatar: Icon(Icons.workspace_premium, size: 18),
-                label: Text('PRO FEATURE'),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                description,
-                style: Theme.of(context).textTheme.bodyLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Your existing store records stay safely on this device. Subscription options will appear here when available.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final gold = dark ? const Color(0xFFFFCC63) : const Color(0xFF805300);
+    final panel = Color.alphaBlend(
+      colors.primary.withValues(alpha: dark ? .10 : .055),
+      colors.surface,
+    );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1060),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: panel,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 29,
+                      backgroundColor: colors.primary.withValues(alpha: .17),
+                      child: Icon(icon, color: colors.primary, size: 29),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: dark
+                            ? const Color(0xFFFFCA5C)
+                            : const Color(0xFFFFD879),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'PRO FEATURE',
+                        style: TextStyle(
+                          color: Color(0xFF312100),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 7),
+                Text(description, style: Theme.of(context).textTheme.bodyLarge),
+                if (metrics.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  LayoutBuilder(
+                    builder: (context, space) {
+                      const gap = 12.0;
+                      final columns = space.maxWidth >= 660 ? 3 : 1;
+                      final cardWidth =
+                          (space.maxWidth - gap * (columns - 1)) / columns;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [
+                          for (final metric in metrics)
+                            SizedBox(
+                              width: cardWidth,
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                  minHeight: 91,
+                                ),
+                                padding: const EdgeInsets.all(15),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(13),
+                                  border: Border.all(
+                                    color: colors.outlineVariant,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      metric,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge,
+                                    ),
+                                    const SizedBox(height: 11),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.lock_outline,
+                                          size: 20,
+                                          color: gold,
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Text(
+                                          '--',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleLarge,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+                if (benefits.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  for (final benefit in benefits)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check, color: colors.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(benefit)),
+                        ],
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Preview Pro'),
+                        content: const Text(
+                          'Pro subscriptions are not available yet. Your existing records stay safely on this device.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Got it'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Spacer(),
+                        Icon(Icons.workspace_premium_outlined),
+                        SizedBox(width: 9),
+                        Text('Preview Pro'),
+                        Spacer(),
+                        Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

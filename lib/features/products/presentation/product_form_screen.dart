@@ -586,12 +586,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           (x) => x.name.trim().toLowerCase().replaceAll(RegExp(r'[- ]+'), ' '),
         )
         .firstOrNull;
-    return const {
-      'rice',
-      'cooking oil',
-      'cigarettes',
-      'cigarettes & tobacco',
-    }.contains(name);
+    return const {'rice', 'cooking oil'}.contains(name) ||
+        ProductUnitPreset.isCigaretteCategory(name ?? '');
   }
 
   String _friendlyStock(Product product) {

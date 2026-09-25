@@ -32,6 +32,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
   late final String kind;
   late final TextEditingController size, purchase, largePrice, smallPrice;
   TextEditingController? secondSmallPrice;
+  ProductUnitConfiguration? cigaretteUnits;
   bool changing = false;
 
   @override
@@ -49,6 +50,38 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     final large = preset.sellingOptions.length > 1
         ? preset.sellingOptions.last
         : null;
+    if (kind == 'cigarettes') {
+      final quantity = package.baseQuantity;
+      cigaretteUnits = ProductUnitConfiguration(
+        baseUnit: preset.baseUnit == BaseUnit.piece
+            ? BaseUnit.piece
+            : BaseUnit.stick,
+        purchasePackages: [
+          PurchasePackageDraft(
+            name: 'Pack',
+            baseQuantity: quantity,
+            isDefault: true,
+          ),
+          ...preset.purchasePackages.skip(1),
+        ],
+        sellingOptions: [
+          SellingOptionDraft(
+            name: 'Stick',
+            baseQuantity: 1,
+            priceCentavos: small.priceCentavos,
+            isDefault: true,
+          ),
+          SellingOptionDraft(
+            name: 'Pack',
+            baseQuantity: quantity,
+            priceCentavos: small.priceCentavos * quantity,
+          ),
+          ...preset.sellingOptions.skip(
+            preset.sellingOptions.length > 1 ? 2 : 1,
+          ),
+        ],
+      );
+    }
     size = TextEditingController(text: _displaySize(package.baseQuantity));
     purchase = TextEditingController(
       text: _money(widget.purchasePriceCentavos),
@@ -130,7 +163,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
       'oil' => 'Number of Gallons Purchased',
       _ => 'Number of Packs Purchased',
     };
-    return Card(
+    final pricing = Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -156,14 +189,14 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
               ),
               const SizedBox(height: 14),
             ],
-            _field(
-              size,
-              labels.$1,
-              suffix: labels.$2,
-              money: false,
-              whole: kind == 'cigarettes',
-              onChanged: (_) => _sizeChanged(),
-            ),
+            if (kind != 'cigarettes')
+              _field(
+                size,
+                labels.$1,
+                suffix: labels.$2,
+                money: false,
+                onChanged: (_) => _sizeChanged(),
+              ),
             const SizedBox(height: 14),
             _field(purchase, labels.$3, onChanged: (_) => _emit()),
             const SizedBox(height: 14),
@@ -216,6 +249,28 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
           ],
         ),
       ),
+    );
+    if (kind != 'cigarettes') return pricing;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        pricing,
+        const SizedBox(height: 16),
+        UnitsPackagingEditor(
+          categoryName: widget.categoryName,
+          defaultSellingPriceCentavos: _cents(smallPrice.text) ?? 0,
+          initial: cigaretteUnits,
+          initiallyExpanded: false,
+          cigaretteMode: true,
+          onChanged: (next) {
+            cigaretteUnits = next;
+            final quantity = next.purchasePackages.first.baseQuantity;
+            size.text = '$quantity';
+            largePrice.text = _money((_cents(smallPrice.text) ?? 0) * quantity);
+            _emit();
+          },
+        ),
+      ],
     );
   }
 
@@ -297,6 +352,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
       }
     }
     _emit();
+    if (kind == 'cigarettes') setState(() {});
   }
 
   void _sizeChanged() {
@@ -375,23 +431,18 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
         ],
       );
     }
+    final current = cigaretteUnits!;
     return ProductUnitConfiguration(
-      baseUnit: BaseUnit.stick,
-      purchasePackages: [
-        PurchasePackageDraft(name: 'Pack', baseQuantity: base, isDefault: true),
-      ],
+      baseUnit: current.baseUnit,
+      purchasePackages: current.purchasePackages,
       sellingOptions: [
-        SellingOptionDraft(
-          name: 'Stick',
-          baseQuantity: 1,
-          priceCentavos: small,
-          isDefault: true,
-        ),
-        SellingOptionDraft(
-          name: 'Pack',
-          baseQuantity: base,
-          priceCentavos: large,
-        ),
+        for (final option in current.sellingOptions)
+          SellingOptionDraft(
+            name: option.name,
+            baseQuantity: option.baseQuantity,
+            priceCentavos: small * option.baseQuantity,
+            isDefault: option.isDefault,
+          ),
       ],
     );
   }
@@ -416,7 +467,7 @@ class _SmartPackagingEditorState extends State<SmartPackagingEditor> {
     final n = name.trim().toLowerCase().replaceAll(RegExp(r'[- ]+'), ' ');
     if (n == 'rice') return 'rice';
     if (n == 'cooking oil') return 'oil';
-    if (n == 'cigarettes' || n == 'cigarettes & tobacco') return 'cigarettes';
+    if (ProductUnitPreset.isCigaretteCategory(name)) return 'cigarettes';
     return 'other';
   }
 }

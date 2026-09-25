@@ -28,7 +28,10 @@ class GCashLedgerEntry {
   factory GCashLedgerEntry.fromMap(Map<String, Object?> map) =>
       GCashLedgerEntry(
         id: map['id']! as int,
-        gcashServiceTransactionId: map['gcash_service_transaction_id'] as int?,
+        gcashServiceTransactionId:
+            (map['gcash_service_transaction_id'] ??
+                    map['wallet_service_transaction_id'])
+                as int?,
         loanId: map['loan_id'] as int?,
         loanPaymentId: map['loan_payment_id'] as int?,
         reversalOfEntryId: map['reversal_of_entry_id'] as int?,
@@ -36,7 +39,8 @@ class GCashLedgerEntry {
         type: map['entry_type']! as String,
         amountChangeCentavos: map['amount_change_centavos']! as int,
         occurredAt: DateTime.parse(map['occurred_at']! as String),
-        gcashReference: map['gcash_reference'] as String?,
+        gcashReference:
+            (map['gcash_reference'] ?? map['wallet_reference']) as String?,
         notes: map['notes'] as String?,
       );
 }
@@ -61,11 +65,19 @@ class PaymentAccountingException implements Exception {
 }
 
 class PaymentAccountingRepository {
-  const PaymentAccountingRepository(this.db, {this.actorRole});
+  const PaymentAccountingRepository(
+    this.db, {
+    this.actorRole,
+    this.provider = PaymentMethod.gcash,
+  });
   final Database db;
   final String? actorRole;
+  final PaymentMethod provider;
+  String get _ledgerTable => provider == PaymentMethod.maya
+      ? 'maya_ledger_entries'
+      : 'gcash_ledger_entries';
   Future<bool> hasOpeningBalance() async => (await db.query(
-    'gcash_ledger_entries',
+    _ledgerTable,
     columns: ['id'],
     where: "entry_type='OPENING_BALANCE'",
     limit: 1,
@@ -97,9 +109,10 @@ class PaymentAccountingRepository {
       'payment_reference': method == PaymentMethod.maya ? reference : null,
       'created_at': occurredAt,
     });
-    if (method == PaymentMethod.gcash) {
+    if (method != PaymentMethod.cash) {
       await _postLedger(
         tx,
+        wallet: method,
         type: 'SALE',
         amountChangeCentavos: amountCentavos,
         cashSaleId: saleId,
@@ -119,9 +132,10 @@ class PaymentAccountingRepository {
     String? actorRole,
     required String occurredAt,
   }) async {
-    if (method != PaymentMethod.gcash) return;
+    if (method == PaymentMethod.cash) return;
     await _postLedger(
       tx,
+      wallet: method,
       type: 'UTANG_PAYMENT',
       amountChangeCentavos: amountCentavos,
       utangPaymentId: paymentId,
@@ -152,9 +166,10 @@ class PaymentAccountingRepository {
       'payment_reference': method == PaymentMethod.maya ? reference : null,
       'created_at': occurredAt,
     });
-    if (method == PaymentMethod.gcash) {
+    if (method != PaymentMethod.cash) {
       await _postLedger(
         tx,
+        wallet: method,
         type: 'EXPENSE',
         amountChangeCentavos: -amountCentavos,
         expenseId: expenseId,
@@ -174,9 +189,10 @@ class PaymentAccountingRepository {
     String? actorRole,
     required String occurredAt,
   }) async {
-    if (method != PaymentMethod.gcash) return;
+    if (method == PaymentMethod.cash) return;
     await _postLedger(
       tx,
+      wallet: method,
       type: 'CONSIGNOR_REMITTANCE',
       amountChangeCentavos: -amountCentavos,
       consignorRemittanceId: remittanceId,
@@ -188,6 +204,7 @@ class PaymentAccountingRepository {
 
   static Future<int> postGCashService(
     DatabaseExecutor tx, {
+    PaymentMethod wallet = PaymentMethod.gcash,
     required int serviceId,
     required String serviceType,
     bool isReversal = false,
@@ -198,6 +215,7 @@ class PaymentAccountingRepository {
     required String occurredAt,
   }) => _postLedger(
     tx,
+    wallet: wallet,
     type: isReversal
         ? 'SERVICE_REVERSAL'
         : serviceType == 'CASH_IN'
@@ -231,29 +249,35 @@ class PaymentAccountingRepository {
         : null;
     final sourceId = cashSaleId ?? utangPaymentId ?? expenseId;
     if (where == null || sourceId == null) return;
-    final rows = await tx.query(
-      'gcash_ledger_entries',
-      where: where,
-      whereArgs: [sourceId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return;
-    final original = rows.single;
-    await _postLedger(
-      tx,
-      type: 'REVERSAL',
-      amountChangeCentavos: -(original['amount_change_centavos']! as int),
-      transactionReversalId: transactionReversalId,
-      expenseReversalId: expenseReversalId,
-      reversalOfEntryId: original['id']! as int,
-      actorRole: actorRole,
-      notes: reason.trim(),
-      occurredAt: occurredAt,
-    );
+    for (final wallet in [PaymentMethod.gcash, PaymentMethod.maya]) {
+      final rows = await tx.query(
+        wallet == PaymentMethod.maya
+            ? 'maya_ledger_entries'
+            : 'gcash_ledger_entries',
+        where: where,
+        whereArgs: [sourceId],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+      final original = rows.single;
+      await _postLedger(
+        tx,
+        wallet: wallet,
+        type: 'REVERSAL',
+        amountChangeCentavos: -(original['amount_change_centavos']! as int),
+        transactionReversalId: transactionReversalId,
+        expenseReversalId: expenseReversalId,
+        reversalOfEntryId: original['id']! as int,
+        actorRole: actorRole,
+        notes: reason.trim(),
+        occurredAt: occurredAt,
+      );
+    }
   }
 
   static Future<void> postLoanGCashMovement(
     DatabaseExecutor tx, {
+    PaymentMethod wallet = PaymentMethod.gcash,
     required int amountChangeCentavos,
     int? loanId,
     int? loanPaymentId,
@@ -264,6 +288,7 @@ class PaymentAccountingRepository {
   }) async {
     await _postLedger(
       tx,
+      wallet: wallet,
       type: amountChangeCentavos < 0 ? 'ADJUSTMENT_OUT' : 'ADJUSTMENT_IN',
       amountChangeCentavos: amountChangeCentavos,
       loanId: loanId,
@@ -277,23 +302,27 @@ class PaymentAccountingRepository {
 
   static Future<void> reverseLoanGCashPayment(
     DatabaseExecutor tx, {
+    PaymentMethod wallet = PaymentMethod.gcash,
     required int paymentId,
     String? actorRole,
     required String occurredAt,
     required String reason,
   }) async {
     final rows = await tx.query(
-      'gcash_ledger_entries',
+      wallet == PaymentMethod.maya
+          ? 'maya_ledger_entries'
+          : 'gcash_ledger_entries',
       where: "loan_payment_id=? AND entry_type='ADJUSTMENT_OUT'",
       whereArgs: [paymentId],
       limit: 1,
     );
     if (rows.isEmpty) {
-      throw StateError('Original GCash loan payment was not found.');
+      throw StateError('Original ${wallet.label} loan payment was not found.');
     }
     final original = rows.single;
     await _postLedger(
       tx,
+      wallet: wallet,
       type: 'REVERSAL',
       amountChangeCentavos: -(original['amount_change_centavos']! as int),
       loanPaymentId: paymentId,
@@ -334,7 +363,7 @@ class PaymentAccountingRepository {
       db.transaction((tx) async {
         if (type == 'OPENING_BALANCE' &&
             (await tx.query(
-              'gcash_ledger_entries',
+              _ledgerTable,
               columns: ['id'],
               where: "entry_type='OPENING_BALANCE'",
               limit: 1,
@@ -345,6 +374,7 @@ class PaymentAccountingRepository {
         }
         final id = await _postLedger(
           tx,
+          wallet: provider,
           type: type,
           amountChangeCentavos: change,
           gcashReference: normalizeReference(gcashReference),
@@ -353,11 +383,12 @@ class PaymentAccountingRepository {
           occurredAt: now,
         );
         await tx.insert('activity_logs', {
-          'event_type': 'GCASH_$type',
-          'description': 'GCash $type recorded. Reason: ${reason.trim()}',
+          'event_type': '${provider.dbValue}_$type',
+          'description':
+              '${provider.label} $type recorded. Reason: ${reason.trim()}',
           'actor_role': actorRole,
           'actor_name': CurrentActor.labelFor(actorRole),
-          'related_entity_type': 'GCASH_LEDGER',
+          'related_entity_type': '${provider.dbValue}_LEDGER',
           'related_entity_id': id,
           'created_at': now,
         });
@@ -375,7 +406,7 @@ class PaymentAccountingRepository {
       COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) today_in,
       COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos<0 THEN -amount_change_centavos ELSE 0 END),0) today_out,
       COUNT(CASE WHEN occurred_at>=? AND occurred_at<? THEN 1 END) today_transactions
-      FROM gcash_ledger_entries''',
+      FROM $_ledgerTable''',
       [
         start.toUtc().toIso8601String(),
         end.toUtc().toIso8601String(),
@@ -395,13 +426,14 @@ class PaymentAccountingRepository {
 
   Future<List<GCashLedgerEntry>> history({int limit = 100}) async =>
       (await db.query(
-        'gcash_ledger_entries',
+        _ledgerTable,
         orderBy: 'occurred_at DESC,id DESC',
         limit: limit,
       )).map(GCashLedgerEntry.fromMap).toList(growable: false);
 
   static Future<int> _postLedger(
     DatabaseExecutor tx, {
+    PaymentMethod wallet = PaymentMethod.gcash,
     required String type,
     required int amountChangeCentavos,
     int? cashSaleId,
@@ -422,26 +454,32 @@ class PaymentAccountingRepository {
     if (amountChangeCentavos == 0) {
       throw const PaymentAccountingException('Ledger amount cannot be zero.');
     }
-    final id = await tx.insert('gcash_ledger_entries', {
-      'reference': 'GCL-${DateTime.now().microsecondsSinceEpoch}',
-      'entry_type': type,
-      'amount_change_centavos': amountChangeCentavos,
-      'cash_sale_id': cashSaleId,
-      'utang_payment_id': utangPaymentId,
-      'expense_id': expenseId,
-      'consignor_remittance_id': consignorRemittanceId,
-      'transaction_reversal_id': transactionReversalId,
-      'expense_reversal_id': expenseReversalId,
-      'gcash_service_transaction_id': gcashServiceTransactionId,
-      'loan_id': loanId,
-      'loan_payment_id': loanPaymentId,
-      'reversal_of_entry_id': reversalOfEntryId,
-      'gcash_reference': gcashReference,
-      'notes': notes,
-      'actor_role': actorRole,
-      'occurred_at': occurredAt,
-      'created_at': occurredAt,
-    });
+    final maya = wallet == PaymentMethod.maya;
+    final id = await tx.insert(
+      maya ? 'maya_ledger_entries' : 'gcash_ledger_entries',
+      {
+        'reference':
+            '${maya ? 'MYL' : 'GCL'}-${DateTime.now().microsecondsSinceEpoch}',
+        'entry_type': type,
+        'amount_change_centavos': amountChangeCentavos,
+        'cash_sale_id': cashSaleId,
+        'utang_payment_id': utangPaymentId,
+        'expense_id': expenseId,
+        'consignor_remittance_id': consignorRemittanceId,
+        'transaction_reversal_id': transactionReversalId,
+        'expense_reversal_id': expenseReversalId,
+        maya ? 'wallet_service_transaction_id' : 'gcash_service_transaction_id':
+            gcashServiceTransactionId,
+        'loan_id': loanId,
+        'loan_payment_id': loanPaymentId,
+        'reversal_of_entry_id': reversalOfEntryId,
+        maya ? 'wallet_reference' : 'gcash_reference': gcashReference,
+        'notes': notes,
+        'actor_role': actorRole,
+        'occurred_at': occurredAt,
+        'created_at': occurredAt,
+      },
+    );
     return id;
   }
 }

@@ -11,12 +11,14 @@ class UnitsPackagingEditor extends StatefulWidget {
     required this.onChanged,
     this.initial,
     this.initiallyExpanded = true,
+    this.cigaretteMode = false,
   });
   final String categoryName;
   final int defaultSellingPriceCentavos;
   final ProductUnitConfiguration? initial;
   final ValueChanged<ProductUnitConfiguration> onChanged;
   final bool initiallyExpanded;
+  final bool cigaretteMode;
 
   @override
   State<UnitsPackagingEditor> createState() => _UnitsPackagingEditorState();
@@ -34,6 +36,7 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
           widget.categoryName,
           widget.defaultSellingPriceCentavos,
         );
+    if (widget.cigaretteMode) value = _priced(value);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => widget.onChanged(value),
     );
@@ -56,12 +59,15 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
         purchasePackages: value.purchasePackages,
         sellingOptions: [
           for (final option in value.sellingOptions)
-            option.isDefault
+            widget.cigaretteMode || option.isDefault
                 ? SellingOptionDraft(
                     name: option.name,
                     baseQuantity: option.baseQuantity,
-                    priceCentavos: widget.defaultSellingPriceCentavos,
-                    isDefault: true,
+                    priceCentavos: widget.cigaretteMode
+                        ? widget.defaultSellingPriceCentavos *
+                              option.baseQuantity
+                        : widget.defaultSellingPriceCentavos,
+                    isDefault: option.isDefault,
                   )
                 : option,
         ],
@@ -71,9 +77,26 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
   }
 
   void update(ProductUnitConfiguration next) {
+    if (widget.cigaretteMode) next = _priced(next);
     setState(() => value = next);
     widget.onChanged(next);
   }
+
+  ProductUnitConfiguration _priced(ProductUnitConfiguration config) =>
+      ProductUnitConfiguration(
+        baseUnit: config.baseUnit,
+        purchasePackages: config.purchasePackages,
+        sellingOptions: [
+          for (final option in config.sellingOptions)
+            SellingOptionDraft(
+              name: option.name,
+              baseQuantity: option.baseQuantity,
+              priceCentavos:
+                  widget.defaultSellingPriceCentavos * option.baseQuantity,
+              isDefault: option.isDefault,
+            ),
+        ],
+      );
 
   int? positive(String? text) {
     final number = int.tryParse(text?.trim() ?? '');
@@ -116,18 +139,26 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               items: BaseUnit.values
                   .map((x) => DropdownMenuItem(value: x, child: Text(x.label)))
                   .toList(),
-              onChanged: (unit) {
-                if (unit != null) {
-                  update(
-                    ProductUnitConfiguration(
-                      baseUnit: unit,
-                      purchasePackages: value.purchasePackages,
-                      sellingOptions: value.sellingOptions,
-                    ),
-                  );
-                }
-              },
+              onChanged: widget.cigaretteMode
+                  ? null
+                  : (unit) {
+                      if (unit != null) {
+                        update(
+                          ProductUnitConfiguration(
+                            baseUnit: unit,
+                            purchasePackages: value.purchasePackages,
+                            sellingOptions: value.sellingOptions,
+                          ),
+                        );
+                      }
+                    },
             ),
+            if (widget.cigaretteMode) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Pack and other selling-option prices are calculated from the stick price above.',
+              ),
+            ],
             const SizedBox(height: 20),
             Text(
               'How do you buy this product?',
@@ -210,7 +241,9 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               initialValue: item.name,
               decoration: InputDecoration(
                 labelText: index == 0
-                    ? 'Default purchase package'
+                    ? widget.cigaretteMode
+                          ? 'Default purchase package (pack)'
+                          : 'Default purchase package'
                     : 'Package name',
               ),
               validator: _label,
@@ -225,7 +258,9 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               initialValue: '${item.baseQuantity}',
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: '${value.baseUnit.label}s per package',
+                labelText: widget.cigaretteMode && index == 0
+                    ? 'Sticks per Pack'
+                    : '${value.baseUnit.label}s per package',
               ),
               validator: _positiveMessage,
               onChanged: (text) =>
@@ -265,7 +300,9 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               initialValue: item.name,
               decoration: InputDecoration(
                 labelText: index == 0
-                    ? 'Default selling option'
+                    ? widget.cigaretteMode
+                          ? 'Default selling option (stick)'
+                          : 'Default selling option'
                     : 'Option name',
               ),
               validator: _label,
@@ -279,6 +316,7 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               key: ValueKey('sale-qty-$index-${item.baseQuantity}'),
               initialValue: '${item.baseQuantity}',
               keyboardType: TextInputType.number,
+              readOnly: widget.cigaretteMode && index == 0,
               decoration: InputDecoration(
                 labelText: '${value.baseUnit.label}s used',
               ),
@@ -296,12 +334,15 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              readOnly: widget.cigaretteMode,
               decoration: const InputDecoration(
                 labelText: 'Selling price',
                 prefixText: '₱ ',
               ),
               validator: _moneyMessage,
-              onChanged: (text) => _replaceSale(index, price: _centavos(text)),
+              onChanged: widget.cigaretteMode
+                  ? null
+                  : (text) => _replaceSale(index, price: _centavos(text)),
             ),
           ),
           if (index > 0)
@@ -339,11 +380,24 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
       baseQuantity: quantity ?? old.baseQuantity,
       isDefault: i == 0,
     );
-    value = ProductUnitConfiguration(
+    final sales = [...value.sellingOptions];
+    if (widget.cigaretteMode && i == 0 && quantity != null) {
+      final packIndex = sales.length > 1 ? 1 : -1;
+      if (packIndex >= 0) {
+        final pack = sales[packIndex];
+        sales[packIndex] = SellingOptionDraft(
+          name: pack.name,
+          baseQuantity: quantity,
+          priceCentavos: widget.defaultSellingPriceCentavos * quantity,
+        );
+      }
+    }
+    final next = ProductUnitConfiguration(
       baseUnit: value.baseUnit,
       purchasePackages: list,
-      sellingOptions: value.sellingOptions,
+      sellingOptions: sales,
     );
+    value = widget.cigaretteMode ? _priced(next) : next;
     widget.onChanged(value);
   }
 
@@ -355,11 +409,12 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
       priceCentavos: price ?? old.priceCentavos,
       isDefault: i == 0,
     );
-    value = ProductUnitConfiguration(
+    final next = ProductUnitConfiguration(
       baseUnit: value.baseUnit,
       purchasePackages: value.purchasePackages,
       sellingOptions: list,
     );
+    value = widget.cigaretteMode ? _priced(next) : next;
     widget.onChanged(value);
   }
 }

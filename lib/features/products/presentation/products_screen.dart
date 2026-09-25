@@ -263,7 +263,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _form([Product? product]) async {
-    final categories = await widget.categoryRepository.getActive();
+    final categories = [...await widget.categoryRepository.getActive()];
+    if (product != null &&
+        !categories.any((category) => category.id == product.categoryId) &&
+        widget.categoryRepository is SqliteCategoryRepository) {
+      final existingCategory =
+          await (widget.categoryRepository as SqliteCategoryRepository).getById(
+            product.categoryId,
+          );
+      if (existingCategory != null) categories.add(existingCategory);
+    }
     if (!mounted) return;
     if (categories.isEmpty) {
       _message(AppStrings.chooseCategory);

@@ -64,6 +64,14 @@ class DailyClosingSummary {
     this.mayaPayments = 0,
     this.mayaExpenses = 0,
     this.mayaRemittances = 0,
+    this.mayaOpeningBalance = 0,
+    this.mayaMoneyIn = 0,
+    this.mayaMoneyOut = 0,
+    this.mayaServiceCashReceived = 0,
+    this.mayaServiceCashPaid = 0,
+    this.mayaCashInServiceFees = 0,
+    this.mayaCashOutServiceFees = 0,
+    this.mayaServiceCount = 0,
     this.loanCashReceived = 0,
     this.loanCashPayments = 0,
     this.loanCashPaymentReversals = 0,
@@ -112,17 +120,32 @@ class DailyClosingSummary {
       mayaPayments,
       mayaExpenses,
       mayaRemittances;
+  final int mayaOpeningBalance,
+      mayaMoneyIn,
+      mayaMoneyOut,
+      mayaServiceCashReceived,
+      mayaServiceCashPaid,
+      mayaCashInServiceFees,
+      mayaCashOutServiceFees,
+      mayaServiceCount;
   final int loanCashReceived, loanCashPayments, loanCashPaymentReversals;
   final int loanMayaReceived, loanMayaPayments, loanMayaPaymentReversals;
   int get totalSales => cashSales + gcashSales + mayaSales;
   int get serviceFeeIncome => cashInServiceFees + cashOutServiceFees;
-  int get totalEarnings => totalSales + serviceFeeIncome;
+  int get mayaServiceFeeIncome =>
+      mayaCashInServiceFees + mayaCashOutServiceFees;
+  int get totalEarnings => totalSales + serviceFeeIncome + mayaServiceFeeIncome;
   int get cashReceived =>
-      cashSales + cashPayments + gcashServiceCashReceived + loanCashReceived;
+      cashSales +
+      cashPayments +
+      gcashServiceCashReceived +
+      mayaServiceCashReceived +
+      loanCashReceived;
   int get cashPaid =>
       cashExpenses +
       cashRemittances +
       gcashServiceCashPaid +
+      mayaServiceCashPaid +
       loanCashPayments -
       loanCashPaymentReversals;
   int get cashDifference => cashReceived - cashPaid;
@@ -133,6 +156,7 @@ class DailyClosingSummary {
   int get netRecordedCash => cashDifference;
   int get gcashEndingBalance =>
       gcashOpeningBalance + gcashMoneyIn - gcashMoneyOut;
+  int get mayaEndingBalance => mayaOpeningBalance + mayaMoneyIn - mayaMoneyOut;
 
   Map<String, Object?> toJson() => {
     'cashSales': cashSales,
@@ -142,6 +166,14 @@ class DailyClosingSummary {
     'mayaPayments': mayaPayments,
     'mayaExpenses': mayaExpenses,
     'mayaRemittances': mayaRemittances,
+    'mayaOpeningBalance': mayaOpeningBalance,
+    'mayaMoneyIn': mayaMoneyIn,
+    'mayaMoneyOut': mayaMoneyOut,
+    'mayaServiceCashReceived': mayaServiceCashReceived,
+    'mayaServiceCashPaid': mayaServiceCashPaid,
+    'mayaCashInServiceFees': mayaCashInServiceFees,
+    'mayaCashOutServiceFees': mayaCashOutServiceFees,
+    'mayaServiceCount': mayaServiceCount,
     'loanCashReceived': loanCashReceived,
     'loanCashPayments': loanCashPayments,
     'loanCashPaymentReversals': loanCashPaymentReversals,
@@ -202,6 +234,14 @@ class DailyClosingSummary {
       mayaPayments: value('mayaPayments'),
       mayaExpenses: value('mayaExpenses'),
       mayaRemittances: value('mayaRemittances'),
+      mayaOpeningBalance: value('mayaOpeningBalance'),
+      mayaMoneyIn: value('mayaMoneyIn'),
+      mayaMoneyOut: value('mayaMoneyOut'),
+      mayaServiceCashReceived: value('mayaServiceCashReceived'),
+      mayaServiceCashPaid: value('mayaServiceCashPaid'),
+      mayaCashInServiceFees: value('mayaCashInServiceFees'),
+      mayaCashOutServiceFees: value('mayaCashOutServiceFees'),
+      mayaServiceCount: value('mayaServiceCount'),
       loanCashReceived: value('loanCashReceived'),
       loanCashPayments: value('loanCashPayments'),
       loanCashPaymentReversals: value('loanCashPaymentReversals'),
@@ -410,6 +450,14 @@ class OperationsRepository {
       FROM gcash_ledger_entries''',
       [start, start, end, start, end],
     )).single;
+    final maya = (await db.rawQuery(
+      '''SELECT
+      COALESCE(SUM(CASE WHEN occurred_at<? THEN amount_change_centavos ELSE 0 END),0) opening,
+      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos>0 THEN amount_change_centavos ELSE 0 END),0) money_in,
+      COALESCE(SUM(CASE WHEN occurred_at>=? AND occurred_at<? AND amount_change_centavos<0 THEN -amount_change_centavos ELSE 0 END),0) money_out
+      FROM maya_ledger_entries''',
+      [start, start, end, start, end],
+    )).single;
     final services = await one('''SELECT COUNT(*) service_count,
       COALESCE(SUM(CASE WHEN service_type='CASH_IN' AND status='POSTED' THEN 1 ELSE 0 END),0) ci_count,
       COALESCE(SUM(CASE WHEN service_type='CASH_OUT' AND status='POSTED' THEN 1 ELSE 0 END),0) co_count,
@@ -424,6 +472,12 @@ class OperationsRepository {
       COALESCE(SUM(CASE WHEN gcash_change_centavos>0 THEN gcash_change_centavos ELSE 0 END),0) wallet_received,
       COALESCE(SUM(CASE WHEN gcash_change_centavos<0 THEN -gcash_change_centavos ELSE 0 END),0) wallet_sent
       FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''');
+    final mayaServices = await one('''SELECT COUNT(*) service_count,
+      COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) ci_fees,
+      COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) co_fees,
+      COALESCE(SUM(CASE WHEN physical_cash_change_centavos>0 THEN physical_cash_change_centavos ELSE 0 END),0) cash_received,
+      COALESCE(SUM(CASE WHEN physical_cash_change_centavos<0 THEN -physical_cash_change_centavos ELSE 0 END),0) cash_paid
+      FROM maya_service_transactions WHERE created_at>=? AND created_at<?''');
     final con = await one(
       '''SELECT COALESCE(SUM(COALESCE(a.sale_revenue_centavos,a.selling_price_centavos*a.quantity)),0) sales,COALESCE(SUM(a.payable_centavos),0) payable,COALESCE(SUM(COALESCE(a.actual_margin_centavos,a.margin_centavos)),0) margin,COUNT(DISTINCT COALESCE(a.cash_sale_item_id,-a.utang_item_id)) count FROM consignment_allocations a WHERE a.occurred_at>=? AND a.occurred_at<? AND NOT EXISTS(SELECT 1 FROM consignment_allocation_reversals r WHERE r.allocation_id=a.id)''',
     );
@@ -451,6 +505,14 @@ class OperationsRepository {
       cashRemittances: remittances['cash_total']! as int,
       gcashRemittances: remittances['gcash_total']! as int,
       mayaRemittances: remittances['maya_total']! as int,
+      mayaOpeningBalance: maya['opening']! as int,
+      mayaMoneyIn: maya['money_in']! as int,
+      mayaMoneyOut: maya['money_out']! as int,
+      mayaServiceCashReceived: mayaServices['cash_received']! as int,
+      mayaServiceCashPaid: mayaServices['cash_paid']! as int,
+      mayaCashInServiceFees: mayaServices['ci_fees']! as int,
+      mayaCashOutServiceFees: mayaServices['co_fees']! as int,
+      mayaServiceCount: mayaServices['service_count']! as int,
       loanCashReceived: loanReceipts['cash_total']! as int,
       loanCashPayments: loanPayments['cash_total']! as int,
       loanCashPaymentReversals: loanReversals['cash_total']! as int,
@@ -484,6 +546,7 @@ class OperationsRepository {
           (expenses['count']! as int) +
           (remittances['count']! as int) +
           (services['service_count']! as int) +
+          (mayaServices['service_count']! as int) +
           (loanReceipts['count']! as int) +
           (loanPayments['count']! as int) +
           (loanReversals['count']! as int),
@@ -501,6 +564,7 @@ class OperationsRepository {
       UNION ALL SELECT expense_datetime FROM expenses WHERE status='POSTED'
       UNION ALL SELECT remitted_at FROM consignor_remittances
       UNION ALL SELECT created_at FROM gcash_service_transactions
+      UNION ALL SELECT created_at FROM maya_service_transactions
       UNION ALL SELECT created_at FROM loans
       UNION ALL SELECT paid_at FROM loan_payments
       UNION ALL SELECT reversed_at FROM loan_payments WHERE reversed_at IS NOT NULL

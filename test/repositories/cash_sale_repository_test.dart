@@ -122,7 +122,7 @@ void main() {
     },
   );
   test('V2 installed and cash sale atomically snapshots and deducts', () async {
-    expect(AppDatabase.schemaVersion, 26);
+    expect(AppDatabase.schemaVersion, 27);
     expect(
       (await db.query(
         'schema_migrations',
@@ -155,6 +155,7 @@ void main() {
         24,
         25,
         26,
+        27,
       ],
     );
     final id = await CashSaleRepository(db)
@@ -308,6 +309,7 @@ void main() {
         24,
         25,
         26,
+        27,
       ],
     );
     expect(

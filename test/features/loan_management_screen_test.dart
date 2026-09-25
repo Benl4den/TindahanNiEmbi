@@ -120,9 +120,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Bombay'), findsOneWidget);
-    final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), '100');
-    await tester.enterText(fields.at(1), '120');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Amount borrowed'),
+      '100',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Total to repay'),
+      '120',
+    );
     await tester.tap(find.text('Save Loan'));
     await tester.runAsync(
       () async => Future<void>.delayed(const Duration(milliseconds: 100)),

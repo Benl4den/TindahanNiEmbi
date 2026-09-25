@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:sqflite/sqflite.dart';
 
 import '../core/formatters/number_format.dart';
+import '../models/payment_method.dart';
 
 import '../services/app_refresh_controller.dart';
 import '../services/auth_service.dart';
@@ -42,28 +43,30 @@ class GCashServiceTransaction {
   final String? gcashReference, notes;
   final String? cancelledBy, cancellationReason;
   final DateTime? cancelledAt;
-  factory GCashServiceTransaction.fromMap(Map<String, Object?> row) =>
-      GCashServiceTransaction(
-        id: row['id']! as int,
-        reference: row['reference']! as String,
-        type: row['service_type']! as String,
-        status: (row['effective_status'] ?? row['status'])! as String,
-        principalCentavos: row['principal_centavos']! as int,
-        feeCentavos: row['fee_centavos']! as int,
-        feeOption: (row['fee_option'] as String?) ?? 'ADDED',
-        customerTotalCentavos: row['customer_total_centavos']! as int,
-        physicalCashChangeCentavos:
-            row['physical_cash_change_centavos']! as int,
-        gcashChangeCentavos: row['gcash_change_centavos']! as int,
-        createdAt: DateTime.parse(row['created_at']! as String),
-        gcashReference: row['gcash_reference'] as String?,
-        notes: row['notes'] as String?,
-        cancelledBy: row['cancelled_by'] as String?,
-        cancelledAt: row['cancelled_at'] == null
-            ? null
-            : DateTime.parse(row['cancelled_at']! as String),
-        cancellationReason: row['cancellation_reason'] as String?,
-      );
+  factory GCashServiceTransaction.fromMap(
+    Map<String, Object?> row,
+  ) => GCashServiceTransaction(
+    id: row['id']! as int,
+    reference: row['reference']! as String,
+    type: row['service_type']! as String,
+    status: (row['effective_status'] ?? row['status'])! as String,
+    principalCentavos: row['principal_centavos']! as int,
+    feeCentavos: row['fee_centavos']! as int,
+    feeOption: (row['fee_option'] as String?) ?? 'ADDED',
+    customerTotalCentavos: row['customer_total_centavos']! as int,
+    physicalCashChangeCentavos: row['physical_cash_change_centavos']! as int,
+    gcashChangeCentavos:
+        (row['gcash_change_centavos'] ?? row['wallet_change_centavos'])! as int,
+    createdAt: DateTime.parse(row['created_at']! as String),
+    gcashReference:
+        (row['gcash_reference'] ?? row['wallet_reference']) as String?,
+    notes: row['notes'] as String?,
+    cancelledBy: row['cancelled_by'] as String?,
+    cancelledAt: row['cancelled_at'] == null
+        ? null
+        : DateTime.parse(row['cancelled_at']! as String),
+    cancellationReason: row['cancellation_reason'] as String?,
+  );
 }
 
 class GCashServiceSummary {
@@ -83,9 +86,22 @@ class GCashServiceSummary {
 }
 
 class GCashServiceRepository {
-  const GCashServiceRepository(this.db, {this.actorRole = 'OWNER'});
+  const GCashServiceRepository(
+    this.db, {
+    this.actorRole = 'OWNER',
+    this.provider = PaymentMethod.gcash,
+  });
   final Database db;
   final String actorRole;
+  final PaymentMethod provider;
+  bool get _maya => provider == PaymentMethod.maya;
+  String get _serviceTable =>
+      _maya ? 'maya_service_transactions' : 'gcash_service_transactions';
+  String get _ledgerTable =>
+      _maya ? 'maya_ledger_entries' : 'gcash_ledger_entries';
+  String get _changeColumn =>
+      _maya ? 'wallet_change_centavos' : 'gcash_change_centavos';
+  String get _referenceColumn => _maya ? 'wallet_reference' : 'gcash_reference';
   static String newRequestId() => List.generate(
     16,
     (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
@@ -93,7 +109,7 @@ class GCashServiceRepository {
   Future<int> totalFeeIncome() async =>
       Sqflite.firstIntValue(
         await db.rawQuery(
-          "SELECT COALESCE(SUM(CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END),0) FROM gcash_service_transactions",
+          "SELECT COALESCE(SUM(CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END),0) FROM $_serviceTable",
         ),
       ) ??
       0;
@@ -101,7 +117,7 @@ class GCashServiceRepository {
   Future<int> availableGCashBalance() async =>
       Sqflite.firstIntValue(
         await db.rawQuery(
-          'SELECT COALESCE(SUM(amount_change_centavos),0) FROM gcash_ledger_entries',
+          'SELECT COALESCE(SUM(amount_change_centavos),0) FROM $_ledgerTable',
         ),
       ) ??
       0;
@@ -117,9 +133,10 @@ class GCashServiceRepository {
     String? requestId,
   }) => AppRefreshController.instance.after(
     db.transaction((tx) async {
-      final reference = 'GCS-${requestId ?? newRequestId()}';
+      final reference =
+          '${_maya ? 'MYS' : 'GCS'}-${requestId ?? newRequestId()}';
       final existing = await tx.query(
-        'gcash_service_transactions',
+        _serviceTable,
         where: 'reference=?',
         whereArgs: [reference],
       );
@@ -129,7 +146,7 @@ class GCashServiceRepository {
             row['principal_centavos'] != principalCentavos ||
             row['fee_centavos'] != feeCentavos ||
             (row['fee_option'] ?? 'ADDED') != feeOption ||
-            row['gcash_reference'] !=
+            row[_referenceColumn] !=
                 PaymentAccountingRepository.normalizeReference(
                   gcashReference,
                 ) ||
@@ -170,13 +187,13 @@ class GCashServiceRepository {
         final balance =
             Sqflite.firstIntValue(
               await tx.rawQuery(
-                'SELECT COALESCE(SUM(amount_change_centavos),0) FROM gcash_ledger_entries',
+                'SELECT COALESCE(SUM(amount_change_centavos),0) FROM $_ledgerTable',
               ),
             ) ??
             0;
         if (balance < customerReceives) {
           throw GCashServiceException(
-            'Insufficient GCash. Available: ${standardMoney(balance)}. '
+            'Insufficient ${provider.label}. Available: ${standardMoney(balance)}. '
             'Required: ${standardMoney(customerReceives)}. '
             'Short: ${standardMoney(customerReceives - balance)}.',
           );
@@ -190,7 +207,7 @@ class GCashServiceRepository {
       final physicalChange = type == 'CASH_IN'
           ? customerSends
           : -customerReceives;
-      final id = await tx.insert('gcash_service_transactions', {
+      final id = await tx.insert(_serviceTable, {
         'reference': reference,
         'service_type': type,
         'status': 'POSTED',
@@ -199,8 +216,8 @@ class GCashServiceRepository {
         'fee_option': feeOption,
         'customer_total_centavos': total,
         'physical_cash_change_centavos': physicalChange,
-        'gcash_change_centavos': gcashChange,
-        'gcash_reference': PaymentAccountingRepository.normalizeReference(
+        _changeColumn: gcashChange,
+        _referenceColumn: PaymentAccountingRepository.normalizeReference(
           gcashReference,
         ),
         'notes': PaymentAccountingRepository.normalizeReference(notes),
@@ -210,6 +227,7 @@ class GCashServiceRepository {
       });
       await PaymentAccountingRepository.postGCashService(
         tx,
+        wallet: provider,
         serviceId: id,
         serviceType: type,
         amountChangeCentavos: gcashChange,
@@ -219,21 +237,17 @@ class GCashServiceRepository {
         occurredAt: now,
       );
       await tx.insert('activity_logs', {
-        'event_type': 'GCASH_$type',
+        'event_type': '${provider.dbValue}_$type',
         'description':
-            'GCash ${type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} $principalCentavos centavos.',
+            '${provider.label} ${type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} $principalCentavos centavos.',
         'actor_role': actorRole,
         'actor_name': CurrentActor.labelFor(actorRole),
-        'related_entity_type': 'GCASH_SERVICE',
+        'related_entity_type': '${provider.dbValue}_SERVICE',
         'related_entity_id': id,
         'created_at': now,
       });
       return GCashServiceTransaction.fromMap(
-        (await tx.query(
-          'gcash_service_transactions',
-          where: 'id=?',
-          whereArgs: [id],
-        )).single,
+        (await tx.query(_serviceTable, where: 'id=?', whereArgs: [id])).single,
       );
     }),
   );
@@ -252,8 +266,9 @@ class GCashServiceRepository {
         );
       }
       final original = await tx.query(
-        'gcash_service_transactions',
-        where: "id=? AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=gcash_service_transactions.id)",
+        _serviceTable,
+        where:
+            "id=? AND status='POSTED' AND NOT EXISTS(SELECT 1 FROM $_serviceTable r WHERE r.reversal_of_service_id=$_serviceTable.id)",
         whereArgs: [id],
       );
       if (original.isEmpty) {
@@ -263,8 +278,9 @@ class GCashServiceRepository {
       }
       final row = original.single,
           now = DateTime.now().toUtc().toIso8601String();
-      final reversalId = await tx.insert('gcash_service_transactions', {
-        'reference': 'GCS-R-${DateTime.now().microsecondsSinceEpoch}',
+      final reversalId = await tx.insert(_serviceTable, {
+        'reference':
+            '${_maya ? 'MYS' : 'GCS'}-R-${DateTime.now().microsecondsSinceEpoch}',
         'service_type': row['service_type'],
         'status': 'REVERSAL',
         'principal_centavos': row['principal_centavos'],
@@ -273,8 +289,8 @@ class GCashServiceRepository {
         'customer_total_centavos': row['customer_total_centavos'],
         'physical_cash_change_centavos':
             -(row['physical_cash_change_centavos']! as int),
-        'gcash_change_centavos': -(row['gcash_change_centavos']! as int),
-        'gcash_reference': row['gcash_reference'],
+        _changeColumn: -(row[_changeColumn]! as int),
+        _referenceColumn: row[_referenceColumn],
         'notes': reason.trim(),
         'created_by_role_snapshot': actorRole,
         'created_by_name_snapshot': CurrentActor.labelFor(actorRole),
@@ -283,28 +299,29 @@ class GCashServiceRepository {
       });
       await PaymentAccountingRepository.postGCashService(
         tx,
+        wallet: provider,
         serviceId: reversalId,
         isReversal: true,
         serviceType: row['service_type']! as String,
-        amountChangeCentavos: -(row['gcash_change_centavos']! as int),
-        gcashReference: row['gcash_reference'] as String?,
+        amountChangeCentavos: -(row[_changeColumn]! as int),
+        gcashReference: row[_referenceColumn] as String?,
         actorRole: actorRole,
         notes: 'Reversal: ${reason.trim()}',
         occurredAt: now,
       );
       await tx.insert('activity_logs', {
-        'event_type': 'GCASH_SERVICE_REVERSAL',
+        'event_type': '${provider.dbValue}_SERVICE_REVERSAL',
         'description':
-            'GCash service ${row['reference']} reversed — ${reason.trim()}',
+            '${provider.label} service ${row['reference']} reversed — ${reason.trim()}',
         'actor_role': actorRole,
         'actor_name': CurrentActor.labelFor(actorRole),
-        'related_entity_type': 'GCASH_SERVICE',
+        'related_entity_type': '${provider.dbValue}_SERVICE',
         'related_entity_id': reversalId,
         'created_at': now,
       });
       return GCashServiceTransaction.fromMap(
         (await tx.query(
-          'gcash_service_transactions',
+          _serviceTable,
           where: 'id=?',
           whereArgs: [reversalId],
         )).single,
@@ -312,11 +329,12 @@ class GCashServiceRepository {
     }),
   );
 
-  Future<List<GCashServiceTransaction>> recent({int limit = 50}) async =>
-      (await db.rawQuery(
-        "SELECT s.*, CASE WHEN EXISTS(SELECT 1 FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id) THEN 'REVERSED' ELSE s.status END effective_status, (SELECT r.created_by_name_snapshot FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_by, (SELECT r.created_at FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_at, (SELECT r.notes FROM gcash_service_transactions r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancellation_reason FROM gcash_service_transactions s ORDER BY s.created_at DESC,s.id DESC LIMIT ?",
-        [limit],
-      )).map(GCashServiceTransaction.fromMap).toList(growable: false);
+  Future<List<GCashServiceTransaction>> recent({
+    int limit = 50,
+  }) async => (await db.rawQuery(
+    "SELECT s.*, CASE WHEN EXISTS(SELECT 1 FROM $_serviceTable r WHERE r.reversal_of_service_id=s.id) THEN 'REVERSED' ELSE s.status END effective_status, (SELECT r.created_by_name_snapshot FROM $_serviceTable r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_by, (SELECT r.created_at FROM $_serviceTable r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancelled_at, (SELECT r.notes FROM $_serviceTable r WHERE r.reversal_of_service_id=s.id LIMIT 1) cancellation_reason FROM $_serviceTable s ORDER BY s.created_at DESC,s.id DESC LIMIT ?",
+    [limit],
+  )).map(GCashServiceTransaction.fromMap).toList(growable: false);
 
   Future<GCashServiceSummary> summary(DateTime day) async {
     final start = DateTime(
@@ -338,8 +356,8 @@ class GCashServiceRepository {
       COALESCE(SUM(CASE WHEN service_type='CASH_IN' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) ci_fee,
       COALESCE(SUM(CASE WHEN service_type='CASH_OUT' THEN CASE WHEN status='REVERSAL' THEN -fee_centavos ELSE fee_centavos END ELSE 0 END),0) co_fee,
       COALESCE(SUM(physical_cash_change_centavos),0) cash_change,
-      COALESCE(SUM(gcash_change_centavos),0) gcash_change
-      FROM gcash_service_transactions WHERE created_at>=? AND created_at<?''',
+      COALESCE(SUM($_changeColumn),0) gcash_change
+      FROM $_serviceTable WHERE created_at>=? AND created_at<?''',
       [start, end],
     )).single;
     return GCashServiceSummary(

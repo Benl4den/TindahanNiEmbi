@@ -18,6 +18,10 @@ import '../../../repositories/category_repository.dart';
 import '../../../services/product_photo_service.dart';
 import '../../../widgets/product_image.dart';
 import '../../../widgets/summary_card.dart';
+import '../../../widgets/feature_access_builder.dart';
+import '../../../widgets/pro_feature_preview.dart';
+import '../../../widgets/pro_overview_panel.dart';
+import '../../../services/feature_access_service.dart';
 
 class ConsignmentScreen extends StatefulWidget {
   const ConsignmentScreen({
@@ -26,6 +30,7 @@ class ConsignmentScreen extends StatefulWidget {
     required this.products,
     required this.categories,
     required this.photoService,
+    this.access,
     this.initialConsignorId,
     this.initialReceiveProductId,
   });
@@ -33,6 +38,7 @@ class ConsignmentScreen extends StatefulWidget {
   final ProductRepository products;
   final CategoryRepository categories;
   final ProductPhotoService photoService;
+  final FeatureAccessService? access;
   final int? initialConsignorId;
   final int? initialReceiveProductId;
   @override
@@ -852,15 +858,19 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
 
 class _ConsignmentScreenState extends State<ConsignmentScreen> {
   int? selectedConsignorId;
+  String _search = '';
+  String _filter = 'All';
+  String _sort = 'Name';
   int? _pendingReceiveProductId;
   int _companyTab = 0;
-  late Future<
+  Future<
     ({
+      ConsignmentSummary overview,
       ConsignmentSummary? summary,
       List<Map<String, Object?>> cards,
       List<Map<String, Object?>> companies,
     })
-  >
+  >?
   _data;
 
   @override
@@ -868,7 +878,6 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     super.initState();
     selectedConsignorId = widget.initialConsignorId;
     _pendingReceiveProductId = widget.initialReceiveProductId;
-    _reload();
     _scheduleInitialReceive();
   }
 
@@ -888,6 +897,11 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     if (_pendingReceiveProductId == null || selectedConsignorId == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _pendingReceiveProductId == null) return;
+      if (!await (widget.access ?? FeatureAccessService(widget.repository.db))
+          .allows(ProFeature.consignment)) {
+        return;
+      }
+      if (!mounted) return;
       final productId = _pendingReceiveProductId;
       _pendingReceiveProductId = null;
       await _receive(initialProductId: productId);
@@ -900,22 +914,26 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
 
   Future<
     ({
+      ConsignmentSummary overview,
       ConsignmentSummary? summary,
       List<Map<String, Object?>> cards,
       List<Map<String, Object?>> companies,
     })
   >
   _load() async {
+    final overview = await widget.repository.summary();
     final companies = await widget.repository.companyCards();
     final id = selectedConsignorId;
     if (id == null) {
       return (
+        overview: overview,
         summary: null,
         cards: <Map<String, Object?>>[],
         companies: companies,
       );
     }
     return (
+      overview: overview,
       summary: await widget.repository.summaryForConsignor(id),
       cards: await widget.repository.productCardsForConsignor(id),
       companies: companies,
@@ -1520,7 +1538,35 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => SectionBackHandler(
+  Widget build(BuildContext context) => FeatureAccessBuilder(
+    access: widget.access ?? FeatureAccessService(widget.repository.db),
+    feature: ProFeature.consignment,
+    builder: (context, allowed) => allowed
+        ? _buildPro(context)
+        : Scaffold(
+            appBar: AppBar(title: const Text('Consignment')),
+            body: const ProFeaturePreview(
+              title: 'Manage consigned stock with confidence',
+              description: 'Track supplier-owned products, what has sold, and how much you still owe each supplier.',
+              icon: Icons.inventory_2_outlined,
+              metrics: [
+                'Consigned Stock Value',
+                'Amount Owed to Suppliers',
+                'Total Products',
+              ],
+              benefits: [
+                'Manage consignor profiles',
+                'Receive consigned products',
+                'Track products sold',
+                'Track amount owed to suppliers',
+                'Record remittances and returns',
+                'View complete consignment history',
+              ],
+            ),
+          ),
+  );
+
+  Widget _buildPro(BuildContext context) => SectionBackHandler(
     onBack: () async {
       if (selectedConsignorId == null) return false;
       setState(() {
@@ -1557,7 +1603,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
       actions: const [HelpButton(topic: HelpTopicId.consignment)],
     ),
     body: FutureBuilder(
-      future: _data,
+      future: _data ??= _load(),
       builder: (_, s) {
         if (s.hasError) {
           return Center(
@@ -1568,52 +1614,115 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           );
         }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
-        final summary = s.data!.summary,
+        final overview = s.data!.overview,
+            summary = s.data!.summary,
             cards = s.data!.cards,
             companies = s.data!.companies;
         if (selectedConsignorId == null) {
+          final visibleCompanies = companies.where((company) {
+            final name = (company['name']! as String).toLowerCase();
+            return name.contains(_search) &&
+                (_filter == 'All' || (company['payable_centavos']! as int) > 0);
+          }).toList();
+          visibleCompanies.sort(
+            (a, b) => switch (_sort) {
+              'Amount owed' => (b['payable_centavos']! as int).compareTo(
+                a['payable_centavos']! as int,
+              ),
+              'Stock value' =>
+                ((b['stock_value_centavos'] as int?) ?? 0).compareTo(
+                  (a['stock_value_centavos'] as int?) ?? 0,
+                ),
+              _ => (a['name']! as String).toLowerCase().compareTo(
+                (b['name']! as String).toLowerCase(),
+              ),
+            },
+          );
           return ListView(
             key: const Key('consignor-company-list'),
             padding: const EdgeInsets.all(20),
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SizedBox(
-                    width: 270,
-                    child: SummaryCard(
-                      label: 'Consignment companies',
-                      value: '${companies.length}',
-                      icon: Icons.business_outlined,
-                    ),
+              ProOverviewPanel(
+                title: 'Consignment Overview',
+                subtitle:
+                    'Your consigned stock, supplier balances, and earnings.',
+                metrics: [
+                  ProOverviewMetric(
+                    'Consigned Stock Value',
+                    money(overview.inventoryValueCentavos),
+                    Icons.inventory_2_outlined,
+                    Theme.of(context).colorScheme.primary,
                   ),
-                  SizedBox(
-                    width: 270,
-                    child: SummaryCard(
-                      label: 'Active products',
-                      value:
-                          '${companies.fold<int>(0, (n, x) => n + (x['product_count']! as int))}',
-                      icon: Icons.inventory_2_outlined,
-                    ),
+                  ProOverviewMetric(
+                    'Amount Owed to Suppliers',
+                    money(overview.payableCentavos),
+                    Icons.request_quote_outlined,
+                    Theme.of(context).colorScheme.error,
                   ),
-                  SizedBox(
-                    width: 270,
-                    child: SummaryCard(
-                      label: 'Supplier payables',
-                      value: money(
-                        companies.fold<int>(
-                          0,
-                          (n, x) => n + (x['payable_centavos']! as int),
-                        ),
-                      ),
-                      icon: Icons.payments_outlined,
-                      accentColor: const Color(0xFFF39C4A),
-                    ),
+                  ProOverviewMetric(
+                    'Earnings',
+                    money(overview.marginCentavos),
+                    Icons.trending_up,
+                    Theme.of(context).colorScheme.secondary,
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 340,
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search consignors...',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (value) =>
+                          setState(() => _search = value.trim().toLowerCase()),
+                    ),
+                  ),
+                  DropdownButton<String>(
+                    value: _filter,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'All',
+                        child: Text('Filter: All'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Amount owed',
+                        child: Text('Amount owed'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _filter = value ?? 'All'),
+                  ),
+                  DropdownButton<String>(
+                    value: _sort,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Name',
+                        child: Text('Sort: Name'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Amount owed',
+                        child: Text('Sort: Amount owed'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Stock value',
+                        child: Text('Sort: Stock value'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _sort = value ?? 'Name'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               Builder(
                 builder: (context) {
                   final restockCount = companies.fold<int>(
@@ -1669,14 +1778,16 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              if (companies.isEmpty)
+              if (visibleCompanies.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(40),
                   child: Center(
-                    child: Text('No suppliers yet. Add a supplier to begin.'),
+                    child: Text(
+                      'No consignors match this view. Add a supplier or change your search.',
+                    ),
                   ),
                 ),
-              ...companies.map(
+              ...visibleCompanies.map(
                 (x) => Card(
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(18),
@@ -1687,7 +1798,8 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     ),
                     subtitle: Text(
                       '${x['product_count']} ${(x['product_count']! as int) == 1 ? 'product' : 'products'}'
-                      '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'}\n'
+                      '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'} • Active\n'
+                      'Stock value: ${money((x['stock_value_centavos'] as int?) ?? 0)}\n'
                       'Last delivery: ${_shortDate(x['last_receipt_at'])} • Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
                     ),
                     isThreeLine: true,

@@ -31,12 +31,13 @@ import 'migrations/migration_v23.dart';
 import 'migrations/migration_v24.dart';
 import 'migrations/migration_v25.dart';
 import 'migrations/migration_v26.dart';
+import 'migrations/migration_v27.dart';
 
 class AppDatabase {
   AppDatabase({this.factory, this.databasePath});
 
   static const databaseName = 'tindahan_ni_embi.db';
-  static const schemaVersion = 26;
+  static const schemaVersion = 27;
 
   final DatabaseFactory? factory;
   final String? databasePath;
@@ -70,6 +71,7 @@ class AppDatabase {
     MigrationV24(),
     MigrationV25(),
     MigrationV26(),
+    MigrationV27(),
   ];
 
   Future<Database> get database async => _database ??= await _open();

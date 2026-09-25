@@ -49,6 +49,15 @@ class ProductUnitConfiguration {
 class ProductUnitPreset {
   const ProductUnitPreset._();
 
+  static bool isCigaretteCategory(String categoryName) {
+    final name = categoryName
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z]+'), ' ')
+        .trim();
+    return RegExp(r'(^| )cigarettes?( |$)').hasMatch(name) || name == 'tobacco';
+  }
+
   static ProductUnitConfiguration forCategory(
     String categoryName,
     int defaultSellingPriceCentavos,
@@ -78,7 +87,7 @@ class ProductUnitPreset {
         ],
       );
     }
-    if (name == 'cigarettes' || name == 'cigarettes & tobacco') {
+    if (isCigaretteCategory(categoryName)) {
       return ProductUnitConfiguration(
         baseUnit: BaseUnit.stick,
         purchasePackages: const [

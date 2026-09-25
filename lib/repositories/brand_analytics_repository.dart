@@ -4,6 +4,40 @@ class BrandAnalyticsRepository {
   const BrandAnalyticsRepository(this.db);
   final Database db;
 
+  /// Posted historical attributions for all brands in two aggregate queries.
+  Future<Map<int, ({int sales, int profit})>> totalsByBrand() async {
+    final cash = await db.rawQuery('''
+      SELECT a.inventory_group_id brand_id,
+        COALESCE(SUM(i.line_total_centavos),0) sales,
+        COALESCE(SUM(a.cost_centavos),0) cost
+      FROM brand_sale_attributions a
+      JOIN cash_sale_items i ON i.id=a.cash_sale_item_id
+      JOIN cash_sales s ON s.id=i.cash_sale_id
+      WHERE s.status='POSTED' GROUP BY a.inventory_group_id
+    ''');
+    final utang = await db.rawQuery('''
+      SELECT a.inventory_group_id brand_id,
+        COALESCE(SUM(i.line_total_centavos),0) sales,
+        COALESCE(SUM(a.cost_centavos),0) cost
+      FROM brand_sale_attributions a
+      JOIN utang_transaction_items i ON i.id=a.utang_item_id
+      JOIN utang_transactions u ON u.id=i.utang_transaction_id
+      WHERE u.status='POSTED' GROUP BY a.inventory_group_id
+    ''');
+    final result = <int, ({int sales, int profit})>{};
+    for (final row in [...cash, ...utang]) {
+      final id = row['brand_id']! as int;
+      final sales = row['sales']! as int;
+      final profit = sales - (row['cost']! as int);
+      final previous = result[id];
+      result[id] = (
+        sales: (previous?.sales ?? 0) + sales,
+        profit: (previous?.profit ?? 0) + profit,
+      );
+    }
+    return result;
+  }
+
   /// Called in the sale transaction, after consignment allocation has been
   /// posted, so later brand assignments and price edits cannot rewrite sales.
   static Future<void> recordSaleItem(

@@ -257,11 +257,56 @@ class ReportsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
+              'Maya Services • All Time',
+              style: Theme.of(c).textTheme.titleLarge,
+            ),
+            FutureBuilder<Map<String, Object?>>(
+              future: repository.gcashServiceSummary(maya: true),
+              builder: (_, services) {
+                if (services.hasError) {
+                  return const Text(
+                    'Could not load Maya service totals. Reopen Reports to try again.',
+                  );
+                }
+                if (!services.hasData) return const LinearProgressIndicator();
+                final m = services.data!;
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    SizedBox(
+                      width: 280,
+                      child: _total(
+                        'Cash-In (${m['cash_in_count']})',
+                        m['cash_in_principal']! as int,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _total(
+                        'Cash-Out (${m['cash_out_count']})',
+                        m['cash_out_principal']! as int,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _total(
+                        'Fees Earned',
+                        (m['cash_in_fees']! as int) +
+                            (m['cash_out_fees']! as int),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            Text(
               'Frequently Sold Products',
               style: Theme.of(c).textTheme.titleLarge,
             ),
             const Text(
-              'Ranked by number of sales containing each product. Includes Cash, GCash and UTANG sales.',
+              'Ranked by number of sales containing each product. Includes Cash, GCash, Maya and UTANG sales.',
             ),
             ...?(f.data?.map(
               (r) => ListTile(

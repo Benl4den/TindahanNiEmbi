@@ -343,7 +343,19 @@ class SqliteProductRepository implements ProductRepository {
     }
     return AppRefreshController.instance.after(
       _database.transaction((txn) async {
-        await _requireActiveCategory(txn, product.categoryId);
+        final currentCategory = (await txn.query(
+          'products',
+          columns: ['category_id'],
+          where: 'id=?',
+          whereArgs: [product.id],
+          limit: 1,
+        )).firstOrNull;
+        if (currentCategory == null) {
+          throw const InvalidProductException('Product not found.');
+        }
+        if (currentCategory['category_id'] != product.categoryId) {
+          await _requireActiveCategory(txn, product.categoryId);
+        }
         final now = DateTime.now().toUtc().toIso8601String();
         final units = product.unitConfiguration;
         if (units != null) {

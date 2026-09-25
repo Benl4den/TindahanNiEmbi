@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:tindahan_ni_embi/features/gcash/presentation/gcash_screen.dart';
+import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/repositories/gcash_service_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_accounting_repository.dart';
 import 'package:tindahan_ni_embi/services/auth_service.dart';
@@ -69,7 +70,53 @@ class Services extends GCashServiceRepository {
   }
 }
 
+class DistinctWallet extends PaymentAccountingRepository {
+  DistinctWallet(PaymentMethod provider, this.balance)
+    : super(StubDb(), provider: provider);
+  final int balance;
+  @override
+  Future<GCashSummary> summary([DateTime? selectedDay]) async =>
+      GCashSummary(balance: balance, todayIn: 0, todayOut: 0);
+  @override
+  Future<List<GCashLedgerEntry>> history({int limit = 100}) async => [];
+}
+
+class DistinctServices extends GCashServiceRepository {
+  DistinctServices(PaymentMethod provider)
+    : super(StubDb(), provider: provider);
+  @override
+  Future<int> totalFeeIncome() async => 0;
+  @override
+  Future<List<GCashServiceTransaction>> recent({int limit = 50}) async => [];
+}
+
 void main() {
+  testWidgets('switching from GCash to Maya reloads the independent balance', (
+    tester,
+  ) async {
+    Future<void> show(PaymentMethod provider, int balance) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GCashScreen(
+            repository: DistinctWallet(provider, balance),
+            services: DistinctServices(provider),
+            auth: Auth(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show(PaymentMethod.gcash, 123400);
+    expect(find.text('₱1,234.00'), findsOneWidget);
+    await show(PaymentMethod.maya, 567800);
+    expect(find.text('Maya'), findsOneWidget);
+    expect(find.text('₱5,678.00'), findsOneWidget);
+    expect(find.text('₱1,234.00'), findsNothing);
+    await show(PaymentMethod.gcash, 123400);
+    expect(find.text('₱1,234.00'), findsOneWidget);
+  });
+
   final receipt = GCashServiceTransaction(
     id: 1,
     reference: 'GCS-test',

@@ -91,6 +91,16 @@ class SqliteCategoryRepository implements CategoryRepository {
     return rows.map(Category.fromMap).toList(growable: false);
   }
 
+  Future<Category?> getById(int id) async {
+    final rows = await _database.query(
+      'categories',
+      where: 'id=?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Category.fromMap(rows.single);
+  }
+
   @override
   Future<Category> create(String name) async {
     final normalizedName = _normalize(name);

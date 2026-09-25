@@ -53,11 +53,12 @@ void main() {
       expect(await access.allows(ProFeature.fiveSixLoanManagement), isFalse);
       expect(await access.allows(ProFeature.productInsights), isFalse);
       expect(await access.canAccess(AppFeature.inventoryAnalytics), isTrue);
-      expect(await access.canAccess(AppFeature.consignment), isTrue);
+      expect(await access.canAccess(AppFeature.consignment), isFalse);
 
       await access.setLocalPlanForTesting(AppPlan.pro);
       expect(await access.currentPlan(), AppPlan.pro);
       expect(await access.allows(ProFeature.managedBrandAnalytics), isTrue);
+      expect(await access.allows(ProFeature.consignment), isTrue);
       expect(await access.allows(ProFeature.fiveSixLoanManagement), isTrue);
       expect(await access.allows(ProFeature.productInsights), isTrue);
       expect(changes, greaterThanOrEqualTo(2));

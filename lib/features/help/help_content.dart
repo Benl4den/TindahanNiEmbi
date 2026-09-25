@@ -12,6 +12,7 @@ enum HelpTopicId {
   utangPayments,
   customers,
   gcash,
+  maya,
   cashIn,
   cashOut,
   expenses,
@@ -282,6 +283,25 @@ const helpArticles = <HelpArticle>[
       'Cancel Service Record only cancels the record in TindaSari PH. It does not send, receive, or refund actual GCash money.',
     ],
     keywords: ['wallet balance gcash service adjustment opening add subtract'],
+  ),
+  HelpArticle(
+    id: HelpTopicId.maya,
+    group: 'GCash & Money',
+    title: 'Maya',
+    icon: Icons.account_balance_wallet_outlined,
+    description: 'Track your Maya balance, customer services, and adjustments separately from GCash.',
+    steps: [
+      'Check the recorded Maya balance and recent activity.',
+      'Use Cash-In when a customer pays cash to receive Maya, or Cash-Out when a customer sends Maya to receive cash.',
+      'Review the fee and both money movements before confirming.',
+      'The owner may record an opening balance or a reasoned adjustment with the Owner PIN.',
+    ],
+    notes: [
+      'Recording a service does not move money in Maya itself.',
+      'A cancellation reverses only this app record; handle any real refund separately.',
+      'Maya and GCash balances are never combined.',
+    ],
+    keywords: ['maya wallet cash in cash out fees adjustment'],
   ),
   HelpArticle(
     id: HelpTopicId.cashIn,

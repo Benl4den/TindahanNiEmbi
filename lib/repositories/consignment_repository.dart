@@ -657,6 +657,11 @@ class ConsignmentRepository {
   Future<List<Map<String, Object?>>> companyCards() => db.rawQuery('''SELECT c.id,c.name,c.contact_details,c.default_category_id,cat.name default_category_name,COUNT(DISTINCT CASE WHEN p.is_archived=0 THEN b.product_id END) product_count,MAX(b.received_at) last_receipt_at,
       COUNT(DISTINCT CASE WHEN p.is_archived=0 AND p.current_quantity<=p.minimum_stock_level THEN p.id END) restock_count,
       (SELECT MAX(r.remitted_at) FROM consignor_remittances r WHERE r.consignor_id=c.id) last_remittance_at,
+      COALESCE((SELECT SUM(((b2.units_received-b2.units_allocated-b2.units_returned)*
+        COALESCE(b2.supplier_cost_centavos,b2.unit_cost_centavos)+
+        COALESCE(b2.supplier_cost_basis_quantity,1)/2)/
+        COALESCE(b2.supplier_cost_basis_quantity,1))
+        FROM consignment_batches b2 WHERE b2.consignor_id=c.id),0) stock_value_centavos,
       COALESCE((SELECT SUM(l.amount_change_centavos) FROM consignor_ledger_entries l WHERE l.consignor_id=c.id),0)+
       COALESCE((SELECT SUM(r.payable_change_centavos) FROM consignment_allocation_reversals r WHERE r.consignor_id=c.id),0) payable_centavos
       FROM consignors c LEFT JOIN consignment_batches b ON b.consignor_id=c.id
