@@ -92,7 +92,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _field(0, AppStrings.name, required: true),
-          if (!widget.compact) ...[
+          if (!widget.compact || widget.customer != null) ...[
             _field(1, AppStrings.nickname),
             _field(3, AppStrings.address),
           ],
@@ -111,7 +111,13 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Saving…' : AppStrings.save),
+                  child: Text(
+                    _saving
+                        ? 'Saving…'
+                        : widget.customer != null
+                        ? 'Save Changes'
+                        : AppStrings.save,
+                  ),
                 ),
               ),
             ],
@@ -140,7 +146,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  AppStrings.newCustomer,
+                  widget.customer == null
+                      ? AppStrings.newCustomer
+                      : 'Edit Customer',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 20),

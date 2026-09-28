@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/activity_description.dart';
 import '../../../models/activity_log.dart';
 import '../../../repositories/activity_log_repository.dart';
 import '../../../widgets/app_search_field.dart';
@@ -332,13 +333,14 @@ class _State extends State<ActivityLogsScreen> {
           .join(' '),
   };
 
-  String _displayDescription(String description) => description
-      .replaceAll(RegExp(r'\bReversal\b'), 'Cancellation')
-      .replaceAll(RegExp(r'\breversal\b'), 'cancellation')
-      .replaceAll(RegExp(r'\bReversed\b'), 'Cancelled')
-      .replaceAll(RegExp(r'\breversed\b'), 'cancelled')
-      .replaceAll(RegExp(r'\bCorrected\b'), 'Fixed')
-      .replaceAll(RegExp(r'\bcorrected\b'), 'fixed');
+  String _displayDescription(String description) =>
+      formatActivityDescription(description)
+          .replaceAll(RegExp(r'\bReversal\b'), 'Cancellation')
+          .replaceAll(RegExp(r'\breversal\b'), 'cancellation')
+          .replaceAll(RegExp(r'\bReversed\b'), 'Cancelled')
+          .replaceAll(RegExp(r'\breversed\b'), 'cancelled')
+          .replaceAll(RegExp(r'\bCorrected\b'), 'Fixed')
+          .replaceAll(RegExp(r'\bcorrected\b'), 'fixed');
 
   String _role(String role) => role == 'OWNER' ? 'Owner' : 'Staff';
 }

@@ -70,39 +70,73 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
 
   Future<void> _add() async {
     final controller = TextEditingController();
-    final name = await showDialog<String>(
+    var submitted = false, saving = false;
+    String? error;
+    final route = DialogRoute<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.sell_outlined),
-        title: const Text('Add Brand'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Brand name',
-              helperText: 'Use a name that is easy to recognize.',
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, set) => AlertDialog(
+          icon: const Icon(Icons.sell_outlined),
+          title: const Text('Add Brand'),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              onChanged: (_) => set(() {}),
+              decoration: InputDecoration(
+                labelText: 'Brand name',
+                helperText: 'Use a name that is easy to recognize.',
+                errorText: submitted && controller.text.trim().isEmpty
+                    ? 'Enter a brand name.'
+                    : error,
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      set(() => submitted = true);
+                      if (controller.text.trim().isEmpty) return;
+                      set(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await widget.special.createBrand(
+                          controller.text.trim(),
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      } catch (_) {
+                        if (dialogContext.mounted) {
+                          set(() {
+                            saving = false;
+                            error = 'Could not save this brand. Check the name and retry.';
+                          });
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Saving…' : 'Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
-    if (name != null && name.trim().isNotEmpty) {
-      await widget.special.createBrand(name);
-      _refreshBrands();
-    }
+    final created = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    if (created == true) _refreshBrands();
   }
 
   Future<void> _open(InventoryGroup group) async {

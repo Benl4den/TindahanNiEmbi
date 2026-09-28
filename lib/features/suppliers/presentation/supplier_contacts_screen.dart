@@ -16,49 +16,63 @@ class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
   Future<void> edit([SupplierContact? item]) async {
     final name = TextEditingController(text: item?.name),
         contact = TextEditingController(text: item?.contactNumber);
+    var submitted = false;
     final result = await showDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
-        title: Text(item == null ? 'Add Supplier' : 'Edit Supplier'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Supplier name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: contact,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Contact number (optional)',
+      builder: (d) => StatefulBuilder(
+        builder: (_, update) => AlertDialog(
+          title: Text(item == null ? 'Add Supplier' : 'Edit Supplier'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  onChanged: (_) {
+                    if (submitted) update(() {});
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Supplier name',
+                    errorText: submitted && name.text.trim().isEmpty
+                        ? 'Enter a supplier name.'
+                        : null,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: contact,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact number (optional)',
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (name.text.trim().isEmpty) {
+                  update(() => submitted = true);
+                  return;
+                }
+                await widget.repository.save(
+                  id: item?.id,
+                  name: name.text,
+                  contactNumber: contact.text,
+                );
+                if (d.mounted) Navigator.pop(d, true);
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(d),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (name.text.trim().isEmpty) return;
-              await widget.repository.save(
-                id: item?.id,
-                name: name.text,
-                contactNumber: contact.text,
-              );
-              if (d.mounted) Navigator.pop(d, true);
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
     if (result == true && mounted) setState(() {});

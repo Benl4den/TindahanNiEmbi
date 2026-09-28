@@ -27,7 +27,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
   PaymentMethod paymentMethod = PaymentMethod.cash;
   int cents = 0;
   bool saving = false;
+  bool submitted = false;
   String? error;
+  String? get amountError {
+    if (!submitted) return null;
+    if (amount.text.trim().isEmpty) return 'Enter a payment amount.';
+    final value = parseMoneyCentavos(amount.text);
+    if (value == null) return 'Use pesos with up to two decimal places.';
+    if (value <= 0) return 'Amount must be greater than ₱0.00.';
+    if (value > widget.customer.balanceCentavos) {
+      return 'Cannot exceed ${standardMoney(widget.customer.balanceCentavos)}.';
+    }
+    return null;
+  }
+
   @override
   void dispose() {
     amount.dispose();
@@ -36,7 +49,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> save() async {
-    if (saving || cents <= 0 || cents > widget.customer.balanceCentavos) return;
+    if (saving) return;
+    setState(() => submitted = true);
+    if (amountError != null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -162,14 +177,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     decimal: true,
                   ),
                   style: const TextStyle(fontSize: 24),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Payment Amount',
                     prefixText: '₱ ',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText: amountError,
                   ),
-                  onChanged: (v) => setState(
-                    () => cents = ((double.tryParse(v) ?? 0) * 100).round(),
-                  ),
+                  onChanged: (v) =>
+                      setState(() => cents = parseMoneyCentavos(v) ?? 0),
                 ),
                 if (error != null)
                   Padding(
@@ -188,12 +203,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed:
-                      cents > 0 &&
-                          cents <= widget.customer.balanceCentavos &&
-                          !saving
-                      ? save
-                      : null,
+                  onPressed: saving ? null : save,
                   child: const Text('Record Payment'),
                 ),
                 TextButton(

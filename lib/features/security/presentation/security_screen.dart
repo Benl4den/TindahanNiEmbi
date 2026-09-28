@@ -163,7 +163,7 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
   late final TextEditingController name;
   final pin = TextEditingController(), confirm = TextEditingController();
   String? error;
-  bool saving = false, visible = false;
+  bool saving = false, visible = false, submitted = false;
 
   @override
   void initState() {
@@ -182,9 +182,9 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
   Future<void> save() async {
     if (saving) return;
     if (name.text.trim().isEmpty ||
-        pin.text.length != 4 ||
+        !RegExp(r'^\d{4}$').hasMatch(pin.text) ||
         pin.text != confirm.text) {
-      setState(() => error = 'Enter a name and matching 4-digit PINs.');
+      setState(() => submitted = true);
       return;
     }
     setState(() {
@@ -237,19 +237,30 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
                 TextField(
                   controller: name,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
                     labelText: 'Staff name',
-                    prefixIcon: Icon(Icons.person_outline),
+                    prefixIcon: const Icon(Icons.person_outline),
+                    errorText: submitted && name.text.trim().isEmpty
+                        ? 'Enter a staff name.'
+                        : null,
                   ),
                 ),
               const SizedBox(height: 12),
               TextField(
                 controller: pin,
+                onChanged: (_) => setState(() {}),
                 obscureText: !visible,
                 keyboardType: TextInputType.number,
                 maxLength: 4,
                 decoration: InputDecoration(
                   labelText: 'New 4-digit PIN',
+                  errorText:
+                      submitted &&
+                          (pin.text.length != 4 ||
+                              !RegExp(r'^\d{4}$').hasMatch(pin.text))
+                      ? 'Enter a 4-digit PIN.'
+                      : null,
                   prefixIcon: const Icon(Icons.pin_outlined),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => visible = !visible),
@@ -261,12 +272,16 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
               ),
               TextField(
                 controller: confirm,
+                onChanged: (_) => setState(() {}),
                 obscureText: !visible,
                 keyboardType: TextInputType.number,
                 maxLength: 4,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Confirm PIN',
-                  prefixIcon: Icon(Icons.verified_user_outlined),
+                  prefixIcon: const Icon(Icons.verified_user_outlined),
+                  errorText: submitted && confirm.text != pin.text
+                      ? 'PINs do not match.'
+                      : null,
                 ),
               ),
               if (error != null)

@@ -239,7 +239,7 @@ class GCashServiceRepository {
       await tx.insert('activity_logs', {
         'event_type': '${provider.dbValue}_$type',
         'description':
-            '${provider.label} ${type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} $principalCentavos centavos.',
+            '${provider.label} ${type == 'CASH_IN' ? 'Cash-In' : 'Cash-Out'} ${standardMoney(principalCentavos)}.',
         'actor_role': actorRole,
         'actor_name': CurrentActor.labelFor(actorRole),
         'related_entity_type': '${provider.dbValue}_SERVICE',

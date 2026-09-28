@@ -572,6 +572,7 @@ class _GCashScreenState extends State<GCashScreen> {
     final reference = TextEditingController();
     final pin = TextEditingController();
     var type = 'ADJUSTMENT_IN', busy = false, error = '';
+    var submitted = false, pinError = '';
     final route = DialogRoute<bool>(
       context: context,
       barrierDismissible: false,
@@ -619,20 +620,31 @@ class _GCashScreenState extends State<GCashScreen> {
                     TextField(
                       controller: amount,
                       enabled: !busy,
+                      onChanged: (_) => setDialog(() {}),
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Amount',
                         prefixText: '₱ ',
+                        errorText:
+                            submitted &&
+                                (parseMoneyCentavos(amount.text) == null ||
+                                    parseMoneyCentavos(amount.text)! <= 0)
+                            ? 'Enter an amount greater than ₱0 (up to two decimals).'
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: reason,
                       enabled: !busy,
-                      decoration: const InputDecoration(
+                      onChanged: (_) => setDialog(() {}),
+                      decoration: InputDecoration(
                         labelText: 'Reason (required)',
+                        errorText: submitted && reason.text.trim().isEmpty
+                            ? 'Enter a reason.'
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -647,9 +659,17 @@ class _GCashScreenState extends State<GCashScreen> {
                     TextField(
                       controller: pin,
                       enabled: !busy,
+                      onChanged: (_) => setDialog(() => pinError = ''),
                       obscureText: true,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Owner PIN'),
+                      decoration: InputDecoration(
+                        labelText: 'Owner PIN',
+                        errorText: pinError.isNotEmpty
+                            ? pinError
+                            : submitted && pin.text.trim().isEmpty
+                            ? 'Enter the Owner PIN.'
+                            : null,
+                      ),
                     ),
                     if (error.isNotEmpty)
                       Padding(
@@ -674,27 +694,29 @@ class _GCashScreenState extends State<GCashScreen> {
                     : () async {
                         if (busy) return;
                         FocusScope.of(dialog).unfocus();
+                        setDialog(() => submitted = true);
+                        final cents = parseMoneyCentavos(amount.text);
+                        if (cents == null ||
+                            cents <= 0 ||
+                            reason.text.trim().isEmpty ||
+                            pin.text.trim().isEmpty) {
+                          return;
+                        }
                         setDialog(() {
                           busy = true;
                           error = '';
+                          pinError = '';
                         });
                         try {
-                          final cents = parseMoneyCentavos(amount.text);
-                          if (cents == null || cents <= 0) {
-                            throw const PaymentAccountingException(
-                              'Enter a valid amount with up to two decimal places.',
-                            );
-                          }
-                          if (reason.text.trim().isEmpty) {
-                            throw const PaymentAccountingException(
-                              'Provide a reason for this adjustment.',
-                            );
-                          }
                           final role = await widget.auth.verify(pin.text);
                           if (role != UserRole.owner) {
-                            throw const PaymentAccountingException(
-                              'Incorrect Owner PIN.',
-                            );
+                            if (dialog.mounted) {
+                              setDialog(() {
+                                busy = false;
+                                pinError = 'Incorrect Owner PIN.';
+                              });
+                            }
+                            return;
                           }
                           if (!await _canManageServices()) {
                             throw const PaymentAccountingException(
@@ -746,251 +768,501 @@ class _GCashScreenState extends State<GCashScreen> {
     final reference = TextEditingController();
     final notes = TextEditingController();
     String? error;
+    int? availableBalance;
+    if (type == 'CASH_IN') {
+      try {
+        availableBalance = await widget.services.availableGCashBalance();
+      } catch (_) {
+        error = 'Could not check $wallet balance. Review will retry.';
+      }
+      if (!mounted) {
+        principal.dispose();
+        fee.dispose();
+        reference.dispose();
+        notes.dispose();
+        return;
+      }
+    }
     var reviewing = false, saving = false, principalCents = 0, feeCents = 0;
+    var submitted = false;
     var feeOption = 'ADDED';
     final route = DialogRoute<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialog) => StatefulBuilder(
-        builder: (_, setDialog) => PageBackGuard(
-          controllers: [principal, fee, reference, notes],
-          changeToken: (feeOption, reviewing),
-          busy: saving,
-          onBack: () async {
-            if (!reviewing) return false;
-            setDialog(() {
-              reviewing = false;
-              error = null;
-            });
-            return true;
-          },
-          child: AlertDialog(
-            title: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  reviewing
-                      ? 'Review $wallet Service'
-                      : type == 'CASH_IN'
-                      ? '$wallet Cash-In'
-                      : '$wallet Cash-Out',
-                ),
-                if (error != null)
+        builder: (_, setDialog) {
+          final enteredAmount = parseMoneyCentavos(principal.text);
+          final enteredFee = parseMoneyCentavos(fee.text);
+          final validAmounts =
+              enteredAmount != null &&
+              enteredAmount > 0 &&
+              enteredFee != null &&
+              (feeOption != 'DEDUCTED' || enteredFee < enteredAmount);
+          final previewAmount = enteredAmount ?? 0;
+          final previewFee = enteredFee ?? 0;
+          final int walletNeeded = validAmounts
+              ? (feeOption == 'ADDED'
+                    ? previewAmount
+                    : previewAmount - previewFee)
+              : 0;
+          final int customerCash = validAmounts
+              ? (feeOption == 'ADDED'
+                    ? previewAmount + previewFee
+                    : previewAmount)
+              : 0;
+          final int shortfall =
+              type == 'CASH_IN' &&
+                  validAmounts &&
+                  availableBalance != null &&
+                  walletNeeded > availableBalance!
+              ? walletNeeded - availableBalance!
+              : 0;
+          final scheme = Theme.of(dialog).colorScheme;
+          return PageBackGuard(
+            controllers: [principal, fee, reference, notes],
+            changeToken: (feeOption, reviewing),
+            busy: saving,
+            onBack: () async {
+              if (!reviewing) return false;
+              setDialog(() {
+                reviewing = false;
+                error = null;
+              });
+              return true;
+            },
+            child: AlertDialog(
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                    reviewing
+                        ? 'Review $wallet Service'
+                        : type == 'CASH_IN'
+                        ? '$wallet Cash-In'
+                        : '$wallet Cash-Out',
                   ),
-              ],
-            ),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: reviewing
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
                         children: [
-                          Text('Amount: ${standardMoney(principalCents)}'),
-                          Text('Service Fee: ${standardMoney(feeCents)}'),
-                          Text(
-                            feeOption == 'ADDED'
-                                ? 'Fee option: Fee Added'
-                                : 'Fee option: Fee Deducted',
+                          Icon(
+                            Icons.error_outline,
+                            color: scheme.error,
+                            size: 19,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _serviceSummary(
-                              type,
-                              principalCents,
-                              feeCents,
-                              feeOption,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: principal,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Amount',
-                              prefixText: '₱ ',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: fee,
-                            onTap: () {
-                              if (fee.text.trim() == '0') fee.clear();
-                            },
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Service Fee',
-                              prefixText: '₱ ',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            initialValue: feeOption,
-                            decoration: const InputDecoration(
-                              labelText: 'Fee Option',
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'ADDED',
-                                child: Text('Fee Added'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'DEDUCTED',
-                                child: Text('Fee Deducted'),
-                              ),
-                            ],
-                            onChanged: (value) =>
-                                setDialog(() => feeOption = value!),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: reference,
-                            decoration: InputDecoration(
-                              labelText: '$wallet Reference (optional)',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: notes,
-                            decoration: const InputDecoration(
-                              labelText: 'Notes (optional)',
-                            ),
-                          ),
-                          if (type == 'CASH_OUT')
-                            const Padding(
-                              padding: EdgeInsets.only(top: 12),
-                              child: Text(
-                                'Confirm that there is enough physical cash in the drawer before continuing.',
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              error!,
+                              style: TextStyle(
+                                color: scheme.error,
+                                fontSize: 13,
                               ),
                             ),
+                          ),
                         ],
                       ),
+                    ),
+                ],
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: saving
-                    ? null
-                    : () => reviewing
-                          ? setDialog(() {
-                              reviewing = false;
-                              error = null;
-                            })
-                          : Navigator.of(dialog).pop(false),
-                child: Text(reviewing ? 'Back' : 'Cancel'),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: reviewing
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Amount: ${standardMoney(principalCents)}'),
+                            Text('Service Fee: ${standardMoney(feeCents)}'),
+                            Text(
+                              feeOption == 'ADDED'
+                                  ? 'Fee option: Fee Added'
+                                  : 'Fee option: Fee Deducted',
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _serviceSummary(
+                                type,
+                                principalCents,
+                                feeCents,
+                                feeOption,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 180),
+                              child: shortfall > 0
+                                  ? Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: scheme.errorContainer.withValues(
+                                          alpha: .65,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.warning_amber_rounded,
+                                                color: scheme.onErrorContainer,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  '$wallet balance is ${standardMoney(shortfall)} short',
+                                                  style: Theme.of(dialog)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        color: scheme
+                                                            .onErrorContainer,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 5),
+                                          Text(
+                                            'Available ${standardMoney(availableBalance!)}  •  Wallet needed ${standardMoney(walletNeeded)}',
+                                            style: TextStyle(
+                                              color: scheme.onErrorContainer,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            'Add funds to your $wallet balance or enter a smaller cash-in amount.',
+                                            style: TextStyle(
+                                              color: scheme.onErrorContainer,
+                                            ),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: saving
+                                                ? null
+                                                : () async {
+                                                    setDialog(
+                                                      () => saving = true,
+                                                    );
+                                                    try {
+                                                      final balance = await widget
+                                                          .services
+                                                          .availableGCashBalance();
+                                                      if (dialog.mounted) {
+                                                        setDialog(() {
+                                                          availableBalance =
+                                                              balance;
+                                                          error = null;
+                                                        });
+                                                      }
+                                                    } catch (_) {
+                                                      if (dialog.mounted) {
+                                                        setDialog(
+                                                          () => error =
+                                                              'Could not refresh $wallet balance. Please retry.',
+                                                        );
+                                                      }
+                                                    } finally {
+                                                      if (dialog.mounted) {
+                                                        setDialog(
+                                                          () => saving = false,
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              size: 18,
+                                            ),
+                                            label: const Text(
+                                              'Refresh balance',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: principal,
+                              onChanged: (_) => setDialog(() => error = null),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Amount',
+                                prefixText: '₱ ',
+                                errorText:
+                                    submitted &&
+                                        (enteredAmount == null ||
+                                            enteredAmount <= 0)
+                                    ? 'Enter an amount greater than ₱0 (up to two decimals).'
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: fee,
+                              onChanged: (_) => setDialog(() => error = null),
+                              onTap: () {
+                                if (fee.text.trim() == '0') {
+                                  fee.clear();
+                                  setDialog(() => error = null);
+                                }
+                              },
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Service Fee',
+                                prefixText: '₱ ',
+                                errorText: submitted && enteredFee == null
+                                    ? 'Enter a fee with up to two decimals (use 0 for none).'
+                                    : submitted &&
+                                          feeOption == 'DEDUCTED' &&
+                                          enteredAmount != null &&
+                                          enteredAmount > 0 &&
+                                          enteredFee != null &&
+                                          enteredFee >= enteredAmount
+                                    ? 'Deducted fee must be less than the amount.'
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              initialValue: feeOption,
+                              decoration: const InputDecoration(
+                                labelText: 'Fee Option',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'ADDED',
+                                  child: Text('Fee Added'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'DEDUCTED',
+                                  child: Text('Fee Deducted'),
+                                ),
+                              ],
+                              onChanged: (value) => setDialog(() {
+                                feeOption = value!;
+                                error = null;
+                              }),
+                            ),
+                            if (type == 'CASH_IN')
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 180),
+                                child: validAmounts
+                                    ? Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                scheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Transaction summary',
+                                                style: Theme.of(dialog)
+                                                    .textTheme
+                                                    .labelLarge,
+                                              ),
+                                              Text(
+                                                'Customer pays cash: ${standardMoney(customerCash)}',
+                                              ),
+                                              Text(
+                                                'Sent from $wallet wallet: ${standardMoney(walletNeeded)}',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: reference,
+                              decoration: InputDecoration(
+                                labelText: '$wallet Reference (optional)',
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: notes,
+                              decoration: const InputDecoration(
+                                labelText: 'Notes (optional)',
+                              ),
+                            ),
+                            if (type == 'CASH_OUT')
+                              const Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: Text(
+                                  'Confirm that there is enough physical cash in the drawer before continuing.',
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
               ),
-              FilledButton(
-                onPressed: saving
-                    ? null
-                    : () async {
-                        if (saving) return;
-                        FocusScope.of(dialog).unfocus();
-                        if (!reviewing) {
-                          final p = parseMoneyCentavos(principal.text),
-                              f = parseMoneyCentavos(fee.text);
-                          if (p == null ||
-                              f == null ||
-                              p <= 0 ||
-                              (feeOption == 'DEDUCTED' && f >= p)) {
-                            setDialog(
-                              () => error = 'Enter a valid amount (up to two decimals). A deducted fee must be less than the amount.',
-                            );
+              actions: [
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () => reviewing
+                            ? setDialog(() {
+                                reviewing = false;
+                                error = null;
+                              })
+                            : Navigator.of(dialog).pop(false),
+                  child: Text(reviewing ? 'Back' : 'Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving || (!reviewing && shortfall > 0)
+                      ? null
+                      : () async {
+                          if (saving) return;
+                          FocusScope.of(dialog).unfocus();
+                          if (!reviewing) {
+                            final p = parseMoneyCentavos(principal.text),
+                                f = parseMoneyCentavos(fee.text);
+                            if (p == null ||
+                                f == null ||
+                                p <= 0 ||
+                                (feeOption == 'DEDUCTED' && f >= p)) {
+                              setDialog(() {
+                                submitted = true;
+                                error = null;
+                              });
+                              return;
+                            }
+                            if (type == 'CASH_IN') {
+                              setDialog(() => saving = true);
+                              int available;
+                              try {
+                                available = await widget.services
+                                    .availableGCashBalance();
+                              } catch (_) {
+                                if (dialog.mounted) {
+                                  setDialog(() {
+                                    saving = false;
+                                    error =
+                                        'Could not check $wallet balance. Please retry.';
+                                  });
+                                }
+                                return;
+                              }
+                              if (!dialog.mounted) return;
+                              setDialog(() {
+                                saving = false;
+                                availableBalance = available;
+                              });
+                              final needed = feeOption == 'ADDED' ? p : p - f;
+                              if (needed > available) {
+                                if (dialog.mounted) {
+                                  setDialog(() => error = null);
+                                }
+                                return;
+                              }
+                            }
+                            if (dialog.mounted) {
+                              setDialog(() {
+                                principalCents = p;
+                                feeCents = f;
+                                error = null;
+                                reviewing = true;
+                              });
+                            }
                             return;
                           }
-                          if (type == 'CASH_IN') {
-                            setDialog(() => saving = true);
-                            int available;
-                            try {
-                              available = await widget.services
-                                  .availableGCashBalance();
-                            } catch (_) {
+                          setDialog(() => saving = true);
+                          try {
+                            if (!await _canManageServices()) {
+                              throw const GCashServiceException(
+                                'Wallet services require Pro access.',
+                              );
+                            }
+                            await widget.services.record(
+                              type: type,
+                              requestId: requestId,
+                              principalCentavos: principalCents,
+                              feeCentavos: feeCents,
+                              feeOption: feeOption,
+                              gcashReference: reference.text,
+                              notes: notes.text,
+                              physicalCashAvailabilityAcknowledged:
+                                  type == 'CASH_OUT',
+                            );
+                            if (dialog.mounted) {
+                              Navigator.of(dialog).pop(true);
+                            }
+                          } catch (e) {
+                            if (type == 'CASH_IN' &&
+                                e is GCashServiceException &&
+                                e.message.startsWith('Insufficient ')) {
+                              int? refreshedBalance;
+                              try {
+                                refreshedBalance = await widget.services
+                                    .availableGCashBalance();
+                              } catch (_) {
+                                // Keep the record error if the balance cannot be reloaded.
+                              }
                               if (dialog.mounted) {
                                 setDialog(() {
                                   saving = false;
-                                  error =
-                                      'Could not check $wallet balance. Please retry.';
+                                  reviewing = false;
+                                  availableBalance = refreshedBalance;
+                                  error = refreshedBalance == null
+                                      ? 'Balance changed. Please check $wallet balance and retry.'
+                                      : null;
                                 });
                               }
                               return;
                             }
-                            if (!dialog.mounted) return;
-                            setDialog(() => saving = false);
-                            final needed = feeOption == 'ADDED' ? p : p - f;
-                            if (needed > available) {
-                              if (dialog.mounted) {
-                                setDialog(
-                                  () => error =
-                                      'Insufficient $wallet Balance\nAvailable: ${standardMoney(available)}\nRequired: ${standardMoney(needed)}\nShort: ${standardMoney(needed - available)}',
-                                );
-                              }
-                              return;
+                            if (dialog.mounted) {
+                              setDialog(() {
+                                saving = false;
+                                error = e.toString();
+                              });
                             }
                           }
-                          if (dialog.mounted) {
-                            setDialog(() {
-                              principalCents = p;
-                              feeCents = f;
-                              error = null;
-                              reviewing = true;
-                            });
-                          }
-                          return;
-                        }
-                        setDialog(() => saving = true);
-                        try {
-                          if (!await _canManageServices()) {
-                            throw const GCashServiceException(
-                              'Wallet services require Pro access.',
-                            );
-                          }
-                          await widget.services.record(
-                            type: type,
-                            requestId: requestId,
-                            principalCentavos: principalCents,
-                            feeCentavos: feeCents,
-                            feeOption: feeOption,
-                            gcashReference: reference.text,
-                            notes: notes.text,
-                            physicalCashAvailabilityAcknowledged:
-                                type == 'CASH_OUT',
-                          );
-                          if (dialog.mounted) {
-                            Navigator.of(dialog).pop(true);
-                          }
-                        } catch (e) {
-                          if (dialog.mounted) {
-                            setDialog(() {
-                              saving = false;
-                              error = e.toString();
-                            });
-                          }
-                        }
-                      },
-                child: Text(
-                  saving
-                      ? 'Saving…'
-                      : reviewing
-                      ? 'Confirm'
-                      : 'Review',
+                        },
+                  child: Text(
+                    saving
+                        ? reviewing
+                              ? 'Saving…'
+                              : 'Checking…'
+                        : reviewing
+                        ? 'Confirm'
+                        : 'Review',
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
     final saved = await Navigator.of(context).push(route);

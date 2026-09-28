@@ -429,11 +429,8 @@ class _State extends State<AppShell> {
         ),
         label: 'Restock',
       ),
-      NavigationDestination(
-        icon: Badge(
-          label: Text('$productCount'),
-          child: const Icon(Icons.inventory),
-        ),
+      const NavigationDestination(
+        icon: Icon(Icons.inventory),
         label: 'Products',
       ),
       const NavigationDestination(
@@ -852,7 +849,7 @@ class _State extends State<AppShell> {
                             child: Tooltip(
                               message: expanded
                                   ? ''
-                                  : '${destination.label}${proLocked ? ' • PRO' : ''}',
+                                  : '${destination.label}${target == 5 && productCount > 0 ? ' • $productCount total' : ''}${proLocked ? ' • PRO' : ''}',
                               decoration: BoxDecoration(
                                 color: colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(10),
@@ -884,7 +881,18 @@ class _State extends State<AppShell> {
                                                 ? colors.primary
                                                 : colors.onSurface,
                                           ),
-                                          child: !expanded && proLocked
+                                          child: !expanded && target == 5
+                                              ? Badge(
+                                                  isLabelVisible:
+                                                      productCount > 0,
+                                                  label: Text('$productCount'),
+                                                  backgroundColor: colors
+                                                      .surfaceContainerHighest,
+                                                  textColor:
+                                                      colors.onSurfaceVariant,
+                                                  child: destination.icon,
+                                                )
+                                              : !expanded && proLocked
                                               ? Badge(
                                                   label: const Text(
                                                     'PRO',
@@ -918,6 +926,29 @@ class _State extends State<AppShell> {
                                               ),
                                             ),
                                           ),
+                                          if (target == 5 && productCount > 0)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: colors
+                                                    .surfaceContainerHighest,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                '$productCount',
+                                                style: TextStyle(
+                                                  color:
+                                                      colors.onSurfaceVariant,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
                                           if (proLocked)
                                             Container(
                                               padding:

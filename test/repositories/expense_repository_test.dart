@@ -42,6 +42,13 @@ void main() {
       expect(second.reference, 'EXP-000002');
       expect(first.amountCentavos, 205001);
       expect(first.categoryName, isNotEmpty);
+      final activity = (await db.query(
+        'activity_logs',
+        where: 'event_type=? AND related_entity_id=?',
+        whereArgs: ['EXPENSE_ADDED', first.id],
+      )).single;
+      expect(activity['description'], contains('₱2,050.01'));
+      expect(activity['description'], isNot(contains('centavos')));
       await expectLater(
         repository.add(
           ExpenseDraft(

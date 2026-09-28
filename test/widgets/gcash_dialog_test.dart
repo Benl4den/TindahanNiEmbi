@@ -44,14 +44,18 @@ class Auth extends AuthService {
 }
 
 class Services extends GCashServiceRepository {
-  Services() : super(StubDb());
+  Services({
+    super.provider = PaymentMethod.gcash,
+    this.balance = 200000,
+  }) : super(StubDb());
+  int balance;
   int calls = 0;
   List<GCashServiceTransaction> rows = [];
   final result = Completer<GCashServiceTransaction>();
   @override
   Future<int> totalFeeIncome() async => 0;
   @override
-  Future<int> availableGCashBalance() async => 200000;
+  Future<int> availableGCashBalance() async => balance;
   @override
   Future<List<GCashServiceTransaction>> recent({int limit = 50}) async => rows;
   @override
@@ -126,6 +130,76 @@ class MutablePlanSource extends AppPlanSource {
 }
 
 void main() {
+  for (final provider in [PaymentMethod.gcash, PaymentMethod.maya]) {
+    testWidgets('${provider.name} Cash-In explains the shortfall and fee', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final walletName = provider == PaymentMethod.maya ? 'Maya' : 'GCash';
+      final services = Services(provider: provider, balance: 0);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GCashScreen(
+            repository: DistinctWallet(provider, 0),
+            services: services,
+            auth: Auth(),
+            access: proAccess(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Cash-In'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Amount'), '500');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Service Fee'),
+        '10',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('$walletName balance is ₱500.00 short'), findsOneWidget);
+      expect(find.text('Customer pays cash: ₱510.00'), findsOneWidget);
+      expect(
+        find.text('Sent from $walletName wallet: ₱500.00'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Review'))
+            .onPressed,
+        isNull,
+      );
+
+      services.balance = 49000;
+      await tester.tap(find.text('Refresh balance'));
+      await tester.pumpAndSettle();
+      expect(find.text('$walletName balance is ₱500.00 short'), findsNothing);
+      expect(find.text('$walletName balance is ₱10.00 short'), findsOneWidget);
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fee Deducted').last);
+      await tester.pumpAndSettle();
+      expect(find.text('$walletName balance is ₱10.00 short'), findsNothing);
+      expect(find.text('Customer pays cash: ₱500.00'), findsOneWidget);
+      expect(
+        find.text('Sent from $walletName wallet: ₱490.00'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Review'))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.text('Review'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review $walletName Service'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final provider in [PaymentMethod.gcash, PaymentMethod.maya]) {
     testWidgets('${provider.name} Free preview hides data and switches live', (
       tester,

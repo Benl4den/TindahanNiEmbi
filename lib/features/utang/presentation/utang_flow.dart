@@ -31,6 +31,7 @@ import '../../../widgets/app_state_view.dart';
 import '../../../widgets/app_alerts.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
+import 'customer_account_details_view.dart';
 
 class UtangCustomerScreen extends StatefulWidget {
   const UtangCustomerScreen({
@@ -754,60 +755,87 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
   Future<void> _addExistingUtang(Customer customer) async {
     final amount = TextEditingController();
     final note = TextEditingController();
+    var submitted = false, saving = false;
+    String? error;
     final result = await showDialog<bool>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Add Existing UTANG Amount'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Use this for a balance the customer already owed before you started using the app. It does not create a sale or change stock.',
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: amount,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+      builder: (dialog) => StatefulBuilder(
+        builder: (_, set) => AlertDialog(
+          title: const Text('Add Existing UTANG Amount'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Use this for a balance the customer already owed before you started using the app. It does not create a sale or change stock.',
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'Existing UTANG amount',
-                  prefixText: '₱ ',
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amount,
+                  onChanged: (_) => set(() {}),
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Existing UTANG amount',
+                    prefixText: '₱ ',
+                    errorText:
+                        submitted &&
+                            (parseMoneyCentavos(amount.text) == null ||
+                                parseMoneyCentavos(amount.text)! <= 0)
+                        ? 'Enter an amount greater than ₱0 (up to two decimals).'
+                        : null,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: note,
-                decoration: const InputDecoration(
-                  labelText: 'Note or reference (optional)',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: note,
+                  decoration: const InputDecoration(
+                    labelText: 'Note or reference (optional)',
+                  ),
                 ),
-              ),
-            ],
+                if (error != null) Text(error!),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final cents = parseMoneyCentavos(amount.text);
+                      set(() => submitted = true);
+                      if (cents == null || cents <= 0) return;
+                      set(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await widget.utang.addExistingBalance(
+                          customerId: customer.id,
+                          amountCentavos: cents,
+                          note: note.text,
+                        );
+                        if (dialog.mounted) Navigator.pop(dialog, true);
+                      } catch (_) {
+                        if (dialog.mounted) {
+                          set(() {
+                            saving = false;
+                            error = 'Could not add the existing balance. Please retry.';
+                          });
+                        }
+                      }
+                    },
+              child: const Text('Add Amount'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final cents = ((double.tryParse(amount.text.trim()) ?? 0) * 100)
-                  .round();
-              if (cents <= 0) return;
-              await widget.utang.addExistingBalance(
-                customerId: customer.id,
-                amountCentavos: cents,
-                note: note.text,
-              );
-              if (dialog.mounted) Navigator.pop(dialog, true);
-            },
-            child: const Text('Add Amount'),
-          ),
-        ],
       ),
     );
     if (result == true && mounted) await refreshDetailsNow();
@@ -820,245 +848,65 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       future: data,
       builder: (_, s) {
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
-        final d = s.data!,
-            currentBalance =
-                visibleBalanceCentavos ?? d.customer.balanceCentavos,
-            entries = d.ledger
-                .where(
-                  (e) =>
-                      filter == 'All' ||
-                      (filter == 'UTANG'
-                          ? e.type.startsWith('UTANG')
-                          : e.type.startsWith('PAYMENT')),
-                )
-                .toList();
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              d.customer.fullName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Current Balance'),
-                          Text(
-                            _money(currentBalance),
-                            style: TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w700,
-                              color: currentBalance > 0
-                                  ? Colors.orange.shade800
-                                  : Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Last UTANG Sale: ${_lastDate(d.ledger, 'UTANG')}\nLast Payment: ${_lastDate(d.ledger, 'PAYMENT')}\nOutstanding UTANG transactions: ${_outstandingCount(d)}',
-                          ),
-                        ],
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () => newUtang(d.customer),
-                      icon: const Icon(Icons.add),
-                      label: const Text('New UTANG Sale'),
-                    ),
-                    if (widget.reversals != null) ...[
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => _addExistingUtang(d.customer),
-                        icon: const Icon(Icons.history_edu_outlined),
-                        label: const Text('Add Existing UTANG Amount'),
-                      ),
-                    ],
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: currentBalance <= 0
-                          ? null
-                          : () async {
-                              final ok = await showDialog<bool>(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (_) => Dialog(
-                                  insetPadding: const EdgeInsets.all(16),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 620,
-                                      maxHeight: 620,
-                                    ),
-                                    child: PaymentScreen(
-                                      customer: d.customer,
-                                      repository: widget.payments,
-                                      onRecorded: (amount) =>
-                                          applyCommittedPayment(
-                                            currentBalance,
-                                            amount,
-                                          ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                              if (ok == true && mounted) {
-                                await refreshDetailsNow();
-                              }
-                            },
-                      icon: const Icon(Icons.payments),
-                      label: const Text('Record Payment'),
-                    ),
-                  ],
-                ),
+        final d = s.data!;
+        final currentBalance =
+            visibleBalanceCentavos ?? d.customer.balanceCentavos;
+        return CustomerAccountDetailsView(
+          details: d,
+          currentBalanceCentavos: currentBalance,
+          outstandingCount: _outstandingCount(d),
+          filter: filter,
+          onFilterChanged: (value) => setState(() => filter = value),
+          onEditProfile: () async {
+            final changed = await showDialog<bool>(
+              context: context,
+              builder: (_) => CustomerFormScreen(
+                repository: widget.customers,
+                customer: d.customer,
+                compact: true,
               ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              children: ['All', 'UTANG', 'Payments', 'UTANG Products']
-                  .map(
-                    (x) => ChoiceChip(
-                      label: Text(x),
-                      selected: filter == x,
-                      onSelected: (_) => setState(() => filter = x),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            if (filter == 'UTANG Products')
-              ...d.products.map(
-                (item) => Card(
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.shopping_bag_outlined),
-                    ),
-                    title: Text(
-                      item.name,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      '${item.quantity} ${item.option} • ${_date(item.occurredAt.toLocal())}',
-                    ),
-                    trailing: Text(
-                      _money(item.lineTotalCentavos),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
+            );
+            if (changed == true && mounted) await refreshDetailsNow();
+          },
+          onRecordPayment: () async {
+            final ok = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => Dialog(
+                insetPadding: const EdgeInsets.all(16),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 620,
+                    maxHeight: 620,
                   ),
-                ),
-              )
-            else
-              ..._groupByDay(entries).entries.map(
-                (group) => Card(
-                  child: ExpansionTile(
-                    initiallyExpanded: true,
-                    title: Text(
-                      MaterialLocalizations.of(context).formatMediumDate(
-                        group.value.first.occurredAt.toLocal(),
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      '${group.value.length} ${group.value.length == 1 ? 'transaction' : 'transactions'}',
-                    ),
-                    children: group.value
-                        .map(
-                          (e) => ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: CircleAvatar(
-                              child: Icon(
-                                e.type.startsWith('UTANG')
-                                    ? Icons.receipt_long
-                                    : Icons.payments,
-                              ),
-                            ),
-                            title: Text(
-                              e.isExistingBalance
-                                  ? 'Existing UTANG'
-                                  : e.type.startsWith('UTANG')
-                                  ? 'UTANG'
-                                  : 'Payment',
-                            ),
-                            subtitle: Text(
-                              '${TimeOfDay.fromDateTime(e.occurredAt.toLocal()).format(context)}'
-                              '${e.description == null ? '' : ' • ${e.description}'}\n'
-                              '${e.itemCount == null ? '' : '${e.itemCount} items'}',
-                            ),
-                            trailing: e.type == 'UTANG'
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        '+${_money(e.amountCentavos.abs())}',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.orange.shade800,
-                                        ),
-                                      ),
-                                      const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            'View Details',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          Icon(Icons.chevron_right),
-                                        ],
-                                      ),
-                                    ],
-                                  )
-                                : Text(
-                                    '-${_money(e.amountCentavos.abs())}',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                            onTap:
-                                e.type == 'UTANG' &&
-                                    e.utangTransactionId != null
-                                ? () => _showDetails(d, e)
-                                : e.type == 'PAYMENT' &&
-                                      e.paymentId != null &&
-                                      widget.reversals != null
-                                ? () => _showPaymentDetails(e, d.customer)
-                                : null,
-                          ),
-                        )
-                        .toList(),
+                  child: PaymentScreen(
+                    customer: d.customer,
+                    repository: widget.payments,
+                    onRecorded: (amount) =>
+                        applyCommittedPayment(currentBalance, amount),
                   ),
                 ),
               ),
-          ],
+            );
+            if (ok == true && mounted) await refreshDetailsNow();
+          },
+          onNewUtang: () => newUtang(d.customer),
+          onAddExisting: widget.reversals == null
+              ? null
+              : () => _addExistingUtang(d.customer),
+          onViewEntry: (entry) {
+            if (entry.type == 'UTANG' && entry.utangTransactionId != null) {
+              _showDetails(d, entry);
+            } else if (entry.type == 'PAYMENT' && entry.paymentId != null) {
+              _showPaymentDetails(entry, d.customer);
+            }
+          },
         );
       },
     ),
   );
   String _money(int c) => standardMoney(c);
-  Map<String, List<CustomerLedgerEntry>> _groupByDay(
-    List<CustomerLedgerEntry> entries,
-  ) {
-    final groups = <String, List<CustomerLedgerEntry>>{};
-    for (final entry in entries) {
-      final day = entry.occurredAt.toLocal();
-      final key = '${day.year}-${day.month}-${day.day}';
-      groups.putIfAbsent(key, () => []).add(entry);
-    }
-    return groups;
-  }
 
   String _date(DateTime d) =>
       '${MaterialLocalizations.of(context).formatMediumDate(d)} • ${TimeOfDay.fromDateTime(d).format(context)}';
@@ -1091,6 +939,8 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
   Future<void> _reversePayment(CustomerLedgerEntry entry) async {
     final reason = TextEditingController(), pin = TextEditingController();
     String? error;
+    String? pinError;
+    var submitted = false, saving = false;
     final done = await showDialog<bool>(
       context: context,
       builder: (x) => StatefulBuilder(
@@ -1101,62 +951,83 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
             children: [
               TextField(
                 controller: reason,
+                onChanged: (_) => set(() {}),
                 decoration: InputDecoration(
                   labelText: 'Reason',
                   border: const OutlineInputBorder(),
-                  errorText: error,
+                  errorText: submitted && reason.text.trim().isEmpty
+                      ? 'Enter a reason.'
+                      : null,
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: pin,
+                onChanged: (_) => set(() => pinError = null),
                 obscureText: true,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Owner PIN',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  errorText:
+                      pinError ??
+                      (submitted && pin.text.trim().isEmpty
+                          ? 'Enter the Owner PIN.'
+                          : null),
                 ),
               ),
+              if (error != null) Text(error!),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(x, false),
+              onPressed: saving ? null : () => Navigator.pop(x, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.red.shade700,
               ),
-              onPressed: () async {
-                if (reason.text.trim().isEmpty) {
-                  set(() => error = 'Reason is required.');
-                  return;
-                }
-                try {
-                  final authorized =
-                      await AuthService(widget.reversals!.db)
-                          .verify(pin.text) ==
-                      UserRole.owner;
-                  if (!authorized) {
-                    throw const ReversalException('Incorrect Owner PIN.');
-                  }
-                  await widget.reversals!.reversePayment(
-                    entry.paymentId!,
-                    reason.text,
-                    ownerPinAuthorized: true,
-                  );
-                  if (x.mounted) Navigator.pop(x, true);
-                } catch (e) {
-                  if (x.mounted) {
-                    set(
-                      () => error = e is ReversalException
-                          ? e.message
-                          : 'Could not cancel payment.',
-                    );
-                  }
-                }
-              },
+              onPressed: saving
+                  ? null
+                  : () async {
+                      set(() => submitted = true);
+                      if (reason.text.trim().isEmpty ||
+                          pin.text.trim().isEmpty) {
+                        return;
+                      }
+                      set(() => saving = true);
+                      try {
+                        final authorized =
+                            await AuthService(widget.reversals!.db)
+                                .verify(pin.text) ==
+                            UserRole.owner;
+                        if (!authorized) {
+                          if (x.mounted) {
+                            set(() {
+                              saving = false;
+                              pinError = 'Incorrect Owner PIN.';
+                            });
+                          }
+                          return;
+                        }
+                        await widget.reversals!.reversePayment(
+                          entry.paymentId!,
+                          reason.text,
+                          ownerPinAuthorized: true,
+                        );
+                        if (x.mounted) Navigator.pop(x, true);
+                      } catch (e) {
+                        if (x.mounted) {
+                          set(() {
+                            saving = false;
+                            error = e is ReversalException
+                                ? e.message
+                                : 'Could not cancel payment.';
+                          });
+                        }
+                      }
+                    },
               child: const Text('Confirm Cancellation'),
             ),
           ],
@@ -1170,8 +1041,10 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
     CustomerLedgerEntry entry,
     Customer customer,
   ) async {
-    final relation = await CorrectionRepository(widget.reversals!.db)
-        .relationship('PAYMENT', entry.paymentId!);
+    final relation = widget.reversals == null
+        ? null
+        : await CorrectionRepository(widget.reversals!.db)
+              .relationship('PAYMENT', entry.paymentId!);
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -1192,6 +1065,8 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 _money(entry.amountCentavos.abs()),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
+              if (entry.paymentStatus == 'REVERSED')
+                const Text('Status: Reversed'),
               if (relation != null)
                 Text(
                   relation['original_entity_id'] == entry.paymentId
@@ -1202,7 +1077,9 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
           ),
         ),
         actions: [
-          if (relation == null)
+          if (relation == null &&
+              widget.reversals != null &&
+              entry.paymentStatus != 'REVERSED')
             TextButton(
               onPressed: () async {
                 Navigator.pop(dialog);
@@ -1210,7 +1087,9 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
               },
               child: const Text('Fix Payment Details'),
             ),
-          if (relation == null)
+          if (relation == null &&
+              widget.reversals != null &&
+              entry.paymentStatus != 'REVERSED')
             TextButton(
               onPressed: () async {
                 Navigator.pop(dialog);
@@ -1236,11 +1115,15 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
         pin = TextEditingController();
     String? error;
     var saving = false;
+    var submitted = false;
+    String? pinError;
     final done = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (_, set) {
-          final cents = ((double.tryParse(amount.text) ?? 0) * 100).round();
+          final cents = parseMoneyCentavos(amount.text);
+          final maxPayment =
+              customer.balanceCentavos + entry.amountCentavos.abs();
           final content = AlertDialog(
             title: const Text('Fix Payment Details'),
             content: SizedBox(
@@ -1259,34 +1142,51 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                       decimal: true,
                     ),
                     onChanged: (_) => set(() {}),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Updated Payment',
                       prefixText: '₱ ',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      errorText:
+                          submitted &&
+                              (cents == null ||
+                                  cents <= 0 ||
+                                  cents > maxPayment)
+                          ? 'Enter ₱0.01 to ${standardMoney(maxPayment)}.'
+                          : null,
                     ),
                   ),
                   Text(
-                    'Resulting UTANG Balance: ${_money(customer.balanceCentavos + entry.amountCentavos.abs() - cents)}',
+                    'Resulting UTANG Balance: ${_money(maxPayment - (cents ?? 0))}',
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: reason,
+                    onChanged: (_) => set(() {}),
                     decoration: InputDecoration(
                       labelText: 'Reason for this fix',
                       border: const OutlineInputBorder(),
-                      errorText: error,
+                      errorText: submitted && reason.text.trim().isEmpty
+                          ? 'Enter a reason.'
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: pin,
+                    onChanged: (_) => set(() => pinError = null),
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Owner PIN',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      errorText:
+                          pinError ??
+                          (submitted && pin.text.trim().isEmpty
+                              ? 'Enter the Owner PIN.'
+                              : null),
                     ),
                   ),
+                  if (error != null) Text(error!),
                 ],
               ),
             ),
@@ -1296,15 +1196,32 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: saving || cents <= 0
+                onPressed: saving
                     ? null
                     : () async {
+                        set(() => submitted = true);
+                        if (cents == null ||
+                            cents <= 0 ||
+                            cents > maxPayment ||
+                            reason.text.trim().isEmpty ||
+                            pin.text.trim().isEmpty) {
+                          return;
+                        }
                         set(() => saving = true);
                         try {
                           final authorized =
                               await AuthService(widget.reversals!.db)
                                   .verify(pin.text) ==
                               UserRole.owner;
+                          if (!authorized) {
+                            if (dialog.mounted) {
+                              set(() {
+                                saving = false;
+                                pinError = 'Incorrect Owner PIN.';
+                              });
+                            }
+                            return;
+                          }
                           await CorrectionRepository(widget.reversals!.db)
                               .correctPayment(
                                 originalId: entry.paymentId!,
@@ -1337,14 +1254,6 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       ),
     );
     if (done == true && mounted) setState(reload);
-  }
-
-  String _lastDate(List<CustomerLedgerEntry> entries, String type) {
-    final matching = entries.where((e) => e.type == type).toList()
-      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
-    return matching.isEmpty
-        ? 'None'
-        : _date(matching.first.occurredAt.toLocal());
   }
 
   int _outstandingCount(CustomerDetails details) {
@@ -1522,6 +1431,8 @@ class UtangDetailsDialog extends StatelessWidget {
                       final reason = TextEditingController(),
                           pin = TextEditingController();
                       String? error;
+                      String? pinError;
+                      var submitted = false, saving = false;
                       final done = await showDialog<bool>(
                         context: context,
                         builder: (x) => StatefulBuilder(
@@ -1532,64 +1443,87 @@ class UtangDetailsDialog extends StatelessWidget {
                               children: [
                                 TextField(
                                   controller: reason,
+                                  onChanged: (_) => set(() {}),
                                   decoration: InputDecoration(
                                     labelText: 'Reason',
                                     border: const OutlineInputBorder(),
-                                    errorText: error,
+                                    errorText:
+                                        submitted && reason.text.trim().isEmpty
+                                        ? 'Enter a reason.'
+                                        : null,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: pin,
+                                  onChanged: (_) => set(() => pinError = null),
                                   obscureText: true,
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Owner PIN',
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
+                                    errorText:
+                                        pinError ??
+                                        (submitted && pin.text.trim().isEmpty
+                                            ? 'Enter the Owner PIN.'
+                                            : null),
                                   ),
                                 ),
+                                if (error != null) Text(error!),
                               ],
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.pop(x, false),
+                                onPressed: saving
+                                    ? null
+                                    : () => Navigator.pop(x, false),
                                 child: const Text('Cancel'),
                               ),
                               FilledButton(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: Colors.red.shade700,
                                 ),
-                                onPressed: () async {
-                                  if (reason.text.trim().isEmpty) {
-                                    set(() => error = 'Reason is required.');
-                                    return;
-                                  }
-                                  try {
-                                    final authorized =
-                                        await AuthService(reversals!.db)
-                                            .verify(pin.text) ==
-                                        UserRole.owner;
-                                    if (!authorized) {
-                                      throw const ReversalException(
-                                        'Incorrect Owner PIN.',
-                                      );
-                                    }
-                                    await reversals!.reverseUtang(
-                                      transactionId,
-                                      reason.text,
-                                      ownerPinAuthorized: true,
-                                    );
-                                    if (x.mounted) Navigator.pop(x, true);
-                                  } catch (e) {
-                                    if (x.mounted) {
-                                      set(
-                                        () => error = e is ReversalException
-                                            ? e.message
-                                            : 'Could not cancel UTANG sale.',
-                                      );
-                                    }
-                                  }
-                                },
+                                onPressed: saving
+                                    ? null
+                                    : () async {
+                                        set(() => submitted = true);
+                                        if (reason.text.trim().isEmpty ||
+                                            pin.text.trim().isEmpty) {
+                                          return;
+                                        }
+                                        set(() => saving = true);
+                                        try {
+                                          final authorized =
+                                              await AuthService(reversals!.db)
+                                                  .verify(pin.text) ==
+                                              UserRole.owner;
+                                          if (!authorized) {
+                                            if (x.mounted) {
+                                              set(() {
+                                                saving = false;
+                                                pinError =
+                                                    'Incorrect Owner PIN.';
+                                              });
+                                            }
+                                            return;
+                                          }
+                                          await reversals!.reverseUtang(
+                                            transactionId,
+                                            reason.text,
+                                            ownerPinAuthorized: true,
+                                          );
+                                          if (x.mounted) Navigator.pop(x, true);
+                                        } catch (e) {
+                                          if (x.mounted) {
+                                            set(() {
+                                              saving = false;
+                                              error = e is ReversalException
+                                                  ? e.message
+                                                  : 'Could not cancel UTANG sale.';
+                                            });
+                                          }
+                                        }
+                                      },
                                 child: const Text('Confirm Cancellation'),
                               ),
                             ],
@@ -1644,6 +1578,8 @@ class UtangDetailsDialog extends StatelessWidget {
     final reason = TextEditingController(), pin = TextEditingController();
     String? error;
     var saving = false;
+    var submitted = false;
+    String? pinError;
     final done = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -1736,22 +1672,32 @@ class UtangDetailsDialog extends StatelessWidget {
                   const SizedBox(height: 12),
                   TextField(
                     controller: reason,
+                    onChanged: (_) => set(() {}),
                     decoration: InputDecoration(
                       labelText: 'Reason for this fix',
                       border: const OutlineInputBorder(),
-                      errorText: error,
+                      errorText: submitted && reason.text.trim().isEmpty
+                          ? 'Enter a reason.'
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: pin,
+                    onChanged: (_) => set(() => pinError = null),
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Owner PIN',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      errorText:
+                          pinError ??
+                          (submitted && pin.text.trim().isEmpty
+                              ? 'Enter the Owner PIN.'
+                              : null),
                     ),
                   ),
+                  if (error != null) Text(error!),
                 ],
               ),
             ),
@@ -1765,11 +1711,15 @@ class UtangDetailsDialog extends StatelessWidget {
               onPressed: saving
                   ? null
                   : () async {
-                      if (quantities.isEmpty || reason.text.trim().isEmpty) {
+                      set(() => submitted = true);
+                      if (quantities.isEmpty) {
                         set(
-                          () => error =
-                              'At least one item and a reason are required.',
+                          () => error = 'Keep at least one item in the sale.',
                         );
+                        return;
+                      }
+                      if (reason.text.trim().isEmpty ||
+                          pin.text.trim().isEmpty) {
                         return;
                       }
                       set(() => saving = true);
@@ -1777,6 +1727,15 @@ class UtangDetailsDialog extends StatelessWidget {
                         final authorized =
                             await AuthService(db).verify(pin.text) ==
                             UserRole.owner;
+                        if (!authorized) {
+                          if (dialog.mounted) {
+                            set(() {
+                              saving = false;
+                              pinError = 'Incorrect Owner PIN.';
+                            });
+                          }
+                          return;
+                        }
                         await CorrectionRepository(db).correctUtang(
                           originalId: transactionId,
                           corrected: UtangDraft(

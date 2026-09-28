@@ -23,6 +23,7 @@ class _State extends State<AuthGate> {
   Widget? session;
   String? error;
   bool submitting = false;
+  bool setupSubmitted = false;
   int failedAttempts = 0;
 
   @override
@@ -64,13 +65,17 @@ class _State extends State<AuthGate> {
 
   Future<void> submit(bool setup) async {
     if (submitting) return;
+    if (setup &&
+        (!RegExp(r'^\d{4}$').hasMatch(pin.text) || pin.text != confirm.text)) {
+      setState(() => setupSubmitted = true);
+      return;
+    }
     setState(() {
       submitting = true;
       error = null;
     });
     try {
       if (setup) {
-        if (pin.text != confirm.text) throw ArgumentError();
         await widget.auth.setPin(UserRole.owner, pin.text);
         if (mounted) {
           setState(() {
@@ -109,8 +114,10 @@ class _State extends State<AuthGate> {
         );
       }
     } finally {
-      pin.clear();
-      confirm.clear();
+      if (!setup || role != null) {
+        pin.clear();
+        confirm.clear();
+      }
       if (mounted) setState(() => submitting = false);
     }
   }
@@ -519,19 +526,31 @@ class _State extends State<AuthGate> {
                   const SizedBox(height: 20),
                   TextField(
                     controller: pin,
+                    onChanged: (_) => setState(() => error = null),
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     maxLength: 4,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'New 4-digit PIN',
+                      errorText:
+                          setupSubmitted &&
+                              !RegExp(r'^\d{4}$').hasMatch(pin.text)
+                          ? 'Enter exactly four digits.'
+                          : null,
                     ),
                   ),
                   TextField(
                     controller: confirm,
+                    onChanged: (_) => setState(() => error = null),
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     maxLength: 4,
-                    decoration: const InputDecoration(labelText: 'Confirm PIN'),
+                    decoration: InputDecoration(
+                      labelText: 'Confirm PIN',
+                      errorText: setupSubmitted && confirm.text != pin.text
+                          ? 'PINs do not match.'
+                          : null,
+                    ),
                   ),
                   if (error != null)
                     Text(

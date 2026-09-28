@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../core/formatters/number_format.dart';
 import '../models/expense.dart';
 import '../services/auth_service.dart';
 import 'payment_accounting_repository.dart';
@@ -108,7 +109,7 @@ class ExpenseRepository {
     await tx.insert('activity_logs', {
       'event_type': 'EXPENSE_ADDED',
       'description':
-          '$reference added. ${category.single['name']} — ${draft.amountCentavos} centavos',
+          '$reference added. ${category.single['name']} — ${standardMoney(draft.amountCentavos)}',
       'actor_role': actorRole,
       'actor_name': CurrentActor.labelFor(actorRole),
       'related_entity_type': 'EXPENSE',

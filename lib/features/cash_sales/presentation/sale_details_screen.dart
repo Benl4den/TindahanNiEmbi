@@ -165,6 +165,8 @@ class SaleDetailsScreen extends StatelessWidget {
     int? addId = products.isEmpty ? null : products.first['id']! as int;
     String? error;
     var saving = false;
+    var submitted = false;
+    String? pinError;
     final corrected = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -269,22 +271,32 @@ class SaleDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     TextField(
                       controller: reason,
+                      onChanged: (_) => set(() {}),
                       decoration: InputDecoration(
                         labelText: 'Reason for this fix',
                         border: const OutlineInputBorder(),
-                        errorText: error,
+                        errorText: submitted && reason.text.trim().isEmpty
+                            ? 'Enter a reason.'
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: pin,
+                      onChanged: (_) => set(() => pinError = null),
                       obscureText: true,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Owner PIN',
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
+                        errorText:
+                            pinError ??
+                            (submitted && pin.text.trim().isEmpty
+                                ? 'Enter the Owner PIN.'
+                                : null),
                       ),
                     ),
+                    if (error != null) Text(error!),
                   ],
                 ),
               ),
@@ -298,11 +310,15 @@ class SaleDetailsScreen extends StatelessWidget {
                 onPressed: saving
                     ? null
                     : () async {
-                        if (quantities.isEmpty || reason.text.trim().isEmpty) {
+                        set(() => submitted = true);
+                        if (quantities.isEmpty) {
                           set(
-                            () => error =
-                                'At least one item and a reason are required.',
+                            () => error = 'Keep at least one item in the sale.',
                           );
+                          return;
+                        }
+                        if (reason.text.trim().isEmpty ||
+                            pin.text.trim().isEmpty) {
                           return;
                         }
                         set(() => saving = true);
@@ -311,6 +327,15 @@ class SaleDetailsScreen extends StatelessWidget {
                               await AuthService(repository.db)
                                   .verify(pin.text) ==
                               UserRole.owner;
+                          if (!authorized) {
+                            if (dialog.mounted) {
+                              set(() {
+                                saving = false;
+                                pinError = 'Incorrect Owner PIN.';
+                              });
+                            }
+                            return;
+                          }
                           await CorrectionRepository(repository.db)
                               .correctCashSale(
                                 originalId: saleId,
@@ -352,6 +377,8 @@ class SaleDetailsScreen extends StatelessWidget {
     final pin = TextEditingController();
     String? error;
     var saving = false;
+    var submitted = false;
+    String? pinError;
     final done = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -368,22 +395,32 @@ class SaleDetailsScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 TextField(
                   controller: reason,
+                  onChanged: (_) => set(() {}),
                   decoration: InputDecoration(
                     labelText: 'Reason',
                     border: const OutlineInputBorder(),
-                    errorText: error,
+                    errorText: submitted && reason.text.trim().isEmpty
+                        ? 'Enter a reason.'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: pin,
+                  onChanged: (_) => set(() => pinError = null),
                   obscureText: true,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Owner PIN',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText:
+                        pinError ??
+                        (submitted && pin.text.trim().isEmpty
+                            ? 'Enter the Owner PIN.'
+                            : null),
                   ),
                 ),
+                if (error != null) Text(error!),
               ],
             ),
           ),
@@ -399,8 +436,9 @@ class SaleDetailsScreen extends StatelessWidget {
               onPressed: saving
                   ? null
                   : () async {
-                      if (reason.text.trim().isEmpty) {
-                        set(() => error = 'Reason is required.');
+                      set(() => submitted = true);
+                      if (reason.text.trim().isEmpty ||
+                          pin.text.trim().isEmpty) {
                         return;
                       }
                       set(() => saving = true);
@@ -409,7 +447,13 @@ class SaleDetailsScreen extends StatelessWidget {
                             await AuthService(reversals!.db).verify(pin.text) ==
                             UserRole.owner;
                         if (!authorized) {
-                          throw const ReversalException('Incorrect Owner PIN.');
+                          if (dialog.mounted) {
+                            set(() {
+                              saving = false;
+                              pinError = 'Incorrect Owner PIN.';
+                            });
+                          }
+                          return;
                         }
                         await reversals!.reverseCashSale(
                           saleId,

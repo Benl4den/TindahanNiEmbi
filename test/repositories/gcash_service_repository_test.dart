@@ -39,6 +39,14 @@ void main() {
       expect(cashIn.physicalCashChangeCentavos, 101500);
       expect(cashOut.gcashChangeCentavos, 51000);
       expect(cashOut.physicalCashChangeCentavos, -50000);
+      final cashInLog = await db.query(
+        'activity_logs',
+        columns: ['description'],
+        where: "event_type='GCASH_CASH_IN'",
+        limit: 1,
+      );
+      expect(cashInLog.single['description'], contains('₱1,000.00'));
+      expect(cashInLog.single['description'], isNot(contains('centavos')));
       expect((await wallet.summary()).balance, 151000);
       expect((await wallet.summary()).todayTransactions, 3);
       expect(

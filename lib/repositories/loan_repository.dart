@@ -20,22 +20,39 @@ class LoanRepository {
     whereArgs: [loanId],
     orderBy: 'paid_at DESC,id DESC',
   );
-  Future<int> createLender(String name, {String? contact}) async {
+  Future<int> createLender(
+    String name, {
+    String? contact,
+    String? contactPerson,
+    String? notes,
+    String frequency = 'DAILY',
+    String method = 'COLLECTOR_VISITS',
+  }) async {
     final n = name.trim();
     if (n.isEmpty) throw ArgumentError('Lender name is required.');
+    if (!const ['DAILY', 'WEEKLY'].contains(frequency) ||
+        !const ['COLLECTOR_VISITS', 'OWNER_PAYS', 'OTHER'].contains(method)) {
+      throw ArgumentError('Choose a valid collection plan.');
+    }
     final now = DateTime.now().toUtc().toIso8601String();
-    return db.insert('loan_lenders', {
+    final id = await db.insert('loan_lenders', {
       'name': n,
       'contact_number': contact?.trim(),
+      'contact_person': contactPerson?.trim(),
+      'notes': notes?.trim(),
+      'collection_frequency': frequency,
+      'collection_method': method,
       'created_at': now,
       'updated_at': now,
     });
+    AppRefreshController.instance.dataChanged();
+    return id;
   }
 
   Future<List<Map<String, Object?>>> lenders() => db.query(
     'loan_lenders',
     where: 'is_archived=0',
-    orderBy: 'name COLLATE NOCASE',
+    orderBy: 'created_at DESC,id DESC',
   );
   Future<int> create({
     required int lenderId,

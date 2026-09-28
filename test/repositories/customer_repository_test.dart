@@ -37,6 +37,48 @@ void main() {
     expect(u.fullName, 'Juan Cruz');
     expect(u.mobileNumber, '0912');
   });
+  test(
+    'contact and profile edits persist without changing UTANG history',
+    () async {
+      final created = await repo.create(
+        const CustomerDraft(
+          fullName: 'Paksiw',
+          nickname: 'Pak',
+          mobileNumber: '0912 345 6789',
+          address: 'Brgy. San Isidro',
+          notes: 'Neighbor',
+        ),
+      );
+      expect(
+        (await repo.details(created.id)).customer.mobileNumber,
+        '0912 345 6789',
+      );
+      await UtangRepository(db)
+          .addExistingBalance(customerId: created.id, amountCentavos: 82500);
+      final before = await repo.details(created.id);
+      final edited = await repo.update(
+        created.id,
+        const CustomerDraft(
+          fullName: 'Paksiw Santos',
+          nickname: 'Paksiw',
+          mobileNumber: '0999 111 2222',
+          address: 'Tanza, Cavite',
+          notes: 'Updated note',
+        ),
+      );
+      final after = await repo.details(created.id);
+      expect(edited.id, created.id);
+      expect(after.customer.mobileNumber, '0999 111 2222');
+      expect(after.customer.address, 'Tanza, Cavite');
+      expect(after.customer.nickname, 'Paksiw');
+      expect(after.customer.notes, 'Updated note');
+      expect(after.customer.balanceCentavos, before.customer.balanceCentavos);
+      expect(
+        after.ledger.map((entry) => entry.id),
+        before.ledger.map((entry) => entry.id),
+      );
+    },
+  );
   test('archive excludes active without deleting', () async {
     final c = await repo.create(const CustomerDraft(fullName: 'Maria'));
     await repo.archive(c.id);

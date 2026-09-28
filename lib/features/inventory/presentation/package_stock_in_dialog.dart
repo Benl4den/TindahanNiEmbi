@@ -43,13 +43,14 @@ Future<bool> showPackageStockInDialog({
   final cost = TextEditingController();
   final notes = TextEditingController();
   String? error;
-  var submitting = false;
+  var submitting = false, submitted = false;
   final saved = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (dialog) => StatefulBuilder(
       builder: (_, set) {
         final packagesCount = int.tryParse(numericInput(count.text)) ?? 0;
+        final costCentavos = parseMoneyCentavos(cost.text);
         final total = packagesCount * selected.baseQuantity;
         final packageName = selected.name.trim();
         final shortName = packageName.length <= 16;
@@ -94,6 +95,11 @@ Future<bool> showPackageStockInDialog({
                       helperText: shortName ? null : 'Count of $packageName',
                       helperMaxLines: 2,
                       border: const OutlineInputBorder(),
+                      errorText: submitted && packagesCount <= 0
+                          ? count.text.trim().isEmpty
+                                ? 'Enter the package count.'
+                                : 'Count must be greater than zero.'
+                          : null,
                     ),
                     onChanged: (_) => set(() => error = null),
                     onTap: () => count.selection = TextSelection(
@@ -114,6 +120,11 @@ Future<bool> showPackageStockInDialog({
                           : 'Purchase cost per package',
                       prefixText: '₱ ',
                       border: const OutlineInputBorder(),
+                      errorText: submitted && costCentavos == null
+                          ? cost.text.trim().isEmpty
+                                ? 'Enter the purchase cost.'
+                                : 'Use pesos with up to two decimal places.'
+                          : null,
                       helperText: previousCosts[selected.id] == null
                           ? 'No previous purchase cost recorded for this package.'
                           : 'Previous cost: ${standardMoney(previousCosts[selected.id]!)} per ${selected.name}',
@@ -126,9 +137,11 @@ Future<bool> showPackageStockInDialog({
                               onPressed: () {
                                 cost.text = (previousCosts[selected.id]! / 100)
                                     .toStringAsFixed(2);
+                                set(() => error = null);
                               },
                             ),
                     ),
+                    onChanged: (_) => set(() => error = null),
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -174,20 +187,11 @@ Future<bool> showPackageStockInDialog({
                       final packageCount = int.tryParse(
                         numericInput(count.text),
                       );
-                      final costText = cost.text.trim();
-                      final pesos = costText.isEmpty
-                          ? null
-                          : double.tryParse(numericInput(costText));
+                      final costValue = parseMoneyCentavos(cost.text);
                       if (packageCount == null ||
                           packageCount <= 0 ||
-                          costText.isEmpty ||
-                          pesos == null ||
-                          !pesos.isFinite ||
-                          pesos < 0) {
-                        set(
-                          () => error =
-                              'Enter a package count and purchase cost.',
-                        );
+                          costValue == null) {
+                        set(() => submitted = true);
                         return;
                       }
                       set(() {
@@ -199,7 +203,7 @@ Future<bool> showPackageStockInDialog({
                           productId: product.id,
                           packageId: selected.id,
                           packageCount: packageCount,
-                          packageCostCentavos: (pesos * 100).round(),
+                          packageCostCentavos: costValue,
                           notes: notes.text,
                         );
                         if (dialog.mounted) {

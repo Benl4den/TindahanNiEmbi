@@ -391,7 +391,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   Future<void> _reverse(Expense expense) async {
     final reason = TextEditingController(), pin = TextEditingController();
-    var busy = false, error = '';
+    var busy = false, error = '', submitted = false;
     final ok = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -408,15 +408,35 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 TextField(
                   controller: reason,
-                  decoration: const InputDecoration(labelText: 'Reason'),
+                  onChanged: (_) {
+                    if (submitted) setLocal(() {});
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Reason',
+                    errorText: submitted && reason.text.trim().isEmpty
+                        ? 'Enter a reason for cancellation.'
+                        : null,
+                  ),
                 ),
                 TextField(
                   controller: pin,
+                  onChanged: (_) {
+                    if (submitted || error == 'Incorrect Owner PIN.') {
+                      setLocal(() => error = '');
+                    }
+                  },
                   obscureText: true,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Owner PIN'),
+                  decoration: InputDecoration(
+                    labelText: 'Owner PIN',
+                    errorText: submitted && pin.text.isEmpty
+                        ? 'Enter your Owner PIN.'
+                        : error == 'Incorrect Owner PIN.'
+                        ? error
+                        : null,
+                  ),
                 ),
-                if (error.isNotEmpty)
+                if (error.isNotEmpty && error != 'Incorrect Owner PIN.')
                   Text(error, style: const TextStyle(color: Colors.red)),
               ],
             ),
@@ -431,9 +451,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ? null
                   : () async {
                       if (reason.text.trim().isEmpty || pin.text.isEmpty) {
-                        setLocal(
-                          () => error = 'Reason and Owner PIN are required.',
-                        );
+                        setLocal(() {
+                          submitted = true;
+                          error = '';
+                        });
                         return;
                       }
                       setLocal(() {
@@ -508,6 +529,8 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   late PaymentMethod paymentMethod;
   String error = '';
   bool busy = false;
+  bool submitted = false;
+  String? pinIssue;
   @override
   void initState() {
     super.initState();
@@ -543,9 +566,30 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   }
 
   int? get cents {
-    final value = double.tryParse(amount.text.trim());
-    return value == null ? null : (value * 100).round();
+    return parseMoneyCentavos(amount.text);
   }
+
+  String? get amountError {
+    if (!submitted) return null;
+    if (amount.text.trim().isEmpty) return 'Enter an amount.';
+    if (cents == null) return 'Use pesos with up to two decimal places.';
+    if (cents! <= 0) return 'Amount must be greater than ₱0.00.';
+    return null;
+  }
+
+  String? get descriptionError => submitted && description.text.trim().isEmpty
+      ? 'Enter a description or purpose.'
+      : null;
+
+  String? get reasonError =>
+      submitted && widget.original != null && reason.text.trim().isEmpty
+      ? 'Enter a reason for this fix.'
+      : null;
+
+  String? get pinError =>
+      submitted && widget.original != null && pin.text.isEmpty
+      ? 'Enter your Owner PIN.'
+      : pinIssue;
 
   @override
   Widget build(BuildContext context) => PageBackGuard(
@@ -593,10 +637,16 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             ),
             TextField(
               controller: amount,
+              onChanged: (_) {
+                if (submitted) setState(() {});
+              },
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'Amount (₱)'),
+              decoration: InputDecoration(
+                labelText: 'Amount (₱)',
+                errorText: amountError,
+              ),
             ),
             const SizedBox(height: 12),
             SegmentedButton<PaymentMethod>(
@@ -634,8 +684,12 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               ),
             TextField(
               controller: description,
-              decoration: const InputDecoration(
+              onChanged: (_) {
+                if (submitted) setState(() {});
+              },
+              decoration: InputDecoration(
                 labelText: 'Description / Purpose',
+                errorText: descriptionError,
               ),
             ),
             TextField(
@@ -667,15 +721,27 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               ),
               TextField(
                 controller: reason,
-                decoration: const InputDecoration(
+                onChanged: (_) {
+                  if (submitted) setState(() {});
+                },
+                decoration: InputDecoration(
                   labelText: 'Reason for this fix',
+                  errorText: reasonError,
                 ),
               ),
               TextField(
                 controller: pin,
+                onChanged: (_) {
+                  if (submitted || pinIssue != null) {
+                    setState(() => pinIssue = null);
+                  }
+                },
                 obscureText: true,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Owner PIN'),
+                decoration: InputDecoration(
+                  labelText: 'Owner PIN',
+                  errorText: pinError,
+                ),
               ),
             ],
             if (error.isNotEmpty)
@@ -725,14 +791,14 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   }
 
   Future<void> _save() async {
-    if ((cents ?? 0) <= 0 ||
-        description.text.trim().isEmpty ||
-        (widget.original != null &&
-            (reason.text.trim().isEmpty || pin.text.isEmpty))) {
-      setState(
-        () => error =
-            'Complete all required fields. Amount must be greater than zero.',
-      );
+    setState(() {
+      submitted = true;
+      error = '';
+    });
+    if (amountError != null ||
+        descriptionError != null ||
+        reasonError != null ||
+        pinError != null) {
       return;
     }
     setState(() {
@@ -771,9 +837,13 @@ class _ExpenseFormState extends State<_ExpenseForm> {
       if (mounted) {
         setState(() {
           busy = false;
-          error = e is ExpenseException
-              ? e.message
-              : 'Expense could not be saved. Please try again.';
+          if (e is ExpenseException && e.message == 'Incorrect Owner PIN.') {
+            pinIssue = e.message;
+          } else {
+            error = e is ExpenseException
+                ? e.message
+                : 'Expense could not be saved. Please try again.';
+          }
         });
       }
     }
@@ -791,6 +861,7 @@ class _CategoryManagerState extends State<_CategoryManager> {
   final name = TextEditingController();
   late Future<List<ExpenseCategory>> data;
   String error = '';
+  bool submitted = false;
   @override
   void initState() {
     super.initState();
@@ -818,7 +889,15 @@ class _CategoryManagerState extends State<_CategoryManager> {
               Expanded(
                 child: TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'New category'),
+                  onChanged: (_) {
+                    if (submitted) setState(() {});
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'New category',
+                    errorText: submitted && name.text.trim().isEmpty
+                        ? 'Enter a category name.'
+                        : null,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -863,10 +942,13 @@ class _CategoryManagerState extends State<_CategoryManager> {
     ],
   );
   Future<void> _add() async {
+    setState(() => submitted = true);
+    if (name.text.trim().isEmpty) return;
     try {
       await widget.repository.addCategory(name.text);
       name.clear();
       error = '';
+      submitted = false;
       reload();
     } catch (e) {
       setState(

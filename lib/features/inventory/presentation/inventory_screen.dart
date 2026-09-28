@@ -28,8 +28,26 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
   final otherReason = TextEditingController();
   bool adding = false;
   bool saving = false;
+  bool submitted = false;
   String? reason;
   String? error;
+
+  String? get quantityError {
+    if (!submitted) return null;
+    if (quantity.text.trim().isEmpty) return 'Enter a quantity.';
+    if (amount == null || amount! <= 0) {
+      return 'Quantity must be greater than zero.';
+    }
+    if (newStock! < 0) return 'Cannot remove more than current stock.';
+    return null;
+  }
+
+  String? get reasonError =>
+      submitted && reason == null ? 'Choose a reason.' : null;
+  String? get otherReasonError =>
+      submitted && reason == 'Other' && otherReason.text.trim().isEmpty
+      ? 'Describe the reason.'
+      : null;
 
   List<String> get reasons => adding
       ? const ['Physical Count Correction', 'Previously Missed Stock', 'Other']
@@ -56,18 +74,14 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
   }
 
   Future<void> save() async {
+    setState(() {
+      submitted = true;
+      error = null;
+    });
     final value = amount;
-    if (value == null || value <= 0) {
-      setState(() => error = 'Enter a quantity greater than zero.');
-      return;
-    }
-    if (newStock! < 0) {
-      setState(() => error = 'You cannot remove more than the current stock.');
-      return;
-    }
-    if (reason == null ||
-        (reason == 'Other' && otherReason.text.trim().isEmpty)) {
-      setState(() => error = 'Choose a reason and describe Other if selected.');
+    if (quantityError != null ||
+        reasonError != null ||
+        otherReasonError != null) {
       return;
     }
     setState(() {
@@ -77,7 +91,7 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
     try {
       await widget.repository.adjust(
         productId: widget.product.id,
-        quantityChange: adding ? value : -value,
+        quantityChange: adding ? value! : -value!,
         reason: reason == 'Other'
             ? 'Other: ${otherReason.text.trim()}'
             : reason!,
@@ -153,15 +167,17 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
             decoration: InputDecoration(
               labelText: 'Quantity (${widget.product.baseUnitLabel})',
               border: const OutlineInputBorder(),
+              errorText: quantityError,
             ),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             key: ValueKey(adding),
             initialValue: reason,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Reason',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              errorText: reasonError,
             ),
             items: reasons
                 .map((r) => DropdownMenuItem(value: r, child: Text(r)))
@@ -179,9 +195,10 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
               controller: otherReason,
               maxLines: 2,
               onChanged: (_) => setState(() => error = null),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Describe the reason',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                errorText: otherReasonError,
               ),
             ),
           ],

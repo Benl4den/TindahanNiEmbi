@@ -74,6 +74,9 @@ class CustomerLedgerEntry {
     this.paymentId,
     this.itemCount,
     this.isExistingBalance = false,
+    this.paymentMethod,
+    this.paymentReference,
+    this.paymentStatus,
   });
   final int id;
   final String type;
@@ -82,6 +85,7 @@ class CustomerLedgerEntry {
   final String? description;
   final int? utangTransactionId, paymentId, itemCount;
   final bool isExistingBalance;
+  final String? paymentMethod, paymentReference, paymentStatus;
   factory CustomerLedgerEntry.fromMap(Map<String, Object?> map) =>
       CustomerLedgerEntry(
         id: map['id']! as int,
@@ -93,6 +97,9 @@ class CustomerLedgerEntry {
         paymentId: map['payment_id'] as int?,
         itemCount: map['item_count'] as int?,
         isExistingBalance: map['is_existing_balance'] == 1,
+        paymentMethod: map['payment_method'] as String?,
+        paymentReference: map['payment_reference'] as String?,
+        paymentStatus: map['payment_status'] as String?,
       );
 }
 

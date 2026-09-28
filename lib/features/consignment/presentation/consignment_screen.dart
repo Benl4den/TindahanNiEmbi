@@ -153,7 +153,7 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
         child: const Text('Cancel'),
       ),
       FilledButton(
-        onPressed: name.text.trim().isEmpty || saving ? null : save,
+        onPressed: saving ? null : save,
         child: saving
             ? const SizedBox.square(
                 dimension: 22,
@@ -185,6 +185,7 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
   bool archivedCategory = false;
   bool saving = false;
   String? error;
+  bool submitted = false;
 
   @override
   void initState() {
@@ -208,7 +209,7 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
 
   Future<void> save() async {
     if (name.text.trim().isEmpty) {
-      setState(() => error = 'Company or consignor name is required.');
+      setState(() => submitted = true);
       return;
     }
     setState(() {
@@ -254,10 +255,13 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
             TextField(
               controller: name,
               autofocus: true,
-              onChanged: (_) => setState(() => error = null),
-              decoration: const InputDecoration(
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
                 labelText: 'Company / Name',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                errorText: submitted && name.text.trim().isEmpty
+                    ? 'Company or consignor name is required.'
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
@@ -313,7 +317,7 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: saving || name.text.trim().isEmpty ? null : save,
+          onPressed: saving ? null : save,
           child: Text(saving ? 'Saving…' : 'Save'),
         ),
       ],
@@ -360,9 +364,9 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
 
   String money(int n) => standardMoney(n);
   Future<void> save() async {
-    final cents = ((double.tryParse(amount.text.trim()) ?? 0) * 100).round(),
-        balance = widget.balances[party] ?? 0;
-    if (cents <= 0) {
+    final cents = parseMoneyCentavos(amount.text);
+    final balance = widget.balances[party] ?? 0;
+    if (cents == null || cents <= 0) {
       setState(() => error = 'Enter a remittance amount greater than zero.');
       return;
     }
@@ -487,6 +491,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: amount,
+                  onChanged: (_) => setState(() => error = null),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -558,6 +563,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
   late int? categoryId;
   String photoPath = '';
   bool saving = false, choosingPhoto = false, changeCategory = false;
+  bool submitted = false;
   String? error;
 
   @override
@@ -599,22 +605,18 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
   Future<void> _save() async {
     final productName = name.text.trim();
     final quantity = int.tryParse(numericInput(count.text)) ?? 0;
-    final supplierCost =
-        ((double.tryParse(numericInput(cost.text)) ?? -1) * 100).round();
-    final sellingPrice =
-        ((double.tryParse(numericInput(price.text)) ?? -1) * 100).round();
+    final supplierCost = parseMoneyCentavos(cost.text);
+    final sellingPrice = parseMoneyCentavos(price.text);
     final lowStock = int.tryParse(numericInput(minimum.text)) ?? -1;
+    setState(() => submitted = true);
     if (productName.isEmpty || categoryId == null || photoPath.isEmpty) {
-      setState(() => error = 'Add the product name, category, and photo.');
       return;
     }
     if (quantity <= 0 ||
-        supplierCost < 0 ||
+        supplierCost == null ||
+        sellingPrice == null ||
         sellingPrice <= 0 ||
         lowStock < 0) {
-      setState(
-        () => error = 'Enter a valid quantity, supplier cost, selling price, and low-stock level.',
-      );
       return;
     }
     final duplicate = (await widget.products.searchActive(productName)).any(
@@ -695,8 +697,8 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
 
   Widget _buildContent(BuildContext context) {
     final quantity = int.tryParse(numericInput(count.text)) ?? 0;
-    final supplier = double.tryParse(numericInput(cost.text)) ?? 0;
-    final selling = double.tryParse(numericInput(price.text)) ?? 0;
+    final supplier = parseMoneyCentavos(cost.text) ?? 0;
+    final selling = parseMoneyCentavos(price.text) ?? 0;
     final selectedCategory = widget.categories
         .where((category) => category.id == categoryId)
         .map((category) => category.name)
@@ -721,6 +723,13 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 ),
                 const SizedBox(height: 20),
                 SizedBox(height: 150, child: ProductImage(path: photoPath)),
+                if (submitted && photoPath.isEmpty)
+                  Text(
+                    'Add a product photo.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -749,9 +758,13 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 TextField(
                   controller: name,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
                     labelText: 'Product Name',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText: submitted && name.text.trim().isEmpty
+                        ? 'Enter a product name.'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -768,9 +781,12 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                 else
                   DropdownButtonFormField<int>(
                     initialValue: categoryId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Category',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      errorText: submitted && categoryId == null
+                          ? 'Choose a category.'
+                          : null,
                     ),
                     items: widget.categories
                         .map(
@@ -787,9 +803,14 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                   controller: count,
                   keyboardType: TextInputType.number,
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Quantity Received (pieces)',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText:
+                        submitted &&
+                            (int.tryParse(numericInput(count.text)) ?? 0) <= 0
+                        ? 'Enter a whole-number quantity greater than zero.'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -799,10 +820,14 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                     decimal: true,
                   ),
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Supplier Price per Piece',
                     prefixText: '₱ ',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText:
+                        submitted && parseMoneyCentavos(cost.text) == null
+                        ? 'Enter a valid price (up to two decimals).'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -812,24 +837,36 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                     decimal: true,
                   ),
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Selling Price per Piece',
                     prefixText: '₱ ',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText:
+                        submitted &&
+                            (parseMoneyCentavos(price.text) == null ||
+                                parseMoneyCentavos(price.text)! <= 0)
+                        ? 'Enter a selling price greater than ₱0.'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: minimum,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
                     labelText: 'Low-Stock Level',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText:
+                        submitted &&
+                            (int.tryParse(numericInput(minimum.text)) ?? -1) < 0
+                        ? 'Enter a whole number of zero or more.'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  '$quantity pieces • Supplier total: ${standardMoney((quantity * supplier * 100).round())} • Expected profit: ${standardMoney((quantity * (selling - supplier) * 100).round())}',
+                  '$quantity pieces • Supplier total: ${standardMoney(quantity * supplier)} • Expected profit: ${standardMoney(quantity * (selling - supplier))}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (error != null)
@@ -1080,6 +1117,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
     sell.text = (sellingOption().priceCentavos / 100).toStringAsFixed(2);
     String? error;
     var saving = false;
+    var submitted = false;
     final ok = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -1144,6 +1182,21 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                               : TextInputType.number,
                           decoration: InputDecoration(
                             labelText: f.$2,
+                            errorText: !submitted || f.$1 == notes
+                                ? null
+                                : f.$1 == boxes &&
+                                      (int.tryParse(numericInput(boxes.text)) ??
+                                              0) <=
+                                          0
+                                ? 'Enter a whole-number quantity greater than zero.'
+                                : f.$1 == cost &&
+                                      parseMoneyCentavos(cost.text) == null
+                                ? 'Enter a cost (up to two decimals).'
+                                : f.$1 == sell &&
+                                      (parseMoneyCentavos(sell.text) == null ||
+                                          parseMoneyCentavos(sell.text)! <= 0)
+                                ? 'Enter a selling price greater than ₱0.'
+                                : null,
                             helperText:
                                 f.$1 == cost && previousCosts[product] == null
                                 ? 'No previous cost recorded'
@@ -1171,19 +1224,17 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                         final boxCount =
                             int.tryParse(numericInput(boxes.text)) ?? 0;
                         final perBox = int.tryParse(units.text) ?? 0;
-                        final unitCost = double.tryParse(cost.text) ?? 0;
+                        final unitCost = parseMoneyCentavos(cost.text) ?? 0;
                         final total = boxCount * perBox;
                         final costBasis = sellingOption().baseQuantity;
-                        final totalCost =
-                            (total * (unitCost * 100)).round() /
-                            costBasis /
-                            100;
+                        final totalCost = (total * unitCost / costBasis)
+                            .round();
                         return Padding(
                           padding: const EdgeInsets.only(top: 16),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '${quantityLabel(total)} received\nSupplier cost: ${standardMoney((unitCost * 100).round())} per ${sellingOption().name}\nTotal Consigned Value: ${standardMoney((totalCost * 100).round())}',
+                              '${quantityLabel(total)} received\nSupplier cost: ${standardMoney(unitCost)} per ${sellingOption().name}\nTotal Consigned Value: ${standardMoney(totalCost)}',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ),
@@ -1224,12 +1275,9 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                           productId: product,
                           boxes: int.tryParse(numericInput(boxes.text)) ?? 0,
                           unitsPerBox: int.tryParse(units.text) ?? 0,
-                          unitCostCentavos:
-                              ((double.tryParse(cost.text) ?? -1) * 100)
-                                  .round(),
+                          unitCostCentavos: parseMoneyCentavos(cost.text) ?? -1,
                           sellingPriceCentavos:
-                              ((double.tryParse(sell.text) ?? -1) * 100)
-                                  .round(),
+                              parseMoneyCentavos(sell.text) ?? -1,
                           supplierCostBasisQuantity:
                               sellingOption().baseQuantity,
                           packageName: 'Direct ${unitLabel()}',
@@ -1241,9 +1289,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                             receipt.unitsPerBox <= 0 ||
                             receipt.unitCostCentavos < 0 ||
                             receipt.sellingPriceCentavos <= 0) {
-                          set(
-                            () => error = 'Enter valid quantities, cost, and a selling price greater than zero.',
-                          );
+                          set(() => submitted = true);
                           return;
                         }
                         set(() {

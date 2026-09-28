@@ -108,8 +108,14 @@ void main() {
 
     await tester.tap(find.text('Add Lender'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Bombay');
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Save Lender'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a lender name.'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Lender Name *'),
+      'Bombay',
+    );
+    await tester.tap(find.text('Save Lender'));
     await tester.runAsync(
       () async => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
@@ -121,7 +127,17 @@ void main() {
       () async => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Bombay'), findsOneWidget);
+    expect(find.text('Bombay'), findsWidgets);
+    await tester.tap(find.text('Save Loan'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Enter an amount greater than ₱0 (up to two decimals).'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Enter a valid amount at least equal to the amount borrowed.'),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.widgetWithText(TextField, 'Amount borrowed'),
       '50',
@@ -156,6 +172,114 @@ void main() {
     expect(find.text('₱55,000.00'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(app.close);
+  });
+
+  testWidgets('new lender appears immediately and its card preselects a loan', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = await tester.runAsync(() => app.database);
+    if (db == null) throw StateError('Test database did not open.');
+    final repository = LoanRepository(db, actorRole: 'OWNER');
+    await tester.runAsync(() => repository.createLender('Rusi'));
+
+    Widget screen() => MaterialApp(
+      home: LoanManagementScreen(
+        repository: repository,
+        access: FeatureAccessService(
+          db,
+          planController: AppPlanController(OpenAccessPlanSource()),
+        ),
+      ),
+    );
+    await tester.pumpWidget(screen());
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Lender'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Lender Name *'),
+      'Juan Lending',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Contact Person (Optional)'),
+      'Juan Dela Cruz',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Contact Number (Optional)'),
+      '0917 123 4567',
+    );
+    await tester.tap(find.text('Save Lender'));
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    final saved = await tester.runAsync(() => repository.lenders());
+    expect(saved!.map((row) => row['name']), contains('Juan Lending'));
+    expect(find.text('Juan Lending'), findsOneWidget);
+    expect(find.text('No active loan'), findsWidgets);
+    expect(find.text('✓ Juan Lending added to your lenders.'), findsOneWidget);
+    final juan = saved.singleWhere((row) => row['name'] == 'Juan Lending');
+    expect(juan['contact_person'], 'Juan Dela Cruz');
+    expect(juan['contact_number'], '0917 123 4567');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(screen());
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Juan Lending'), findsOneWidget);
+    final juanCard = find
+        .ancestor(of: find.text('Juan Lending'), matching: find.byType(Card))
+        .first;
+    await tester.tap(
+      find.descendant(
+        of: juanCard,
+        matching: find.widgetWithText(OutlinedButton, 'Add Loan'),
+      ),
+    );
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    final lenderDropdown = tester.widget<DropdownButtonFormField<int>>(
+      find.byType(DropdownButtonFormField<int>),
+    );
+    expect(lenderDropdown.initialValue, juan['id']);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Amount borrowed'),
+      '100',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Total to repay'),
+      '110',
+    );
+    await tester.tap(find.text('Save Loan'));
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    final loans = await tester.runAsync(() => repository.loans());
+    expect(loans, hasLength(1));
+    expect(loans!.single['lender_id'], juan['id']);
+    expect(loans.single['borrowed_amount_centavos'], 10000);
+    expect(loans.single['agreed_repayment_centavos'], 11000);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('loan overview and card use the same centavo amounts', (
