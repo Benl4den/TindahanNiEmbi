@@ -4,25 +4,32 @@ class BrandAnalyticsRepository {
   const BrandAnalyticsRepository(this.db);
   final Database db;
 
-  /// Posted historical attributions for all brands in two aggregate queries.
+  /// Posted historical attributions for active managed brands only.
+  /// SELECTA and CONSIGNMENT are special inventory groups, not managed brands.
   Future<Map<int, ({int sales, int profit})>> totalsByBrand() async {
     final cash = await db.rawQuery('''
       SELECT a.inventory_group_id brand_id,
         COALESCE(SUM(i.line_total_centavos),0) sales,
         COALESCE(SUM(a.cost_centavos),0) cost
       FROM brand_sale_attributions a
+      JOIN inventory_groups g ON g.id=a.inventory_group_id
       JOIN cash_sale_items i ON i.id=a.cash_sale_item_id
       JOIN cash_sales s ON s.id=i.cash_sale_id
-      WHERE s.status='POSTED' GROUP BY a.inventory_group_id
+      WHERE s.status='POSTED' AND g.is_archived=0
+        AND g.code NOT IN ('SELECTA','CONSIGNMENT')
+      GROUP BY a.inventory_group_id
     ''');
     final utang = await db.rawQuery('''
       SELECT a.inventory_group_id brand_id,
         COALESCE(SUM(i.line_total_centavos),0) sales,
         COALESCE(SUM(a.cost_centavos),0) cost
       FROM brand_sale_attributions a
+      JOIN inventory_groups g ON g.id=a.inventory_group_id
       JOIN utang_transaction_items i ON i.id=a.utang_item_id
       JOIN utang_transactions u ON u.id=i.utang_transaction_id
-      WHERE u.status='POSTED' GROUP BY a.inventory_group_id
+      WHERE u.status='POSTED' AND g.is_archived=0
+        AND g.code NOT IN ('SELECTA','CONSIGNMENT')
+      GROUP BY a.inventory_group_id
     ''');
     final result = <int, ({int sales, int profit})>{};
     for (final row in [...cash, ...utang]) {
@@ -89,9 +96,16 @@ class BrandAnalyticsRepository {
     String groupCode, {
     DateTime? from,
     DateTime? to,
+    bool currentMembersOnly = false,
   }) async {
     final conditions = <String>["g.code=?", "s.status='POSTED'"],
         args = <Object?>[groupCode];
+    if (currentMembersOnly) {
+      conditions.add('''EXISTS (SELECT 1 FROM product_inventory_groups m
+        JOIN products p ON p.id=m.product_id AND p.is_archived=0
+        WHERE m.product_id=i.product_id AND m.inventory_group_id=a.inventory_group_id
+          AND m.archived_at IS NULL)''');
+    }
     if (from != null) {
       conditions.add('s.occurred_at>=?');
       args.add(from.toUtc().toIso8601String());
@@ -131,6 +145,68 @@ class BrandAnalyticsRepository {
       'profit': sales - cost,
       'estimatedItems': (a['estimates']! as int) + (b['estimates']! as int),
     };
+  }
+
+  /// Highest-volume posted product attributed to this group in a period.
+  Future<({String name, int units})?> topProduct(
+    String groupCode, {
+    DateTime? from,
+    DateTime? to,
+    bool currentMembersOnly = false,
+  }) async {
+    final cashWhere = <String>["g.code=?", "s.status='POSTED'"];
+    final utangWhere = <String>["g.code=?", "u.status='POSTED'"];
+    final cashArgs = <Object?>[groupCode];
+    final utangArgs = <Object?>[groupCode];
+    if (currentMembersOnly) {
+      const membership = '''EXISTS (SELECT 1 FROM product_inventory_groups m
+        JOIN products active ON active.id=m.product_id AND active.is_archived=0
+        WHERE m.product_id=i.product_id AND m.inventory_group_id=a.inventory_group_id
+          AND m.archived_at IS NULL)''';
+      cashWhere.add(membership);
+      utangWhere.add(membership);
+    }
+    if (from != null) {
+      final value = from.toUtc().toIso8601String();
+      cashWhere.add('s.occurred_at>=?');
+      utangWhere.add('u.occurred_at>=?');
+      cashArgs.add(value);
+      utangArgs.add(value);
+    }
+    if (to != null) {
+      final value = to.toUtc().toIso8601String();
+      cashWhere.add('s.occurred_at<?');
+      utangWhere.add('u.occurred_at<?');
+      cashArgs.add(value);
+      utangArgs.add(value);
+    }
+    final rows = await db.rawQuery(
+      '''
+      SELECT p.name, SUM(sold.units) units FROM (
+        SELECT i.product_id, COALESCE(i.total_base_quantity,i.quantity) units
+        FROM brand_sale_attributions a
+        JOIN inventory_groups g ON g.id=a.inventory_group_id
+        JOIN cash_sale_items i ON i.id=a.cash_sale_item_id
+        JOIN cash_sales s ON s.id=i.cash_sale_id
+        WHERE ${cashWhere.join(' AND ')}
+        UNION ALL
+        SELECT i.product_id, COALESCE(i.total_base_quantity,i.quantity) units
+        FROM brand_sale_attributions a
+        JOIN inventory_groups g ON g.id=a.inventory_group_id
+        JOIN utang_transaction_items i ON i.id=a.utang_item_id
+        JOIN utang_transactions u ON u.id=i.utang_transaction_id
+        WHERE ${utangWhere.join(' AND ')}
+      ) sold JOIN products p ON p.id=sold.product_id
+      GROUP BY sold.product_id ORDER BY units DESC, p.name COLLATE NOCASE
+      LIMIT 1
+    ''',
+      [...cashArgs, ...utangArgs],
+    );
+    if (rows.isEmpty) return null;
+    return (
+      name: rows.single['name']! as String,
+      units: rows.single['units']! as int,
+    );
   }
 
   Future<List<Map<String, Object?>>> products(String groupCode) => db.rawQuery(

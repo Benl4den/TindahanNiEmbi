@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/formatters/number_format.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../models/product.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/brand_analytics_repository.dart';
@@ -48,10 +49,95 @@ class SelectaScreen extends StatefulWidget {
 class _SelectaScreenState extends State<SelectaScreen> {
   String query = '';
   ProductStockStatus? status;
+  String sort = 'Name';
+  String period = 'This Month';
+  Future<
+    ({List<Product> products, Map<int, OwnedInventoryProductValue> values})
+  >?
+  _productsFuture;
+  Future<
+    ({
+      Map<String, Object?> selected,
+      Map<String, Object?> month,
+      ({String name, int units})? top,
+    })
+  >?
+  _performanceFuture;
+
+  void _refresh() => setState(() {
+    _productsFuture = null;
+    _performanceFuture = null;
+  });
+
+  Future<
+    ({List<Product> products, Map<int, OwnedInventoryProductValue> values})
+  >
+  _loadProducts() async => (
+    products: await widget.special.products(widget.groupCode),
+    values: await widget.inventory.ownedProductValues(),
+  );
+
+  Future<
+    ({
+      Map<String, Object?> selected,
+      Map<String, Object?> month,
+      ({String name, int units})? top,
+    })
+  >
+  _loadPerformance() async {
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month);
+    final nextMonth = DateTime(now.year, now.month + 1);
+    final from = switch (period) {
+      'Last Month' => DateTime(now.year, now.month - 1),
+      'All Time' => null,
+      _ => monthStart,
+    };
+    final to = switch (period) {
+      'Last Month' => monthStart,
+      'All Time' => null,
+      _ => nextMonth,
+    };
+    final selected = await widget.analytics.summary(
+      widget.groupCode,
+      from: from,
+      to: to,
+      currentMembersOnly: true,
+    );
+    final month = period == 'This Month'
+        ? selected
+        : await widget.analytics.summary(
+            widget.groupCode,
+            from: monthStart,
+            to: nextMonth,
+            currentMembersOnly: true,
+          );
+    final top = await widget.analytics.topProduct(
+      widget.groupCode,
+      from: from,
+      to: to,
+      currentMembersOnly: true,
+    );
+    return (selected: selected, month: month, top: top);
+  }
+
   Future<void> _assign() async {
     final all = await widget.products.searchActive();
-    if (!mounted || all.isEmpty) return;
-    int selected = all.first.id;
+    final assigned = await widget.special.products(widget.groupCode);
+    if (!mounted) return;
+    final assignedIds = assigned.map((p) => p.id).toSet();
+    final available = all.where((p) => !assignedIds.contains(p.id)).toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No unassigned products available. Add a new product first.',
+          ),
+        ),
+      );
+      return;
+    }
+    int selected = available.first.id;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -65,7 +151,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
                 labelText: 'Product',
                 border: OutlineInputBorder(),
               ),
-              items: all
+              items: available
                   .map(
                     (p) => DropdownMenuItem(value: p.id, child: Text(p.name)),
                   )
@@ -88,7 +174,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     );
     if (ok == true) {
       await widget.special.assign(selected, widget.groupCode);
-      if (mounted) setState(() {});
+      if (mounted) _refresh();
     }
   }
 
@@ -133,7 +219,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     );
     if (saved == true && created != null) {
       await widget.special.assign(created!.id, widget.groupCode);
-      if (mounted) setState(() {});
+      if (mounted) _refresh();
     }
   }
 
@@ -157,7 +243,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
         ),
       ),
     );
-    if (saved == true && mounted) setState(() {});
+    if (saved == true && mounted) _refresh();
   }
 
   Future<void> _stockIn(Product p) async {
@@ -166,7 +252,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
       product: p,
       repository: ProductUnitRepository(widget.inventory.db),
     );
-    if (saved && mounted) setState(() {});
+    if (saved && mounted) _refresh();
   }
 
   Future<void> _saleHistory(Product product) async {
@@ -305,86 +391,309 @@ class _SelectaScreenState extends State<SelectaScreen> {
     ],
   );
 
-  Widget _brandMetric(String label, String value, IconData icon) => SizedBox(
-    width: 205,
-    child: Card(
-      color: Theme.of(context).colorScheme.primaryContainer
-          .withValues(alpha: .4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20),
-            const SizedBox(height: 6),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-            Text(value, style: Theme.of(context).textTheme.titleMedium),
-          ],
+  Widget _panel({
+    required String title,
+    required String subtitle,
+    required Widget child,
+    Widget? trailing,
+    Widget? titleAction,
+    bool showHeader = true,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.semanticColors.surfaceContainer,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showHeader)
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        ?titleAction,
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+                ?trailing,
+              ],
+            ),
+          if (showHeader) const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _metric(
+    String label,
+    String value,
+    IconData icon,
+    Color accent, {
+    String? detail,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 23,
+            backgroundColor: accent.withValues(alpha: .14),
+            child: Icon(icon, color: accent, size: 25),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.bodySmall),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (detail != null)
+                  Text(
+                    detail,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricGrid(List<Widget> cards) => LayoutBuilder(
+    builder: (context, box) {
+      final columns = box.maxWidth >= 940
+          ? 4
+          : box.maxWidth >= 520
+          ? 2
+          : 1;
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: cards.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisExtent: columns == 4 ? 136 : 150,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
         ),
+        itemBuilder: (_, index) => cards[index],
+      );
+    },
+  );
+
+  void _showBrandInfo() => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('About brand performance'),
+      content: const Text(
+        'This dashboard counts posted sales attributed to products currently assigned to the brand. Earlier sales may be included when a product is assigned; older costs are estimates. Removing a product does not delete its sales history. A product linked to multiple brands can appear in each brand’s history.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _periodButton() => PopupMenuButton<String>(
+    tooltip: 'Choose performance period',
+    onSelected: (value) => setState(() {
+      period = value;
+      _performanceFuture = null;
+    }),
+    itemBuilder: (_) => const [
+      PopupMenuItem(value: 'This Month', child: Text('This Month')),
+      PopupMenuItem(value: 'Last Month', child: Text('Last Month')),
+      PopupMenuItem(value: 'All Time', child: Text('All Time')),
+    ],
+    child: Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.calendar_today_outlined, size: 20),
+          const SizedBox(width: 10),
+          Text(period, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(width: 14),
+          const Icon(Icons.keyboard_arrow_down),
+        ],
       ),
     ),
   );
 
-  Widget _brandOverview() => FeatureAccessBuilder(
+  Widget _performancePanels(List<Product> products) => FeatureAccessBuilder(
     access: widget.access,
     feature: ProFeature.managedBrandAnalytics,
     builder: (_, allowed) {
       if (!allowed) return const SizedBox.shrink();
-      return FutureBuilder<Map<String, Object?>>(
-        future: widget.analytics.summary(widget.groupCode),
-        builder: (_, result) {
-          if (!result.hasData) {
-            return result.hasError
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Could not load brand performance.'),
-                  )
-                : const LinearProgressIndicator();
+      return FutureBuilder<
+        ({
+          Map<String, Object?> selected,
+          Map<String, Object?> month,
+          ({String name, int units})? top,
+        })
+      >(
+        future: _performanceFuture ??= _loadPerformance(),
+        builder: (_, snapshot) {
+          if (snapshot.hasError) {
+            return AppStateView.error(
+              title: 'Could not load brand performance',
+              actionLabel: 'Try Again',
+              onAction: _refresh,
+            );
           }
-          final data = result.data!;
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Brand performance',
-                  style: Theme.of(context).textTheme.titleLarge,
+          if (!snapshot.hasData) return const LinearProgressIndicator();
+          final data = snapshot.data!;
+          final selected = data.selected;
+          final sales = selected['sales']! as int;
+          final profit = selected['profit']! as int;
+          final low = products
+              .where((p) => p.stockStatus == ProductStockStatus.lowStock)
+              .length;
+          final out = products
+              .where((p) => p.stockStatus == ProductStockStatus.outOfStock)
+              .length;
+          final stockLabel = products.isEmpty
+              ? 'No products'
+              : out > 0
+              ? 'Out of Stock'
+              : low > 0
+              ? 'Low Stock'
+              : 'Healthy';
+          final stockColor = products.isEmpty
+              ? Theme.of(context).colorScheme.onSurface
+              : out > 0
+              ? context.semanticColors.danger
+              : low > 0
+              ? context.semanticColors.warning
+              : context.semanticColors.success;
+          final stockDetail = products.length == 1
+              ? '1 product • ${productQuantityText(products.single, products.single.currentQuantity)}'
+              : '${products.length} products';
+          final margin = sales == 0
+              ? '—'
+              : '${(profit * 100 / sales).toStringAsFixed(1)}%';
+          final primary = Theme.of(context).colorScheme.primary;
+          return Column(
+            children: [
+              _panel(
+                title: 'Brand Performance',
+                subtitle:
+                    'Sales and profit from products assigned to this brand.',
+                titleAction: IconButton(
+                  tooltip: 'About brand performance',
+                  onPressed: _showBrandInfo,
+                  icon: const Icon(Icons.info_outline),
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _brandMetric(
-                      'Sales',
-                      standardMoney(data['sales']! as int),
-                      Icons.payments_outlined,
-                    ),
-                    _brandMetric(
-                      'Estimated cost',
-                      standardMoney(data['cost']! as int),
-                      Icons.inventory_2_outlined,
-                    ),
-                    _brandMetric(
-                      'Estimated gross profit',
-                      standardMoney(data['profit']! as int),
-                      Icons.trending_up,
-                    ),
-                    _brandMetric(
-                      'Units sold',
-                      '${data['units']}',
-                      Icons.shopping_bag_outlined,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'Posted sales are kept in brand history, including sales made before a product was assigned. Older costs are estimates; a product linked to multiple brands can appear in each brand’s history.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
+                trailing: _periodButton(),
+                child: _metricGrid([
+                  _metric(
+                    'Sales',
+                    standardMoney(sales),
+                    Icons.payments_outlined,
+                    primary,
+                  ),
+                  _metric(
+                    'Cost of Sold Products',
+                    standardMoney(selected['cost']! as int),
+                    Icons.shopping_basket_outlined,
+                    context.semanticColors.warning,
+                  ),
+                  _metric(
+                    'Gross Profit',
+                    standardMoney(profit),
+                    Icons.bar_chart_outlined,
+                    primary,
+                  ),
+                  _metric(
+                    'Units Sold',
+                    '${selected['units']}',
+                    Icons.shopping_bag_outlined,
+                    Theme.of(context).colorScheme.onSurface,
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              _panel(
+                title: 'Performance Insights',
+                subtitle: "Key insights about this brand's performance.",
+                child: _metricGrid([
+                  _metric('Profit Margin', margin, Icons.percent, primary),
+                  _metric(
+                    'Top Product',
+                    data.top?.name ?? 'No sales yet',
+                    Icons.emoji_events_outlined,
+                    context.semanticColors.warning,
+                    detail: data.top == null
+                        ? 'In selected period'
+                        : '${data.top!.units} units sold',
+                  ),
+                  _metric(
+                    'Sales This Month',
+                    standardMoney(data.month['sales']! as int),
+                    Icons.bar_chart_outlined,
+                    primary,
+                  ),
+                  _metric(
+                    'Stock Health',
+                    stockLabel,
+                    Icons.inventory_2_outlined,
+                    stockColor,
+                    detail: stockDetail,
+                  ),
+                ]),
+              ),
+            ],
           );
         },
       );
@@ -413,269 +722,541 @@ class _SelectaScreenState extends State<SelectaScreen> {
     );
     if (yes == true) {
       await widget.special.remove(product.id, widget.groupCode);
-      if (mounted) setState(() {});
+      if (mounted) _refresh();
     }
+  }
+
+  Widget _topActions() => Wrap(
+    spacing: 14,
+    runSpacing: 10,
+    children: [
+      SizedBox(
+        height: 56,
+        child: OutlinedButton.icon(
+          onPressed: _assign,
+          icon: const Icon(Icons.link),
+          label: const Text('Assign Existing Products'),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+      ),
+      SizedBox(
+        height: 56,
+        child: FilledButton.icon(
+          onPressed: _create,
+          icon: const Icon(Icons.add),
+          label: const Text('Add New Product'),
+        ),
+      ),
+    ],
+  );
+
+  Widget _filterButton(String label, ProductStockStatus? value) {
+    final selected = status == value;
+    void onPressed() => setState(() => status = value);
+    return SizedBox(
+      height: 50,
+      child: selected
+          ? FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.check, size: 19),
+              label: Text(label),
+            )
+          : OutlinedButton(onPressed: onPressed, child: Text(label)),
+    );
+  }
+
+  Widget _sortButton() => PopupMenuButton<String>(
+    tooltip: 'Sort products, currently $sort',
+    onSelected: (value) => setState(() => sort = value),
+    itemBuilder: (_) => const [
+      PopupMenuItem(value: 'Name', child: Text('Name')),
+      PopupMenuItem(value: 'Stock', child: Text('Stock')),
+      PopupMenuItem(value: 'Price', child: Text('Price')),
+    ],
+    child: Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.tune, size: 20),
+          const SizedBox(width: 8),
+          Text('Sort', style: Theme.of(context).textTheme.labelLarge),
+          const Icon(Icons.keyboard_arrow_down),
+        ],
+      ),
+    ),
+  );
+
+  Widget _productsToolbar(int count) {
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 14,
+          children: [
+            Text(
+              'Products in ${widget.groupName}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              '$count ${count == 1 ? 'product' : 'products'}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        Text(
+          'Manage products assigned to this brand.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+    final search = SizedBox(
+      height: 52,
+      child: AppSearchField(
+        hintText: 'Search ${widget.groupName} products...',
+        onChanged: (value) =>
+            setState(() => query = value.trim().toLowerCase()),
+      ),
+    );
+    final controls = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _filterButton('All', null),
+        _filterButton('Low Stock', ProductStockStatus.lowStock),
+        _filterButton('Out of Stock', ProductStockStatus.outOfStock),
+        _sortButton(),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (_, box) => box.maxWidth >= 1300
+          ? Row(
+              children: [
+                SizedBox(width: 300, child: heading),
+                const SizedBox(width: 14),
+                Expanded(child: search),
+                const SizedBox(width: 12),
+                controls,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading,
+                const SizedBox(height: 12),
+                search,
+                const SizedBox(height: 10),
+                controls,
+              ],
+            ),
+    );
+  }
+
+  Widget _productIdentity(Product p) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        p.name,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 5),
+      Text(
+        standardMoney(p.sellingPriceCentavos),
+        style: Theme.of(context).textTheme.labelLarge,
+      ),
+      Text(
+        'Stock: ${productQuantityText(p, p.currentQuantity)}',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 5),
+      StatusBadge(
+        label: switch (p.stockStatus) {
+          ProductStockStatus.outOfStock => 'Out of Stock',
+          ProductStockStatus.lowStock => 'Low Stock',
+          _ => 'In Stock',
+        },
+        status: switch (p.stockStatus) {
+          ProductStockStatus.outOfStock => AppStatus.critical,
+          ProductStockStatus.lowStock => AppStatus.attention,
+          _ => AppStatus.normal,
+        },
+      ),
+    ],
+  );
+
+  Widget _productValue(
+    String label,
+    String value,
+    String helper,
+    Color color,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleMedium
+            ?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 3),
+      Text(helper, style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
+
+  List<Widget> _productMetrics(Product p, OwnedInventoryProductValue? value) {
+    final colors = Theme.of(context).colorScheme;
+    if (value == null) {
+      return [
+        _productValue(
+          'Current Stock Cost',
+          '—',
+          'Supplier-owned stock',
+          colors.onSurface,
+        ),
+        _productValue(
+          'Potential Sales Value',
+          '—',
+          'Excluded from owned values',
+          colors.primary,
+        ),
+        _productValue(
+          'Potential Gross Profit',
+          '—',
+          'Excluded from owned values',
+          context.semanticColors.warning,
+        ),
+      ];
+    }
+    final quantity = productQuantityText(p, p.currentQuantity);
+    final packageSize = p.defaultPurchaseBaseQuantity ?? 1;
+    final costPerUnit =
+        (p.purchasePriceCentavos + packageSize ~/ 2) ~/ packageSize;
+    final costHelper =
+        p.currentQuantity * costPerUnit == value.currentStockCostCentavos
+        ? '$quantity × ${standardMoney(costPerUnit)}'
+        : 'Current owned-stock valuation';
+    final salesHelper = '$quantity × ${standardMoney(p.sellingPriceCentavos)}';
+    final profitPerUnit = p.sellingPriceCentavos - costPerUnit;
+    final profitHelper =
+        p.currentQuantity * profitPerUnit == value.potentialGrossProfitCentavos
+        ? '$quantity × ${standardMoney(profitPerUnit)}'
+        : 'Potential sales − stock cost';
+    return [
+      _productValue(
+        'Current Stock Cost',
+        standardMoney(value.currentStockCostCentavos),
+        costHelper,
+        colors.onSurface,
+      ),
+      _productValue(
+        'Potential Sales Value',
+        standardMoney(value.potentialSalesValueCentavos),
+        salesHelper,
+        colors.primary,
+      ),
+      _productValue(
+        'Potential Gross Profit',
+        standardMoney(value.potentialGrossProfitCentavos),
+        profitHelper,
+        context.semanticColors.warning,
+      ),
+    ];
+  }
+
+  Widget _productActions(Product p) => Wrap(
+    spacing: 10,
+    runSpacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      SizedBox(
+        height: 50,
+        child: OutlinedButton.icon(
+          onPressed: () => _stockIn(p),
+          icon: const Icon(Icons.add_circle_outline, size: 19),
+          label: const Text('Stock In'),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Theme.of(context).colorScheme.primary),
+          ),
+        ),
+      ),
+      SizedBox(
+        height: 50,
+        child: OutlinedButton.icon(
+          onPressed: () => _saleHistory(p),
+          icon: const Icon(Icons.bar_chart_outlined, size: 19),
+          label: const Text('Sale History'),
+        ),
+      ),
+      SizedBox(
+        height: 50,
+        width: 50,
+        child: PopupMenuButton<String>(
+          tooltip: 'More product actions',
+          icon: const Icon(Icons.more_vert),
+          onSelected: (action) {
+            if (action == 'edit') _edit(p);
+            if (action == 'history') _saleHistory(p);
+            if (action == 'remove') _remove(p);
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'edit',
+              child: ListTile(
+                leading: Icon(Icons.edit_outlined),
+                title: Text('Edit Product'),
+                dense: true,
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'history',
+              child: ListTile(
+                leading: Icon(Icons.bar_chart_outlined),
+                title: Text('View Sale History'),
+                dense: true,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'remove',
+              child: ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: context.semanticColors.danger,
+                ),
+                title: Text(
+                  'Remove from ${widget.groupName}',
+                  style: TextStyle(color: context.semanticColors.danger),
+                ),
+                dense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _productRow(Product p, OwnedInventoryProductValue? value) {
+    final metrics = _productMetrics(p, value);
+    final border = Theme.of(context).colorScheme.outlineVariant;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: LayoutBuilder(
+        builder: (_, box) {
+          if (box.maxWidth < 1180) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _productIdentity(p),
+                const Divider(height: 24),
+                LayoutBuilder(
+                  builder: (_, inner) {
+                    final columns = inner.maxWidth >= 760
+                        ? 3
+                        : inner.maxWidth >= 490
+                        ? 2
+                        : 1;
+                    return Wrap(
+                      spacing: 14,
+                      runSpacing: 14,
+                      children: [
+                        for (final metric in metrics)
+                          SizedBox(
+                            width:
+                                (inner.maxWidth - 14 * (columns - 1)) / columns,
+                            child: metric,
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                _productActions(p),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(flex: 22, child: _productIdentity(p)),
+              for (final metric in metrics) ...[
+                Container(
+                  width: 1,
+                  height: 100,
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  color: border,
+                ),
+                Expanded(flex: 18, child: metric),
+              ],
+              const SizedBox(width: 12),
+              _productActions(p),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _productsPanel(
+    List<Product> all,
+    Map<int, OwnedInventoryProductValue> values,
+  ) {
+    final needle = query.trim().toLowerCase();
+    final visible = all
+        .where(
+          (p) =>
+              (needle.isEmpty || p.name.toLowerCase().contains(needle)) &&
+              (status == null || p.stockStatus == status),
+        )
+        .toList();
+    visible.sort(
+      (a, b) => switch (sort) {
+        'Stock' => a.currentQuantity.compareTo(b.currentQuantity),
+        'Price' => a.sellingPriceCentavos.compareTo(b.sellingPriceCentavos),
+        _ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      },
+    );
+    return _panel(
+      title: 'Products in ${widget.groupName}',
+      subtitle: 'Manage products assigned to this brand.',
+      showHeader: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _productsToolbar(all.length),
+          const SizedBox(height: 14),
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                children: [
+                  Text(
+                    all.isEmpty
+                        ? 'No products assigned to ${widget.groupName} yet.'
+                        : 'No matching products found.',
+                  ),
+                  if (all.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    _topActions(),
+                  ],
+                ],
+              ),
+            )
+          else
+            for (var i = 0; i < visible.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              _productRow(visible[i], values[visible[i].id]),
+            ],
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(widget.groupName),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: FilledButton.icon(
-            onPressed: _create,
-            icon: const Icon(Icons.add),
-            label: Text('Add ${widget.groupName} Product'),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: IconButton.filledTonal(
-            onPressed: _assign,
-            tooltip: 'Assign Existing Product',
-            icon: const Icon(Icons.playlist_add),
-          ),
-        ),
-      ],
-    ),
-    body: Column(
-      children: [
-        _brandOverview(),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: LayoutBuilder(
-            builder: (_, box) {
-              final search = AppSearchField(
-                hintText: 'Search ${widget.groupName} products',
-                onChanged: (v) => setState(() => query = v),
+    appBar: AppBar(title: Text(widget.groupName), toolbarHeight: 64),
+    body:
+        FutureBuilder<
+          ({
+            List<Product> products,
+            Map<int, OwnedInventoryProductValue> values,
+          })
+        >(
+          future: _productsFuture ??= _loadProducts(),
+          builder: (_, snapshot) {
+            if (snapshot.hasError) {
+              return AppStateView.error(
+                title: 'Could not load ${widget.groupName}',
+                actionLabel: 'Try Again',
+                onAction: _refresh,
               );
-              final chips =
-                  [
-                        (null, 'All'),
-                        (ProductStockStatus.lowStock, 'Low Stock'),
-                        (ProductStockStatus.outOfStock, 'Out of Stock'),
-                      ]
-                      .map(
-                        (x) => ChoiceChip(
-                          label: Text(x.$2),
-                          selected: status == x.$1,
-                          onSelected: (_) => setState(() => status = x.$1),
-                        ),
-                      )
-                      .toList();
-              if (box.maxWidth < 720) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    search,
-                    const SizedBox(height: 10),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(spacing: 8, children: chips),
-                    ),
-                  ],
-                );
-              }
-              return Row(
+            }
+            if (!snapshot.hasData) {
+              return AppLoadingView(label: 'Loading ${widget.groupName}…');
+            }
+            final data = snapshot.data!;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: search),
-                  const SizedBox(width: 16),
-                  ...chips.map(
-                    (chip) => Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: chip,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<List<Product>>(
-            future: widget.special.products(
-              widget.groupCode,
-              query: query,
-              status: status,
-            ),
-            builder: (_, s) {
-              if (s.hasError) {
-                return AppStateView.error(
-                  title: 'Could not load ${widget.groupName} products',
-                  actionLabel: 'Try Again',
-                  onAction: () => setState(() {}),
-                );
-              }
-              if (!s.hasData) {
-                return AppLoadingView(
-                  label: 'Loading ${widget.groupName} products…',
-                );
-              }
-              if (s.data!.isEmpty) {
-                return AppStateView.empty(
-                  title: 'No ${widget.groupName} products found',
-                  message: 'Assign an existing product or add a new one.',
-                  actionLabel: 'Add Product',
-                  onAction: _create,
-                );
-              }
-              return FutureBuilder<Map<int, OwnedInventoryProductValue>>(
-                future: widget.inventory.ownedProductValues(),
-                builder: (_, values) {
-                  if (values.hasError) {
-                    return const Center(
-                      child: Text(
-                        'Could not load product values. Try reopening this brand.',
-                      ),
-                    );
-                  }
-                  if (!values.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(20),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 440,
-                          mainAxisExtent: 430,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                    itemCount: s.data!.length,
-                    itemBuilder: (_, i) {
-                      final p = s.data![i],
-                          out = p.currentQuantity == 0,
-                          low =
-                              !out && p.currentQuantity <= p.minimumStockLevel;
-                      final value = values.data![p.id];
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
+                  LayoutBuilder(
+                    builder: (_, box) => box.maxWidth >= 760
+                        ? Row(
                             children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: SizedBox(
-                                  width: 96,
-                                  height: 140,
-                                  child: ProductImage(
-                                    path: p.photoPath,
-                                    placeholderIcon: Icons.inventory_2_outlined,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      p.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                                      widget.groupName,
                                       style: Theme.of(context)
                                           .textTheme
-                                          .titleLarge,
-                                    ),
-                                    Text(standardMoney(p.sellingPriceCentavos)),
-                                    Text(
-                                      'Stock ${productQuantityText(p, p.currentQuantity)}',
-                                    ),
-                                    StatusBadge(
-                                      label: out
-                                          ? 'Out of Stock'
-                                          : low
-                                          ? 'Low Stock'
-                                          : 'In Stock',
-                                      status: out
-                                          ? AppStatus.critical
-                                          : low
-                                          ? AppStatus.attention
-                                          : AppStatus.normal,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    if (value == null)
-                                      Text(
-                                        'Supplier-owned stock • not included in owned inventory values',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      )
-                                    else ...[
-                                      Text(
-                                        'Current Stock Cost  ${standardMoney(value.currentStockCostCentavos)}',
-                                      ),
-                                      Text(
-                                        'Potential Sales Value  ${standardMoney(value.potentialSalesValueCentavos)}',
-                                      ),
-                                      Text(
-                                        'Potential Gross Profit  ${standardMoney(value.potentialGrossProfitCentavos)}',
-                                      ),
-                                    ],
-                                    const SizedBox(height: 10),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        SizedBox(
-                                          height: 48,
-                                          child: FilledButton.tonalIcon(
-                                            onPressed: () => _stockIn(p),
-                                            icon: const Icon(Icons.add_box),
-                                            label: const Text('Stock In'),
+                                          .headlineSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
                                           ),
-                                        ),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: TextButton.icon(
-                                                onPressed: () =>
-                                                    _saleHistory(p),
-                                                icon: const Icon(
-                                                  Icons.bar_chart_outlined,
-                                                  size: 18,
-                                                ),
-                                                label: const Text(
-                                                  'Sale History',
-                                                ),
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Edit product',
-                                              onPressed: () => _edit(p),
-                                              icon: const Icon(
-                                                Icons.edit_outlined,
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Remove from brand',
-                                              onPressed: () => _remove(p),
-                                              icon: const Icon(
-                                                Icons.remove_circle_outline,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                    ),
+                                    Text(
+                                      widget.lockFrozenCategory
+                                          ? 'Ice cream and frozen treats'
+                                          : 'Manage this brand and its products',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge,
                                     ),
                                   ],
                                 ),
                               ),
+                              _topActions(),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.groupName,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
+                              ),
+                              Text(
+                                widget.lockFrozenCategory
+                                    ? 'Ice cream and frozen treats'
+                                    : 'Manage this brand and its products',
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                              const SizedBox(height: 12),
+                              _topActions(),
                             ],
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                  const SizedBox(height: 16),
+                  _performancePanels(data.products),
+                  const SizedBox(height: 14),
+                  _productsPanel(data.products, data.values),
+                ],
+              ),
+            );
+          },
         ),
-      ],
-    ),
   );
 }

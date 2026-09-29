@@ -847,6 +847,18 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
     body: FutureBuilder<CustomerDetails>(
       future: data,
       builder: (_, s) {
+        if (s.hasError) {
+          return Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Could not load this customer account.'),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => setState(reload),
+                child: const Text('Retry'),
+              ),
+            ]),
+          );
+        }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final d = s.data!;
         final currentBalance =
@@ -892,9 +904,7 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
             if (ok == true && mounted) await refreshDetailsNow();
           },
           onNewUtang: () => newUtang(d.customer),
-          onAddExisting: widget.reversals == null
-              ? null
-              : () => _addExistingUtang(d.customer),
+          onAddExisting: () => _addExistingUtang(d.customer),
           onViewEntry: (entry) {
             if (entry.type == 'UTANG' && entry.utangTransactionId != null) {
               _showDetails(d, entry);

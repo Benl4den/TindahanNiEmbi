@@ -262,6 +262,112 @@ void main() {
       final after = await analytics.summary(brand.code);
       expect(after['sales'], original['sales']);
       expect(after['cost'], original['cost']);
+      expect(
+        (await analytics.summary(
+          brand.code,
+          currentMembersOnly: true,
+        ))['sales'],
+        0,
+      );
+      expect(
+        await analytics.topProduct(brand.code, currentMembersOnly: true),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'managed brand totals exclude unbranded and special-group sales',
+    () async {
+      final categories = SqliteCategoryRepository(db);
+      final products = SqliteProductRepository(db);
+      final special = SpecialInventoryRepository(db);
+      final analytics = BrandAnalyticsRepository(db);
+      final sales = CashSaleRepository(db);
+      final category = await categories.create('Goods');
+      Future<int> product(String name, int cost, int price) async =>
+          (await products.create(
+            ProductDraft(
+              categoryId: category.id,
+              name: name,
+              photoPath: '/$name',
+              purchasePriceCentavos: cost,
+              sellingPriceCentavos: price,
+              startingQuantity: 3,
+              minimumStockLevel: 1,
+            ),
+          )).id;
+
+      final brandA = await special.createBrand('Brand A');
+      final brandB = await special.createBrand('Brand B');
+      expect(
+        (await special.managedBrandSummaries()).map((b) => b.productCount),
+        [0, 0],
+      );
+      expect(await analytics.totalsByBrand(), isEmpty);
+
+      final unbranded = await product('Unbranded', 1000, 2000);
+      await sales.save([UtangItemDraft(productId: unbranded, quantity: 1)]);
+      final selecta = await product('Selecta', 3600, 5000);
+      await special.assign(selecta, 'SELECTA');
+      await sales.save([UtangItemDraft(productId: selecta, quantity: 1)]);
+      expect((await analytics.summary('SELECTA'))['sales'], 5000);
+      expect(await analytics.totalsByBrand(), isEmpty);
+
+      final first = await product('First', 500, 900);
+      final second = await product('Second', 600, 1100);
+      await special.assign(first, brandA.code);
+      await special.assign(second, brandB.code);
+      await sales.save([UtangItemDraft(productId: first, quantity: 1)]);
+      await sales.save([UtangItemDraft(productId: second, quantity: 1)]);
+      final totals = await analytics.totalsByBrand();
+      expect(totals.keys.toSet(), {brandA.id, brandB.id});
+      expect(totals[brandA.id], (sales: 900, profit: 400));
+      expect(totals[brandB.id], (sales: 1100, profit: 500));
+      expect(totals.values.fold<int>(0, (n, x) => n + x.sales), 2000);
+      expect(totals.values.fold<int>(0, (n, x) => n + x.profit), 900);
+      expect(
+        (await analytics.summary(brandA.code))['sales'],
+        totals[brandA.id]!.sales,
+      );
+      expect(
+        (await analytics.summary(brandB.code))['profit'],
+        totals[brandB.id]!.profit,
+      );
+
+      final customer = await SqliteCustomerRepository(db)
+          .create(const CustomerDraft(fullName: 'Brand test customer'));
+      for (final productId in [unbranded, selecta, first]) {
+        await UtangRepository(db).save(
+          UtangDraft(
+            customerId: customer.id,
+            items: [UtangItemDraft(productId: productId, quantity: 1)],
+          ),
+        );
+      }
+      final afterUtang = await analytics.totalsByBrand();
+      expect(afterUtang.keys.toSet(), {brandA.id, brandB.id});
+      expect(afterUtang[brandA.id], (sales: 1800, profit: 800));
+      expect(afterUtang[brandB.id], (sales: 1100, profit: 500));
+      expect(afterUtang.values.fold<int>(0, (n, x) => n + x.sales), 2900);
+      expect(afterUtang.values.fold<int>(0, (n, x) => n + x.profit), 1300);
+      expect((await analytics.topProduct('SELECTA'))?.name, 'Selecta');
+      expect((await analytics.topProduct(brandA.code))?.units, 2);
+      expect(
+        await analytics.topProduct(
+          brandA.code,
+          from: DateTime.now().add(const Duration(days: 1)),
+        ),
+        isNull,
+      );
+
+      await db.update(
+        'inventory_groups',
+        {'is_archived': 1},
+        where: 'id=?',
+        whereArgs: [brandB.id],
+      );
+      expect((await analytics.totalsByBrand()).keys.toSet(), {brandA.id});
     },
   );
 

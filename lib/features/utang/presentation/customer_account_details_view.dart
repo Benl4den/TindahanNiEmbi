@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/formatters/display_labels.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/customer.dart';
@@ -481,7 +482,8 @@ class CustomerAccountDetailsView extends StatelessWidget {
         : 'PAY-${(entry.paymentId ?? 0).toString().padLeft(6, '0')}';
     final metadata = [
       time,
-      if (!isUtang && entry.paymentMethod != null) entry.paymentMethod!,
+      if (!isUtang && entry.paymentMethod != null)
+        DisplayLabels.paymentMethod(entry.paymentMethod),
       id,
       if (isUtang && !entry.isExistingBalance && entry.itemCount != null)
         '${entry.itemCount} ${entry.itemCount == 1 ? 'item' : 'items'}',

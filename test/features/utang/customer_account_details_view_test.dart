@@ -76,11 +76,7 @@ void main() {
       expect(find.text('+₱1,025.00'), findsOneWidget);
       expect(find.text('-₱200.00'), findsOneWidget);
       expect(find.text('₱1,025.00'), findsOneWidget);
-      expect(
-        find.text('GCASH'),
-        findsNothing,
-      ); // Shown in the payment metadata.
-      expect(find.textContaining('GCASH'), findsWidgets);
+      expect(find.textContaining('GCash'), findsWidgets);
       expect(find.textContaining('GC-123'), findsOneWidget);
       expect(find.text('Balance after'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
