@@ -88,19 +88,21 @@ void main() {
       expect(find.text('₱30.00'), findsOneWidget);
       expect(find.text('Upgrade to Pro'), findsNothing);
 
-      tester.view.physicalSize = const Size(620, 500);
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+      for (final width in [280.0, 320.0, 390.0, 620.0]) {
+        tester.view.physicalSize = Size(width, 600);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'width $width');
+      }
 
-    await tester.runAsync(() => controller.setDevelopmentPlan(AppPlan.free));
-    await tester.pumpAndSettle();
-    expect(find.text('Current Stock Cost'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('Upgrade to Pro'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Upgrade to Pro'), findsOneWidget);
+      await tester.runAsync(() => controller.setDevelopmentPlan(AppPlan.free));
+      await tester.pumpAndSettle();
+      expect(find.text('Current Stock Cost'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Upgrade to Pro'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Upgrade to Pro'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

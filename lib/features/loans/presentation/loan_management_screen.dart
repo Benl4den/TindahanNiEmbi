@@ -809,6 +809,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: frequency,
                   decoration: const InputDecoration(
                     labelText: 'Collection Schedule',
@@ -829,6 +830,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: method,
                   decoration: const InputDecoration(
                     labelText: 'Collection Method',
@@ -982,6 +984,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: lender,
                   items: lenders
                       .map(
@@ -1002,6 +1005,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: source,
                   items: const [
                     DropdownMenuItem(
@@ -1069,6 +1073,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   key: ValueKey('loan-frequency-$lender'),
                   initialValue: freq,
                   items: const [
@@ -1108,6 +1113,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 const SizedBox(height: 14),
                 if (source == 'NEW')
                   DropdownButtonFormField<PaymentMethod>(
+                    isExpanded: true,
                     initialValue: method,
                     items: PaymentMethod.values
                         .map(
@@ -1595,103 +1601,134 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
       }
       final data = snapshot.data!;
       final entries = _visibleEntries(data);
+      final compact = MediaQuery.sizeOf(context).width < 600;
+      final controls = Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _addLender,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add Lender'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _add(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add Loan'),
+              ),
+              SizedBox(
+                width: compact ? constraints.maxWidth : 205,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search lenders...',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _search = value.trim().toLowerCase()),
+                ),
+              ),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Active')),
+                  ButtonSegment(value: true, label: Text('Completed')),
+                ],
+                selected: {completed},
+                onSelectionChanged: (selection) {
+                  completed = selection.single;
+                  _reload();
+                },
+              ),
+              DropdownButton<String>(
+                isExpanded: compact,
+                value: _sort,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Recent',
+                    child: Text('Sort: Recent'),
+                  ),
+                  DropdownMenuItem(value: 'Name', child: Text('Sort: Name')),
+                  DropdownMenuItem(
+                    value: 'Remaining',
+                    child: Text('Sort: Remaining'),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _sort = value ?? 'Recent'),
+              ),
+            ],
+          ),
+        ),
+      );
+      final heading = Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lenders & Loans',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    '${data.lenders.length} lenders • ${data.loans.length} ${completed ? 'completed' : 'active'} loans',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      final emptyMessage = _search.isNotEmpty
+          ? 'No lenders match your search.'
+          : completed
+          ? 'No completed loans yet.'
+          : 'No lenders yet. Add a lender to get started.';
+      if (compact) {
+        return CustomScrollView(
+          slivers: [
+            if (!completed)
+              SliverToBoxAdapter(child: _overview(context, data.loans)),
+            SliverToBoxAdapter(child: controls),
+            SliverToBoxAdapter(child: heading),
+            if (entries.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(child: Text(emptyMessage)),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _lenderCard(context, entries[index]),
+                    childCount: entries.length,
+                  ),
+                ),
+              ),
+            if (entries.isEmpty)
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        );
+      }
       return Column(
         children: [
           if (!completed) _overview(context, data.loans),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _addLender,
-                  icon: const Icon(Icons.person_add_alt_1_outlined),
-                  label: const Text('Add Lender'),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _add(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Loan'),
-                ),
-                SizedBox(
-                  width: 205,
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Search lenders...',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) =>
-                        setState(() => _search = value.trim().toLowerCase()),
-                  ),
-                ),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Active')),
-                    ButtonSegment(value: true, label: Text('Completed')),
-                  ],
-                  selected: {completed},
-                  onSelectionChanged: (selection) {
-                    completed = selection.single;
-                    _reload();
-                  },
-                ),
-                DropdownButton<String>(
-                  value: _sort,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Recent',
-                      child: Text('Sort: Recent'),
-                    ),
-                    DropdownMenuItem(value: 'Name', child: Text('Sort: Name')),
-                    DropdownMenuItem(
-                      value: 'Remaining',
-                      child: Text('Sort: Remaining'),
-                    ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _sort = value ?? 'Recent'),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Lenders & Loans',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '${data.lenders.length} lenders • ${data.loans.length} ${completed ? 'completed' : 'active'} loans',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          controls,
+          heading,
           Expanded(
             child: entries.isEmpty
-                ? Center(
-                    child: Text(
-                      _search.isNotEmpty
-                          ? 'No lenders match your search.'
-                          : completed
-                          ? 'No completed loans yet.'
-                          : 'No lenders yet. Add a lender to get started.',
-                    ),
-                  )
+                ? Center(child: Text(emptyMessage))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
                     itemCount: entries.length,

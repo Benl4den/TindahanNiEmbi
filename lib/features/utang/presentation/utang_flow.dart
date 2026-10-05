@@ -135,128 +135,182 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
       title: const Text('Mga Nangutang'),
       actions: const [HelpButton(topic: HelpTopicId.utang)],
     ),
-    body: Column(
-      children: [
-        FutureBuilder<List<Customer>>(
-          future: allCustomers,
-          builder: (_, snapshot) {
-            final customers = snapshot.data ?? const <Customer>[];
-            final owing = customers
-                .where((x) => x.balanceCentavos > 0)
-                .toList();
-            final total = owing.fold<int>(
-              0,
-              (sum, x) => sum + x.balanceCentavos,
-            );
-            final recent = customers
-                .where(
-                  (x) =>
-                      x.lastPaymentAt != null &&
-                      x.lastPaymentAt!.isAfter(
-                        DateTime.now().subtract(const Duration(days: 7)),
-                      ),
-                )
-                .length;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _utangMetric(
-                      'Outstanding UTANG',
-                      standardMoney(total),
-                      context.semanticColors.utang,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _utangMetric(
-                      'With balance',
-                      '${owing.length} customers',
-                      context.semanticColors.utang,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _utangMetric(
-                      'Paid this week',
-                      '$recent customers',
-                      context.semanticColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-          child: LayoutBuilder(
-            builder: (context, constraints) => constraints.maxWidth >= 620
-                ? Row(
+    body: CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: FutureBuilder<List<Customer>>(
+            future: allCustomers,
+            builder: (_, snapshot) {
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: AppSearchField(
+                      const Expanded(
+                        child: Text('Could not load UTANG summary.'),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(reload),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: LinearProgressIndicator(),
+                );
+              }
+              final customers = snapshot.data ?? const <Customer>[];
+              final owing = customers
+                  .where((x) => x.balanceCentavos > 0)
+                  .toList();
+              final total = owing.fold<int>(
+                0,
+                (sum, x) => sum + x.balanceCentavos,
+              );
+              final recent = customers
+                  .where(
+                    (x) =>
+                        x.lastPaymentAt != null &&
+                        x.lastPaymentAt!.isAfter(
+                          DateTime.now().subtract(const Duration(days: 7)),
+                        ),
+                  )
+                  .length;
+              final balance = _utangMetric(
+                'Outstanding UTANG',
+                standardMoney(total),
+                context.semanticColors.utang,
+              );
+              final customersWithBalance = _utangMetric(
+                'Customers with balance',
+                '${owing.length}',
+                context.semanticColors.utang,
+              );
+              final recentlyPaid = _utangMetric(
+                'Paid in last 7 days',
+                '$recent',
+                context.semanticColors.success,
+              );
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: LayoutBuilder(
+                  builder: (_, constraints) => constraints.maxWidth < 600
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            balance,
+                            const SizedBox(height: 12),
+                            IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(child: customersWithBalance),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: recentlyPaid),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(child: balance),
+                            const SizedBox(width: 12),
+                            Expanded(child: customersWithBalance),
+                            const SizedBox(width: 12),
+                            Expanded(child: recentlyPaid),
+                          ],
+                        ),
+                ),
+              );
+            },
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+            child: LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth >= 620
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: AppSearchField(
+                            controller: q,
+                            hintText: 'Search customers...',
+                            onChanged: (_) => setState(reload),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: create,
+                          icon: const Icon(Icons.person_add),
+                          label: const Text('Add New Customer'),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AppSearchField(
                           controller: q,
                           hintText: 'Search customers...',
                           onChanged: (_) => setState(reload),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: create,
-                        icon: const Icon(Icons.person_add),
-                        label: const Text('Add New Customer'),
-                      ),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AppSearchField(
-                        controller: q,
-                        hintText: 'Search customers...',
-                        onChanged: (_) => setState(reload),
-                      ),
-                      const SizedBox(height: 10),
-                      FilledButton.icon(
-                        onPressed: create,
-                        icon: const Icon(Icons.person_add),
-                        label: const Text('Add New Customer'),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: create,
+                          icon: const Icon(Icons.person_add),
+                          label: const Text('Add New Customer'),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
-        Expanded(
-          child: FutureBuilder<List<Customer>>(
-            future: list,
-            builder: (_, s) => s.hasError
-                ? AppStateView.error(
+        FutureBuilder<List<Customer>>(
+          future: list,
+          builder: (_, s) => s.hasError
+              ? SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: AppStateView.error(
                     title: 'Could not load customer accounts',
                     onAction: () => setState(reload),
-                  )
-                : s.hasData
-                ? s.data!.isEmpty
-                      ? const Center(
+                  ),
+                )
+              : s.hasData
+              ? s.data!.isEmpty
+                    ? SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
                           child: Text(
-                            'No UTANGAN yet.\nAdd an UTANGAN to start tracking UTANG.',
+                            q.text.trim().isEmpty
+                                ? 'No UTANGAN yet.\nAdd an UTANGAN to start tracking UTANG.'
+                                : 'No matching customers.\nTry another search.',
                             textAlign: TextAlign.center,
                           ),
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                          children: s.data!
-                              .map(
-                                (c) => UtangCustomerCard(
-                                  customer: c,
-                                  onTap: () => openCustomer(c),
-                                ),
-                              )
-                              .toList(),
-                        )
-                : const Center(child: CircularProgressIndicator()),
-          ),
+                        ),
+                      )
+                    : SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                        sliver: SliverList.builder(
+                          itemCount: s.data!.length,
+                          itemBuilder: (_, index) {
+                            final c = s.data![index];
+                            return UtangCustomerCard(
+                              customer: c,
+                              onTap: () => openCustomer(c),
+                            );
+                          },
+                        ),
+                      )
+              : const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
         ),
       ],
     ),
@@ -274,12 +328,20 @@ class _UtangCustomerScreenState extends State<UtangCustomerScreen> {
       children: [
         Text(label),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: color,
+        SizedBox(
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
           ),
         ),
       ],
@@ -849,14 +911,17 @@ class _CustomerUtangState extends State<CustomerUtangScreen> {
       builder: (_, s) {
         if (s.hasError) {
           return Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Could not load this customer account.'),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => setState(reload),
-                child: const Text('Retry'),
-              ),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Could not load this customer account.'),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () => setState(reload),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
           );
         }
         if (!s.hasData) return const Center(child: CircularProgressIndicator());

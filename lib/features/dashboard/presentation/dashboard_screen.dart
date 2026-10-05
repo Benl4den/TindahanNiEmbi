@@ -273,12 +273,16 @@ class _DashboardState extends State<DashboardScreen> {
   }
 
   Widget _frame(Widget child, {bool loaded = false, bool failed = false}) =>
-      Column(
-        children: [
-          _header(loaded: loaded, failed: failed),
-          const Divider(height: 1),
-          Expanded(child: child),
-        ],
+      SafeArea(
+        top: MediaQuery.sizeOf(context).width < 900,
+        bottom: false,
+        child: Column(
+          children: [
+            _header(loaded: loaded, failed: failed),
+            const Divider(height: 1),
+            Expanded(child: child),
+          ],
+        ),
       );
 
   @override
@@ -346,7 +350,8 @@ class _DashboardState extends State<DashboardScreen> {
                   footer: _periodControls(),
                   title: 'Total Sales • $label',
                   value: standardMoney(x.totalSales + x.newUtang),
-                  caption: '$salesCount sales transactions\n$salesBreakdown',
+                  caption:
+                      '$salesCount ${salesCount == 1 ? 'sale transaction' : 'sale transactions'}\n$salesBreakdown',
                   icon: Icons.bar_chart_outlined,
                 ),
                 const SizedBox(height: 16),
@@ -532,7 +537,9 @@ class _DashboardState extends State<DashboardScreen> {
       const SizedBox(height: 10),
       LayoutBuilder(
         builder: (_, box) {
-          final columns = box.maxWidth >= 900 ? 4 : 2;
+          final columns = box.maxWidth < 500
+              ? 1
+              : (box.maxWidth >= 900 ? 4 : 2);
           const spacing = 12.0;
           final width = (box.maxWidth - spacing * (columns - 1)) / columns;
           Widget action(Widget button) => SizedBox(

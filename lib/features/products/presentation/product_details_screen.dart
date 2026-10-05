@@ -109,57 +109,69 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       ProductStockStatus.lowStock => const Color(0xFFF2B45F),
       ProductStockStatus.outOfStock => const Color(0xFFEC7777),
     };
-    return Row(
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(13),
+      child: SizedBox(
+        width: 102,
+        height: 102,
+        child: ProductImage(path: product.photoPath),
+      ),
+    );
+    final statusBadge = DecoratedBox(
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        child: Text(
+          label,
+          style: TextStyle(color: accent, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+    final information = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: SizedBox(
-            width: 102,
-            height: 102,
-            child: ProductImage(path: product.photoPath),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(product.name, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 5),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3,
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                widget.categoryName ?? 'Product',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        OutlinedButton.icon(
-          onPressed: widget.onEdit,
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('Edit Product'),
+        Text(product.name, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 5),
+        statusBadge,
+        const SizedBox(height: 5),
+        Text(
+          widget.categoryName ?? 'Product',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+    final edit = OutlinedButton.icon(
+      onPressed: widget.onEdit,
+      icon: const Icon(Icons.edit_outlined),
+      label: const Text('Edit Product'),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(child: image),
+              const SizedBox(height: 12),
+              information,
+              const SizedBox(height: 12),
+              edit,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            image,
+            const SizedBox(width: 16),
+            Expanded(child: information),
+            const SizedBox(width: 10),
+            edit,
+          ],
+        );
+      },
     );
   }
 
@@ -721,34 +733,56 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     ),
   );
 
-  Widget _footer(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-    decoration: BoxDecoration(
-      border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final actions = <Widget>[
-          OutlinedButton.icon(
-            onPressed: () => _history(context, purchases: true),
-            icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('View Purchase History'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _history(context, purchases: false),
-            icon: const Icon(Icons.history),
-            label: const Text('Stock Movement History'),
-          ),
-        ];
-        final close = OutlinedButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        );
-        if (constraints.maxWidth < 650) {
-          return Wrap(spacing: 8, runSpacing: 8, children: [...actions, close]);
-        }
-        return Row(children: [...actions, const Spacer(), close]);
-      },
+  Widget _footer(BuildContext context) => SafeArea(
+    top: false,
+    bottom: MediaQuery.sizeOf(context).width < 600,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final actions = <Widget>[
+            OutlinedButton.icon(
+              onPressed: () => _history(context, purchases: true),
+              icon: const Icon(Icons.list_alt_outlined),
+              label: const Text('View Purchase History'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _history(context, purchases: false),
+              icon: const Icon(Icons.history),
+              label: const Text('Stock Movement History'),
+            ),
+          ];
+          final close = OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          );
+          if (constraints.maxWidth < 600) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...actions.map(
+                  (action) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: action,
+                  ),
+                ),
+                close,
+              ],
+            );
+          }
+          if (constraints.maxWidth < 650) {
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [...actions, close],
+            );
+          }
+          return Row(children: [...actions, const Spacer(), close]);
+        },
+      ),
     ),
   );
 
@@ -760,50 +794,71 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 560,
-          height: 420,
-          child: rows.isEmpty
-              ? const Center(child: Text('No history recorded yet.'))
-              : ListView.separated(
-                  itemCount: rows.length,
-                  separatorBuilder: (_, _) => const Divider(),
-                  itemBuilder: (_, i) {
-                    final row = rows[i];
-                    if (row is ProductPurchaseRecord) {
-                      return ListTile(
-                        title: Text(
-                          '${row.quantity} ${row.unit} • ${standardMoney(row.totalCostCentavos)}',
-                        ),
-                        subtitle: Text(
-                          MaterialLocalizations.of(dialog)
-                              .formatMediumDate(row.occurredAt.toLocal()),
-                        ),
-                      );
-                    }
-                    final movement = row as ProductStockMovementRecord;
-                    return ListTile(
-                      title: Text(DisplayLabels.movement(movement.type)),
-                      subtitle: Text(
-                        MaterialLocalizations.of(dialog)
-                            .formatMediumDate(movement.occurredAt.toLocal()),
-                      ),
-                      trailing: Text(
-                        '${movement.quantityChange > 0 ? '+' : '-'}${productQuantityText(widget.product, movement.quantityChange.abs())}',
-                      ),
-                    );
-                  },
+      builder: (dialog) => MediaQuery.sizeOf(dialog).width < 600
+          ? Dialog.fullscreen(
+              child: Scaffold(
+                appBar: AppBar(title: Text(title)),
+                body: SafeArea(
+                  child: rows.isEmpty
+                      ? const Center(child: Text('No history recorded yet.'))
+                      : _historyList(dialog, rows),
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+              ),
+            )
+          : AlertDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 560,
+                height: 420,
+                child: rows.isEmpty
+                    ? const Center(child: Text('No history recorded yet.'))
+                    : _historyList(dialog, rows),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
     );
   }
+
+  Widget _historyList(
+    BuildContext context,
+    List<Object> rows,
+  ) => ListView.separated(
+    padding: const EdgeInsets.all(16),
+    itemCount: rows.length,
+    separatorBuilder: (_, _) => const Divider(),
+    itemBuilder: (_, i) {
+      final row = rows[i];
+      if (row is ProductPurchaseRecord) {
+        return ListTile(
+          title: Text(
+            '${row.quantity} ${row.unit} • ${standardMoney(row.totalCostCentavos)}',
+          ),
+          subtitle: Text(
+            MaterialLocalizations.of(context)
+                .formatMediumDate(row.occurredAt.toLocal()),
+          ),
+        );
+      }
+      final movement = row as ProductStockMovementRecord;
+      return ListTile(
+        title: Text(DisplayLabels.movement(movement.type)),
+        subtitle: Text(
+          MaterialLocalizations.of(context)
+              .formatMediumDate(movement.occurredAt.toLocal()),
+        ),
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 100),
+          child: Text(
+            '${movement.quantityChange > 0 ? '+' : '-'}${productQuantityText(widget.product, movement.quantityChange.abs())}',
+            textAlign: TextAlign.end,
+          ),
+        ),
+      );
+    },
+  );
 }

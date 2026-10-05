@@ -19,6 +19,7 @@ class ProFeaturePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     final colors = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final gold = dark ? const Color(0xFFFFCC63) : const Color(0xFF805300);
@@ -34,12 +35,12 @@ class ProFeaturePreview extends StatelessWidget {
             colors.outlineVariant,
           );
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 16 : 20),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1060),
           child: Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(compact ? 16 : 24),
             decoration: BoxDecoration(
               color: panel,
               borderRadius: BorderRadius.circular(18),
@@ -48,7 +49,10 @@ class ProFeaturePreview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: compact ? 10 : 16,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     CircleAvatar(
                       radius: 29,
@@ -57,7 +61,6 @@ class ProFeaturePreview extends StatelessWidget {
                           leading ??
                           Icon(icon, color: colors.primary, size: 29),
                     ),
-                    const SizedBox(width: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 11,
@@ -110,9 +113,11 @@ class ProFeaturePreview extends StatelessWidget {
                             SizedBox(
                               width: cardWidth,
                               child: Container(
-                                height:
-                                    104 *
-                                    MediaQuery.textScalerOf(context).scale(1),
+                                constraints: BoxConstraints(
+                                  minHeight:
+                                      104 *
+                                      MediaQuery.textScalerOf(context).scale(1),
+                                ),
                                 padding: const EdgeInsets.all(15),
                                 decoration: BoxDecoration(
                                   color: metricSurface,
@@ -121,8 +126,7 @@ class ProFeaturePreview extends StatelessWidget {
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
                                       metric,
@@ -133,6 +137,7 @@ class ProFeaturePreview extends StatelessWidget {
                                             color: colors.onSurfaceVariant,
                                           ),
                                     ),
+                                    const SizedBox(height: 10),
                                     Row(
                                       children: [
                                         Icon(
@@ -197,11 +202,14 @@ class ProFeaturePreview extends StatelessWidget {
                     ),
                     child: const Row(
                       children: [
-                        Spacer(),
                         Icon(Icons.workspace_premium_outlined),
-                        SizedBox(width: 9),
-                        Text('Preview Pro'),
-                        Spacer(),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Preview Pro',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                         Icon(Icons.chevron_right),
                       ],
                     ),

@@ -29,8 +29,12 @@ class ReportsScreen extends StatelessWidget {
             ),
           ],
         ),
-        bottom: const TabBar(
-          tabs: [
+        bottom: TabBar(
+          isScrollable: MediaQuery.sizeOf(context).width < 600,
+          tabAlignment: MediaQuery.sizeOf(context).width < 600
+              ? TabAlignment.start
+              : TabAlignment.fill,
+          tabs: const [
             Tab(icon: Icon(Icons.inventory_2_outlined), text: 'Inventory'),
             Tab(icon: Icon(Icons.people_alt_outlined), text: 'UTANG'),
             Tab(icon: Icon(Icons.point_of_sale_outlined), text: 'Sales'),
@@ -96,36 +100,65 @@ class ReportsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ...rows.map(
-            (r) => Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.inventory_2_outlined),
-                ),
-                title: Text(
-                  r['name']! as String,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  'Stock: ${_quantity(r, 'current_quantity')}\nPurchase: ${standardMoney(r['purchase_price_centavos']! as int)} per ${r['purchase_package']} • Selling: ${standardMoney(r['selling_price_centavos']! as int)}',
-                ),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('Estimated cost'),
-                    Text(
-                      standardMoney(r['stock_value']! as int),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+            (r) => MediaQuery.sizeOf(c).width < 600
+                ? Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r['name']! as String,
+                            style: Theme.of(c).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Stock: ${_quantity(r, 'current_quantity')}'),
+                          Text(
+                            'Purchase: ${standardMoney(r['purchase_price_centavos']! as int)} per ${r['purchase_package']}',
+                          ),
+                          Text(
+                            'Selling: ${standardMoney(r['selling_price_centavos']! as int)}',
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Estimated cost: ${standardMoney(r['stock_value']! as int)}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-                isThreeLine: true,
-              ),
-            ),
+                  )
+                : Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.inventory_2_outlined),
+                      ),
+                      title: Text(
+                        r['name']! as String,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        'Stock: ${_quantity(r, 'current_quantity')}\nPurchase: ${standardMoney(r['purchase_price_centavos']! as int)} per ${r['purchase_package']} • Selling: ${standardMoney(r['selling_price_centavos']! as int)}',
+                      ),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text('Estimated cost'),
+                          Text(
+                            standardMoney(r['stock_value']! as int),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      isThreeLine: true,
+                    ),
+                  ),
           ),
         ],
       );
@@ -172,17 +205,38 @@ class ReportsScreen extends StatelessWidget {
           Text('Balances by UTANGAN', style: Theme.of(c).textTheme.titleLarge),
           const SizedBox(height: 8),
           ...rows.map(
-            (r) => Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                title: Text(r['full_name']! as String),
-                subtitle: const Text('Outstanding UTANG'),
-                trailing: Text(
-                  standardMoney(r['balance']! as int),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
+            (r) => MediaQuery.sizeOf(c).width < 600
+                ? Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r['full_name']! as String,
+                            style: Theme.of(c).textTheme.titleMedium,
+                          ),
+                          const Text('Outstanding UTANG'),
+                          Text(
+                            standardMoney(r['balance']! as int),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      title: Text(r['full_name']! as String),
+                      subtitle: const Text('Outstanding UTANG'),
+                      trailing: Text(
+                        standardMoney(r['balance']! as int),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
           ),
         ],
       );
@@ -327,9 +381,19 @@ class ReportsScreen extends StatelessWidget {
       );
     },
   );
-  Widget _total(String x, int v) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(title: Text(x), trailing: Text(standardMoney(v))),
+  Widget _total(String x, int v) => Builder(
+    builder: (context) => Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: MediaQuery.sizeOf(context).width < 600
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Text(x), Text(standardMoney(v))],
+              ),
+            )
+          : ListTile(title: Text(x), trailing: Text(standardMoney(v))),
+    ),
   );
   Widget _reportIntro(
     BuildContext context,
@@ -354,9 +418,13 @@ class ReportsScreen extends StatelessWidget {
               Text(title, style: const TextStyle(color: Colors.white70)),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 30,
+                  fontSize: MediaQuery.sizeOf(context).width < 320
+                      ? 20
+                      : MediaQuery.sizeOf(context).width < 600
+                      ? 24
+                      : 30,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -465,6 +533,8 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
                 label: Text(
                   range == null
                       ? 'All Dates'
+                      : MediaQuery.sizeOf(context).width < 600
+                      ? 'Change Dates'
                       : '${range!.start.month}/${range!.start.day}/${range!.start.year} – ${range!.end.month}/${range!.end.day}/${range!.end.year}',
                 ),
               ),
@@ -478,6 +548,7 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
                 child: FutureBuilder<List<Map<String, Object?>>>(
                   future: categories,
                   builder: (_, snapshot) => DropdownButtonFormField<int?>(
+                    isExpanded: true,
                     initialValue: categoryId,
                     decoration: const InputDecoration(labelText: 'Category'),
                     items: [
@@ -530,9 +601,19 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
     },
   );
 
-  Widget _total(String label, int value) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(title: Text(label), trailing: Text(standardMoney(value))),
+  Widget _total(String label, int value) => Builder(
+    builder: (context) => Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: MediaQuery.sizeOf(context).width < 600
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Text(label), Text(standardMoney(value))],
+              ),
+            )
+          : ListTile(title: Text(label), trailing: Text(standardMoney(value))),
+    ),
   );
   Widget _expenseIntro(
     BuildContext context,
@@ -557,9 +638,13 @@ class _ExpenseReportsState extends State<_ExpenseReports> {
               Text(title, style: const TextStyle(color: Colors.white70)),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 30,
+                  fontSize: MediaQuery.sizeOf(context).width < 320
+                      ? 20
+                      : MediaQuery.sizeOf(context).width < 600
+                      ? 24
+                      : 30,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -675,15 +760,17 @@ class _RowsScreen extends StatelessWidget {
             if (note != null && note.isNotEmpty) 'Note: $note',
           ].join('\n'),
         ),
-        trailing: Text(
-          '${isAdded ? '+' : '−'}$unit',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: isAdded
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.error,
-          ),
-        ),
+        trailing: MediaQuery.sizeOf(context).width < 600
+            ? null
+            : Text(
+                '${isAdded ? '+' : '−'}$unit',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: isAdded
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.error,
+                ),
+              ),
       ),
     );
   }

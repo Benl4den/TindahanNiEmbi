@@ -13,6 +13,70 @@ import 'package:tindahan_ni_embi/services/auth_service.dart';
 void main() {
   sqfliteFfiInit();
 
+  testWidgets('loan overview remains scrollable on narrow phones', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(280, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = (await tester.runAsync(() => app.database))!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoanManagementScreen(
+          repository: LoanRepository(db, actorRole: 'OWNER'),
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(OpenAccessPlanSource()),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    for (final width in [280.0, 320.0, 360.0, 390.0]) {
+      tester.view.physicalSize = Size(width, 600);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'width $width');
+    }
+    expect(find.text('Add Lender'), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Add Lender'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Lender'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 220);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    tester.view.resetViewInsets();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Lender Name *'),
+      'Phone Lender',
+    );
+    await tester.tap(find.text('Save Lender'));
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add Loan').first);
+    await tester.tap(find.text('Add Loan').first);
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 220);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('open loan screen reacts to development plan changes', (
     tester,
   ) async {

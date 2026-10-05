@@ -8,6 +8,39 @@ import 'package:tindahan_ni_embi/repositories/product_repository.dart';
 import 'package:tindahan_ni_embi/services/product_photo_service.dart';
 
 void main() {
+  testWidgets('Products controls and cards fit compact phone widths', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    tester.view.physicalSize = const Size(280, 600);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductsScreen(
+          repository: _Products(),
+          categoryRepository: _Categories(),
+          photoService: _Photos(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final width in [280.0, 320.0, 360.0, 390.0]) {
+      tester.view.physicalSize = Size(width, 700);
+      await tester.pumpAndSettle();
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Archived'), findsOneWidget);
+      expect(find.text('Filter & Sort'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'width $width');
+    }
+    tester.view.physicalSize = const Size(280, 600);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Filter & Sort'));
+    await tester.pumpAndSettle();
+    expect(find.text('Product status'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Products search filters visible cards immediately', (
     tester,
   ) async {

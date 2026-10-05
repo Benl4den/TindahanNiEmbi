@@ -232,57 +232,69 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
     final item = value.purchasePackages[index];
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              key: ValueKey('purchase-name-$index-${item.name}'),
-              initialValue: item.name,
-              decoration: InputDecoration(
-                labelText: index == 0
-                    ? widget.cigaretteMode
-                          ? 'Default purchase package (pack)'
-                          : 'Default purchase package'
-                    : 'Package name',
-              ),
-              validator: _label,
-              onChanged: (text) => _replacePurchase(index, name: text),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final nameField = TextFormField(
+            key: ValueKey('purchase-name-$index-${item.name}'),
+            initialValue: item.name,
+            decoration: InputDecoration(
+              labelText: index == 0
+                  ? widget.cigaretteMode
+                        ? 'Default purchase package (pack)'
+                        : 'Default purchase package'
+                  : 'Package name',
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              key: ValueKey('purchase-qty-$index-${item.baseQuantity}'),
-              initialValue: '${item.baseQuantity}',
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: widget.cigaretteMode && index == 0
-                    ? 'Sticks per Pack'
-                    : '${value.baseUnit.label}s per package',
-              ),
-              validator: _positiveMessage,
-              onChanged: (text) =>
-                  _replacePurchase(index, quantity: int.tryParse(text)),
+            validator: _label,
+            onChanged: (text) => _replacePurchase(index, name: text),
+          );
+          final quantityField = TextFormField(
+            key: ValueKey('purchase-qty-$index-${item.baseQuantity}'),
+            initialValue: '${item.baseQuantity}',
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: widget.cigaretteMode && index == 0
+                  ? 'Sticks per Pack'
+                  : '${value.baseUnit.label}s per package',
             ),
-          ),
-          if (index > 0)
-            IconButton(
-              tooltip: 'Remove package',
-              onPressed: () {
-                final list = [...value.purchasePackages]..removeAt(index);
-                update(
-                  ProductUnitConfiguration(
-                    baseUnit: value.baseUnit,
-                    purchasePackages: list,
-                    sellingOptions: value.sellingOptions,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.close),
-            ),
-        ],
+            validator: _positiveMessage,
+            onChanged: (text) =>
+                _replacePurchase(index, quantity: int.tryParse(text)),
+          );
+          final removeButton = IconButton(
+            tooltip: 'Remove package',
+            onPressed: () {
+              final list = [...value.purchasePackages]..removeAt(index);
+              update(
+                ProductUnitConfiguration(
+                  baseUnit: value.baseUnit,
+                  purchasePackages: list,
+                  sellingOptions: value.sellingOptions,
+                ),
+              );
+            },
+            icon: const Icon(Icons.close),
+          );
+          if (constraints.maxWidth < 480) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nameField,
+                const SizedBox(height: 10),
+                quantityField,
+                if (index > 0)
+                  Align(alignment: Alignment.centerRight, child: removeButton),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: nameField),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: quantityField),
+              if (index > 0) removeButton,
+            ],
+          );
+        },
       ),
     );
   }
@@ -291,76 +303,86 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
     final item = value.sellingOptions[index];
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              key: ValueKey('sale-name-$index-${item.name}'),
-              initialValue: item.name,
-              decoration: InputDecoration(
-                labelText: index == 0
-                    ? widget.cigaretteMode
-                          ? 'Default selling option (stick)'
-                          : 'Default selling option'
-                    : 'Option name',
-              ),
-              validator: _label,
-              onChanged: (text) => _replaceSale(index, name: text),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final nameField = TextFormField(
+            key: ValueKey('sale-name-$index-${item.name}'),
+            initialValue: item.name,
+            decoration: InputDecoration(
+              labelText: index == 0
+                  ? widget.cigaretteMode
+                        ? 'Default selling option (stick)'
+                        : 'Default selling option'
+                  : 'Option name',
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              key: ValueKey('sale-qty-$index-${item.baseQuantity}'),
-              initialValue: '${item.baseQuantity}',
-              keyboardType: TextInputType.number,
-              readOnly: widget.cigaretteMode && index == 0,
-              decoration: InputDecoration(
-                labelText: '${value.baseUnit.label}s used',
-              ),
-              validator: _positiveMessage,
-              onChanged: (text) =>
-                  _replaceSale(index, quantity: int.tryParse(text)),
+            validator: _label,
+            onChanged: (text) => _replaceSale(index, name: text),
+          );
+          final quantityField = TextFormField(
+            key: ValueKey('sale-qty-$index-${item.baseQuantity}'),
+            initialValue: '${item.baseQuantity}',
+            keyboardType: TextInputType.number,
+            readOnly: widget.cigaretteMode && index == 0,
+            decoration: InputDecoration(
+              labelText: '${value.baseUnit.label}s used',
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              key: ValueKey('sale-price-$index-${item.priceCentavos}'),
-              initialValue: (item.priceCentavos / 100).toStringAsFixed(2),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              readOnly: widget.cigaretteMode,
-              decoration: const InputDecoration(
-                labelText: 'Selling price',
-                prefixText: '₱ ',
-              ),
-              validator: _moneyMessage,
-              onChanged: widget.cigaretteMode
-                  ? null
-                  : (text) => _replaceSale(index, price: _centavos(text)),
+            validator: _positiveMessage,
+            onChanged: (text) =>
+                _replaceSale(index, quantity: int.tryParse(text)),
+          );
+          final priceField = TextFormField(
+            key: ValueKey('sale-price-$index-${item.priceCentavos}'),
+            initialValue: (item.priceCentavos / 100).toStringAsFixed(2),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            readOnly: widget.cigaretteMode,
+            decoration: const InputDecoration(
+              labelText: 'Selling price',
+              prefixText: '₱ ',
             ),
-          ),
-          if (index > 0)
-            IconButton(
-              tooltip: 'Remove selling option',
-              onPressed: () {
-                final list = [...value.sellingOptions]..removeAt(index);
-                update(
-                  ProductUnitConfiguration(
-                    baseUnit: value.baseUnit,
-                    purchasePackages: value.purchasePackages,
-                    sellingOptions: list,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.close),
-            ),
-        ],
+            validator: _moneyMessage,
+            onChanged: widget.cigaretteMode
+                ? null
+                : (text) => _replaceSale(index, price: _centavos(text)),
+          );
+          final removeButton = IconButton(
+            tooltip: 'Remove selling option',
+            onPressed: () {
+              final list = [...value.sellingOptions]..removeAt(index);
+              update(
+                ProductUnitConfiguration(
+                  baseUnit: value.baseUnit,
+                  purchasePackages: value.purchasePackages,
+                  sellingOptions: list,
+                ),
+              );
+            },
+            icon: const Icon(Icons.close),
+          );
+          if (constraints.maxWidth < 480) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nameField,
+                const SizedBox(height: 10),
+                quantityField,
+                const SizedBox(height: 10),
+                priceField,
+                if (index > 0)
+                  Align(alignment: Alignment.centerRight, child: removeButton),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: nameField),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: quantityField),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: priceField),
+              if (index > 0) removeButton,
+            ],
+          );
+        },
       ),
     );
   }

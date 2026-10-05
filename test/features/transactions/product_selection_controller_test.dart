@@ -123,4 +123,43 @@ void main() {
     expect(cart.selectedProducts, isEmpty);
     expect(cart.totalCentavos, 0);
   });
+  test('phone quantity controls change kilograms by quarter without exceeding stock', () {
+    final product = Product(
+      id: 8,
+      categoryId: 1,
+      name: 'Rice',
+      photoPath: '/x',
+      purchasePriceCentavos: 5000,
+      sellingPriceCentavos: 7500,
+      currentQuantity: 1500,
+      minimumStockLevel: 100,
+      isArchived: false,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      baseUnitCode: 'GRAM',
+      baseUnitLabel: 'gram',
+    );
+    final kilogram = SellingOption(
+      id: 5,
+      productId: product.id,
+      name: 'Kilogram',
+      baseQuantity: 1000,
+      priceCentavos: 7500,
+      isDefault: true,
+    );
+    final cart = ProductSelectionController([product])
+      ..add(product, kilogram, quantityValue: 5, quantityScale: 10);
+    cart.adjustLine(cart.lines.single, 1);
+    expect(cart.lines.single.quantityText, '0.75');
+    expect(cart.lines.single.baseQuantity, 750);
+    cart.adjustLine(cart.lines.single, 1);
+    expect(cart.lines.single.quantityText, '1');
+    cart.adjustLine(cart.lines.single, 1);
+    cart.adjustLine(cart.lines.single, 1);
+    expect(cart.lines.single.baseQuantity, 1500);
+    expect(() => cart.adjustLine(cart.lines.single, 1), throwsStateError);
+    expect(cart.lines.single.baseQuantity, 1500);
+    cart.adjustLine(cart.lines.single, -1);
+    expect(cart.lines.single.baseQuantity, 1250);
+  });
 }

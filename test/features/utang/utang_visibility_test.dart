@@ -13,6 +13,7 @@ void main() {
     createdAt: DateTime.utc(2026),
     updatedAt: DateTime.utc(2026),
     balanceCentavos: balance,
+    transactionCount: 1,
   );
   testWidgets('customer cards expose outstanding and zero balance states', (
     tester,
@@ -39,10 +40,52 @@ void main() {
       ),
     );
     expect(find.text('₱300.00'), findsOneWidget);
+    expect(find.text('1 transaction'), findsOneWidget);
     expect(find.text('₱0.00'), findsOneWidget);
     expect(find.bySemanticsLabel('Outstanding UTANG'), findsOneWidget);
     expect(find.bySemanticsLabel('Zero UTANG Balance'), findsOneWidget);
   });
+
+  testWidgets(
+    'customer card fits a narrow Android phone with a large balance',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: [
+                UtangCustomerCard(
+                  customer: Customer(
+                    id: 2,
+                    fullName: 'Juan Dela Cruz with a Long Customer Name',
+                    isArchived: false,
+                    createdAt: DateTime.utc(2026),
+                    updatedAt: DateTime.utc(2026),
+                    balanceCentavos: 50000000,
+                  ),
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      for (final size in const [
+        Size(280, 600),
+        Size(320, 700),
+        Size(390, 844),
+        Size(800, 600),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   testWidgets(
     'credit details modal uses historical snapshots and closes in place',

@@ -254,4 +254,62 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'embedded phone Sales keeps one cart across grid and Current Sale',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final now = DateTime.utc(2026);
+      final product = Product(
+        id: 1,
+        categoryId: 1,
+        name: 'Coffee',
+        photoPath: '/missing',
+        purchasePriceCentavos: 500,
+        sellingPriceCentavos: 1000,
+        currentQuantity: 10,
+        minimumStockLevel: 1,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final visibility = <bool>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CashSaleScreen(
+              embedded: true,
+              products: [product],
+              saveSale: (_) async => 1,
+              onPhoneDetailVisibilityChanged: visibility.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Coffee'));
+      await tester.pump();
+      expect(find.text('1 item'), findsOneWidget);
+      await tester.tap(find.text('1 item'));
+      await tester.pump();
+      expect(visibility.last, isTrue);
+      expect(find.text('Current Sale'), findsOneWidget);
+      await tester.tap(find.byTooltip('Increase quantity'));
+      await tester.pump();
+      expect(find.text('₱20.00'), findsWidgets);
+      await tester.tap(find.text('Add more products'));
+      await tester.pump();
+      expect(visibility.last, isFalse);
+      expect(find.text('1 item'), findsOneWidget);
+      await tester.tap(find.text('1 item'));
+      await tester.pump();
+      expect(find.text('₱20.00'), findsWidgets);
+      tester.view.physicalSize = const Size(320, 700);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

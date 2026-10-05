@@ -179,7 +179,7 @@ class _State extends State<AuthGate> {
       child: LayoutBuilder(
         builder: (_, box) {
           final wide = box.maxWidth >= 760;
-          final brand = const _LoginBrand();
+          final brand = _LoginBrand(compact: !wide);
           final form = Center(
             child: SingleChildScrollView(
               padding: EdgeInsets.symmetric(
@@ -188,7 +188,7 @@ class _State extends State<AuthGate> {
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 510),
-                child: _loginCard(),
+                child: _loginCard(compact: !wide),
               ),
             ),
           );
@@ -219,12 +219,14 @@ class _State extends State<AuthGate> {
     ),
   );
 
-  Widget _loginCard() => Card(
+  Widget _loginCard({required bool compact}) => Card(
     elevation: 8,
     shadowColor: Colors.black.withValues(alpha: .12),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     child: Padding(
-      padding: const EdgeInsets.fromLTRB(36, 30, 36, 34),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(20, 24, 20, 24)
+          : const EdgeInsets.fromLTRB(36, 30, 36, 34),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -379,30 +381,35 @@ class _State extends State<AuthGate> {
             ['4', '5', '6'],
             ['7', '8', '9'],
           ])
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: row.map(_number).toList(),
-            ),
+            Row(children: row.map(_number).toList()),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const SizedBox(width: 112),
+              const Expanded(child: SizedBox()),
               _number('0'),
-              SizedBox(
-                width: 112,
-                height: 55,
-                child: IconButton(
-                  onPressed: backspace,
-                  icon: const Icon(Icons.backspace_outlined),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    foregroundColor: Theme.of(context).colorScheme.onSurface,
-                    elevation: 3,
-                    shadowColor: Colors.black.withValues(alpha: .12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 5,
+                  ),
+                  child: SizedBox(
+                    height: 55,
+                    child: IconButton(
+                      onPressed: backspace,
+                      icon: const Icon(Icons.backspace_outlined),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        foregroundColor: Theme.of(context)
+                            .colorScheme
+                            .onSurface,
+                        elevation: 3,
+                        shadowColor: Colors.black.withValues(alpha: .12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -473,31 +480,32 @@ class _State extends State<AuthGate> {
     ],
   );
 
-  Widget _number(String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: SizedBox(
-      width: 112,
-      height: 55,
-      child: FilledButton(
-        onPressed: () => digit(value),
-        style: FilledButton.styleFrom(
-          foregroundColor: Theme.of(context).colorScheme.onSurface,
-          backgroundColor: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest,
-          elevation: 3,
-          shadowColor: Colors.black.withValues(alpha: .12),
-          side: BorderSide(
-            color: Theme.of(context).colorScheme.onSurface
-                .withValues(alpha: .24),
+  Widget _number(String value) => Expanded(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      child: SizedBox(
+        height: 55,
+        child: FilledButton(
+          onPressed: () => digit(value),
+          style: FilledButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.onSurface,
+            backgroundColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+            elevation: 3,
+            shadowColor: Colors.black.withValues(alpha: .12),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.onSurface
+                  .withValues(alpha: .24),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           ),
-        ),
-        child: Text(
-          value,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
         ),
       ),
     ),
@@ -593,7 +601,9 @@ class _State extends State<AuthGate> {
 }
 
 class _LoginBrand extends StatelessWidget {
-  const _LoginBrand();
+  const _LoginBrand({required this.compact});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -609,66 +619,112 @@ class _LoginBrand extends StatelessWidget {
         const Positioned.fill(
           child: CustomPaint(painter: _GreenPatternPainter()),
         ),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/branding/tindasari_ts_transparent.png',
-                  width: 122,
-                  height: 122,
-                  semanticLabel: 'TindaSari PH',
-                ),
-                const SizedBox(height: 30),
-                const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'TindaSari PH',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
+        if (compact)
+          Center(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                MediaQuery.paddingOf(context).top + 8,
+                20,
+                36,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/branding/tindasari_ts_transparent.png',
+                    width: 60,
+                    height: 60,
+                    semanticLabel: 'TindaSari PH',
+                  ),
+                  const SizedBox(height: 6),
+                  const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'TindaSari PH',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Simple to run. Built for your store.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xff8ee19e),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Simple to run. Built for your store.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xff8ee19e),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 25),
-                Container(
-                  width: 46,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: const Color(0xff66d985),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Opacity(
-                  opacity: .14,
-                  child: Image.asset(
+                ],
+              ),
+            ),
+          )
+        else
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 34),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
                     'assets/branding/tindasari_ts_transparent.png',
-                    width: 150,
-                    height: 150,
-                    excludeFromSemantics: true,
+                    width: 122,
+                    height: 122,
+                    semanticLabel: 'TindaSari PH',
                   ),
-                ),
-              ],
+                  const SizedBox(height: 30),
+                  const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'TindaSari PH',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 40,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Simple to run. Built for your store.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xff8ee19e),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  Container(
+                    width: 46,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: const Color(0xff66d985),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Opacity(
+                    opacity: .14,
+                    child: Image.asset(
+                      'assets/branding/tindasari_ts_transparent.png',
+                      width: 150,
+                      height: 150,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
         Positioned(
-          left: 30,
-          bottom: 24,
+          left: compact ? 20 : 30,
+          right: compact ? 20 : 30,
+          bottom: compact ? 12 : 24,
           child: Row(
             children: [
               Container(
@@ -685,12 +741,16 @@ class _LoginBrand extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 9),
-              const Text(
-                'Ready  •  Data saved on this tablet',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  'Ready  •  Data saved on this device',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: compact ? 13 : 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],

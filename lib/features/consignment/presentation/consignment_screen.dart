@@ -108,6 +108,12 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
 
   Widget _buildContent(BuildContext context) => AlertDialog(
     scrollable: true,
+    insetPadding: MediaQuery.sizeOf(context).width < 600
+        ? const EdgeInsets.all(16)
+        : null,
+    contentPadding: MediaQuery.sizeOf(context).width < 600
+        ? const EdgeInsets.fromLTRB(16, 12, 16, 16)
+        : null,
     title: const Text('Add Consignor'),
     content: SizedBox(
       width: 480,
@@ -134,6 +140,7 @@ class _AddConsignorDialogState extends State<_AddConsignorDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: categoryId,
             decoration: const InputDecoration(
               labelText: 'Default product category (optional)',
@@ -245,6 +252,12 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
     busy: saving,
     child: AlertDialog(
       scrollable: true,
+      insetPadding: MediaQuery.sizeOf(context).width < 600
+          ? const EdgeInsets.all(16)
+          : null,
+      contentPadding: MediaQuery.sizeOf(context).width < 600
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 16)
+          : null,
       title: const Text('Edit Consignor'),
       content: SizedBox(
         width: 440,
@@ -274,6 +287,7 @@ class _EditConsignorDialogState extends State<_EditConsignorDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: categoryId,
               decoration: const InputDecoration(
                 labelText: 'Default product category (optional)',
@@ -1719,59 +1733,66 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 340,
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Search consignors...',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+              LayoutBuilder(
+                builder: (context, constraints) => Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: constraints.maxWidth < 340
+                          ? constraints.maxWidth
+                          : 340,
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Search consignors...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (value) => setState(
+                          () => _search = value.trim().toLowerCase(),
+                        ),
                       ),
-                      onChanged: (value) =>
-                          setState(() => _search = value.trim().toLowerCase()),
                     ),
-                  ),
-                  DropdownButton<String>(
-                    value: _filter,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'All',
-                        child: Text('Filter: All'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Amount owed',
-                        child: Text('Amount owed'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _filter = value ?? 'All'),
-                  ),
-                  DropdownButton<String>(
-                    value: _sort,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Name',
-                        child: Text('Sort: Name'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Amount owed',
-                        child: Text('Sort: Amount owed'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Stock value',
-                        child: Text('Sort: Stock value'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _sort = value ?? 'Name'),
-                  ),
-                ],
+                    DropdownButton<String>(
+                      isExpanded: constraints.maxWidth < 600,
+                      value: _filter,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'All',
+                          child: Text('Filter: All'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Amount owed',
+                          child: Text('Amount owed'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _filter = value ?? 'All'),
+                    ),
+                    DropdownButton<String>(
+                      isExpanded: constraints.maxWidth < 600,
+                      value: _sort,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Name',
+                          child: Text('Sort: Name'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Amount owed',
+                          child: Text('Sort: Amount owed'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Stock value',
+                          child: Text('Sort: Stock value'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _sort = value ?? 'Name'),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Builder(
@@ -1791,7 +1812,6 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           restockCount == 0
@@ -1802,10 +1822,12 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                               : Colors.orange,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          restockCount == 0
-                              ? 'All consigned products are sufficiently stocked'
-                              : '$restockCount consigned products need replenishment',
+                        Expanded(
+                          child: Text(
+                            restockCount == 0
+                                ? 'All consigned products are sufficiently stocked'
+                                : '$restockCount consigned products need replenishment',
+                          ),
                         ),
                       ],
                     ),
@@ -1813,20 +1835,30 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 },
               ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Consignment Suppliers',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  OutlinedButton.icon(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final title = Text(
+                    'Consignment Suppliers',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  );
+                  final add = OutlinedButton.icon(
                     onPressed: _addConsignor,
                     icon: const Icon(Icons.business_outlined),
                     label: const Text('Add Supplier'),
-                  ),
-                ],
+                  );
+                  if (constraints.maxWidth < 500) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [title, const SizedBox(height: 8), add],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: title),
+                      add,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               if (visibleCompanies.isEmpty)
@@ -1840,52 +1872,106 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                 ),
               ...visibleCompanies.map(
                 (x) => Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(18),
-                    leading: const CircleAvatar(child: Icon(Icons.business)),
-                    title: Text(
-                      x['name']! as String,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    subtitle: Text(
-                      '${x['product_count']} ${(x['product_count']! as int) == 1 ? 'product' : 'products'}'
-                      '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'} • Active\n'
-                      'Stock value: ${money((x['stock_value_centavos'] as int?) ?? 0)}\n'
-                      'Last delivery: ${_shortDate(x['last_receipt_at'])} • Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
-                    ),
-                    isThreeLine: true,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'SUPPLIER PAYABLE',
-                              style: Theme.of(context).textTheme.labelSmall,
+                  child: MediaQuery.sizeOf(context).width < 600
+                      ? InkWell(
+                          onTap: () => setState(() {
+                            selectedConsignorId = x['id']! as int;
+                            _companyTab = 0;
+                            _reload();
+                          }),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  x['name']! as String,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${x['product_count']} ${(x['product_count']! as int) == 1 ? 'product' : 'products'} • Active',
+                                ),
+                                Text(
+                                  'Stock value: ${money((x['stock_value_centavos'] as int?) ?? 0)}',
+                                ),
+                                Text(
+                                  'Last delivery: ${_shortDate(x['last_receipt_at'])}',
+                                ),
+                                Text(
+                                  'Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'SUPPLIER PAYABLE',
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                                Text(
+                                  money(x['payable_centavos']! as int),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color: const Color(0xFFF39C4A),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              money(x['payable_centavos']! as int),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: const Color(0xFFF39C4A),
-                                    fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : ListTile(
+                          contentPadding: const EdgeInsets.all(18),
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.business),
+                          ),
+                          title: Text(
+                            x['name']! as String,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          subtitle: Text(
+                            '${x['product_count']} ${(x['product_count']! as int) == 1 ? 'product' : 'products'}'
+                            '${x['default_category_name'] == null ? '' : ' • ${x['default_category_name']}'} • Active\n'
+                            'Stock value: ${money((x['stock_value_centavos'] as int?) ?? 0)}\n'
+                            'Last delivery: ${_shortDate(x['last_receipt_at'])} • Last supplier payment: ${_shortDate(x['last_remittance_at'])}',
+                          ),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'SUPPLIER PAYABLE',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall,
                                   ),
-                            ),
-                          ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    money(x['payable_centavos']! as int),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: const Color(0xFFF39C4A),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.chevron_right),
+                            ],
+                          ),
+                          onTap: () => setState(() {
+                            selectedConsignorId = x['id']! as int;
+                            _companyTab = 0;
+                            _reload();
+                          }),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right),
-                      ],
-                    ),
-                    onTap: () => setState(() {
-                      selectedConsignorId = x['id']! as int;
-                      _companyTab = 0;
-                      _reload();
-                    }),
-                  ),
                 ),
               ),
             ],

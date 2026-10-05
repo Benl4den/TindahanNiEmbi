@@ -8,6 +8,7 @@ import 'package:tindahan_ni_embi/repositories/category_repository.dart';
 import 'package:tindahan_ni_embi/repositories/customer_repository.dart';
 import 'package:tindahan_ni_embi/repositories/payment_repository.dart';
 import 'package:tindahan_ni_embi/repositories/product_repository.dart';
+import 'package:tindahan_ni_embi/repositories/reversal_repository.dart';
 import 'package:tindahan_ni_embi/repositories/utang_repository.dart';
 
 void main() {
@@ -91,6 +92,18 @@ void main() {
       )).single['is_archived'],
       1,
     );
+  });
+  test('reversed payments do not count as recent customer payments', () async {
+    final customer = await repo.create(const CustomerDraft(fullName: 'Maria'));
+    await UtangRepository(db)
+        .addExistingBalance(customerId: customer.id, amountCentavos: 10000);
+    final payment = await PaymentRepository(db)
+        .record(customerId: customer.id, amountCentavos: 500);
+    expect((await repo.searchActive()).single.lastPaymentAt, isNotNull);
+
+    await ReversalRepository(db)
+        .reversePayment(payment, 'Entered in error', ownerPinAuthorized: true);
+    expect((await repo.searchActive()).single.lastPaymentAt, isNull);
   });
   test(
     'details derives balance and chronological histories from ledger',

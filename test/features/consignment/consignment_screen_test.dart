@@ -227,6 +227,37 @@ void main() {
     await t.pumpAndSettle();
   }
 
+  testWidgets('Consignment list and supplier form fit a 280dp phone', (
+    t,
+  ) async {
+    repo.parties.add(
+      const Consignor(
+        id: 1,
+        name: 'A Very Long Supplier Company Name For A Small Store',
+        isArchived: false,
+      ),
+    );
+    await pump(t);
+    t.view.physicalSize = const Size(280, 640);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    await t.scrollUntilVisible(
+      find.text('Add Supplier'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.drag(find.byType(ListView).first, const Offset(0, -360));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('Add Supplier'));
+    await t.tap(find.text('Add Supplier'));
+    await t.pumpAndSettle();
+    expect(find.text('Company / Name'), findsOneWidget);
+    t.view.viewInsets = const FakeViewPadding(bottom: 220);
+    addTearDown(t.view.resetViewInsets);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets(
     'Free preview hides supplier data and switching Pro restores it',
     (t) async {

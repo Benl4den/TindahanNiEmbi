@@ -62,135 +62,162 @@ class _State extends State<DailyClosingScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Daily Closing Summary'),
-      actions: [
-        const HelpButton(topic: HelpTopicId.dailyClosing),
-        TextButton.icon(
-          onPressed: _confirmCloseDay,
-          icon: const Icon(Icons.lock_clock_outlined),
-          label: const Text('Close Day'),
-        ),
-        TextButton.icon(
-          onPressed: pick,
-          icon: const Icon(Icons.calendar_month),
-          label: Text('${date.month}/${date.day}/${date.year}'),
-        ),
-      ],
-    ),
-    body: FutureBuilder<DailyClosingSummary>(
-      future: data,
-      builder: (_, s) {
-        if (s.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (s.hasError) {
-          return Center(
-            child: TextButton(
-              onPressed: () => setState(reload),
-              child: const Text('Could not load this day. Try again'),
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(compact ? 'Daily Closing' : 'Daily Closing Summary'),
+        actions: [
+          if (compact) ...[
+            IconButton(
+              tooltip: 'Choose date',
+              onPressed: pick,
+              icon: const Icon(Icons.calendar_month),
             ),
-          );
-        }
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
-        final x = s.data!;
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              MaterialLocalizations.of(context).formatFullDate(date),
-              style: Theme.of(context).textTheme.headlineSmall,
+            const HelpButton(topic: HelpTopicId.dailyClosing),
+          ] else ...[
+            const HelpButton(topic: HelpTopicId.dailyClosing),
+            TextButton.icon(
+              onPressed: _confirmCloseDay,
+              icon: const Icon(Icons.lock_clock_outlined),
+              label: const Text('Close Day'),
             ),
-            const SizedBox(height: 8),
-            FutureBuilder<DailyClosingSnapshot?>(
-              future: widget.repository.snapshotFor(date),
-              builder: (_, snapshot) => Text(
-                snapshot.data == null
-                    ? 'Live transaction summary. It does not compare your actual cash count.'
-                    : 'Saved Daily Closing — ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.data!.closedAt))}. Later changes stay in transaction history.',
-              ),
-            ),
-            const SizedBox(height: 16),
-            DailyClosingOverview(
-              summary: x,
-              walletServicesAllowed: widget.walletServicesAllowed,
-            ),
-            const Divider(height: 40),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'DAILY CLOSING HISTORY',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: pick,
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  label: const Text('Choose date'),
-                ),
-              ],
-            ),
-            FutureBuilder<List<DateTime>>(
-              future: history,
-              builder: (_, h) => h.hasError
-                  ? TextButton(
-                      onPressed: () => setState(reload),
-                      child: const Text('Could not load history. Try again'),
-                    )
-                  : !h.hasData
-                  ? const LinearProgressIndicator()
-                  : Column(
-                      children: [
-                        if (!h.data!.any(
-                          (d) =>
-                              d.year != DateTime.now().year ||
-                              d.month != DateTime.now().month ||
-                              d.day != DateTime.now().day,
-                        ))
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Text(
-                              'No previous daily summaries yet. Use Choose date to review a specific day.',
-                            ),
-                          ),
-                        ...h.data!
-                            .where(
-                              (d) =>
-                                  !(d.year == DateTime.now().year &&
-                                      d.month == DateTime.now().month &&
-                                      d.day == DateTime.now().day),
-                            )
-                            .take(5)
-                            .map(
-                              (d) => Card(
-                                child: ListTile(
-                                  title: Text(
-                                    MaterialLocalizations.of(context)
-                                        .formatMediumDate(d),
-                                  ),
-                                  subtitle: FutureBuilder<DailyClosingSummary>(
-                                    future: widget.repository.summaryForDate(d),
-                                    builder: (_, day) => Text(
-                                      day.hasData
-                                          ? '${day.data!.transactionCount} transactions • Net Recorded Cash: ${standardMoney(day.data!.netRecordedCash)}'
-                                          : 'Open daily summary',
-                                    ),
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _showDay(d),
-                                ),
-                              ),
-                            ),
-                      ],
-                    ),
+            TextButton.icon(
+              onPressed: pick,
+              icon: const Icon(Icons.calendar_month),
+              label: Text('${date.month}/${date.day}/${date.year}'),
             ),
           ],
-        );
-      },
-    ),
-  );
+        ],
+      ),
+      body: FutureBuilder<DailyClosingSummary>(
+        future: data,
+        builder: (_, s) {
+          if (s.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (s.hasError) {
+            return Center(
+              child: TextButton(
+                onPressed: () => setState(reload),
+                child: const Text('Could not load this day. Try again'),
+              ),
+            );
+          }
+          if (!s.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final x = s.data!;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              if (compact) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _confirmCloseDay,
+                    icon: const Icon(Icons.lock_clock_outlined),
+                    label: const Text('Close Day'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Text(
+                MaterialLocalizations.of(context).formatFullDate(date),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              FutureBuilder<DailyClosingSnapshot?>(
+                future: widget.repository.snapshotFor(date),
+                builder: (_, snapshot) => Text(
+                  snapshot.data == null
+                      ? 'Live transaction summary. It does not compare your actual cash count.'
+                      : 'Saved Daily Closing — ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(snapshot.data!.closedAt))}. Later changes stay in transaction history.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              DailyClosingOverview(
+                summary: x,
+                walletServicesAllowed: widget.walletServicesAllowed,
+              ),
+              const Divider(height: 40),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'DAILY CLOSING HISTORY',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: pick,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: const Text('Choose date'),
+                  ),
+                ],
+              ),
+              FutureBuilder<List<DateTime>>(
+                future: history,
+                builder: (_, h) => h.hasError
+                    ? TextButton(
+                        onPressed: () => setState(reload),
+                        child: const Text('Could not load history. Try again'),
+                      )
+                    : !h.hasData
+                    ? const LinearProgressIndicator()
+                    : Column(
+                        children: [
+                          if (!h.data!.any(
+                            (d) =>
+                                d.year != DateTime.now().year ||
+                                d.month != DateTime.now().month ||
+                                d.day != DateTime.now().day,
+                          ))
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Text(
+                                'No previous daily summaries yet. Use Choose date to review a specific day.',
+                              ),
+                            ),
+                          ...h.data!
+                              .where(
+                                (d) =>
+                                    !(d.year == DateTime.now().year &&
+                                        d.month == DateTime.now().month &&
+                                        d.day == DateTime.now().day),
+                              )
+                              .take(5)
+                              .map(
+                                (d) => Card(
+                                  child: ListTile(
+                                    title: Text(
+                                      MaterialLocalizations.of(context)
+                                          .formatMediumDate(d),
+                                    ),
+                                    subtitle: FutureBuilder<DailyClosingSummary>(
+                                      future: widget.repository.summaryForDate(
+                                        d,
+                                      ),
+                                      builder: (_, day) => Text(
+                                        day.hasData
+                                            ? '${day.data!.transactionCount} transactions • Net Recorded Cash: ${standardMoney(day.data!.netRecordedCash)}'
+                                            : 'Open daily summary',
+                                      ),
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => _showDay(d),
+                                  ),
+                                ),
+                              ),
+                        ],
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _confirmCloseDay() async {
     final closingDate = date;

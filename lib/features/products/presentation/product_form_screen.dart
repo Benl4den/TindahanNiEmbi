@@ -264,6 +264,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Widget _buildContent(BuildContext context) {
     final creatingWithoutPhoto = widget.product == null && _photoPath == null;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -272,7 +273,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
+          padding: EdgeInsets.all(compact ? 16 : 28),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
@@ -282,10 +283,25 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   if (_photoPath != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(18),
-                      child: Image.file(
-                        File(_photoPath!),
-                        height: 280,
-                        fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: compact ? 180 : 280,
+                        child: ColoredBox(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerLow,
+                          child: Image.file(
+                            File(_photoPath!),
+                            fit: compact ? BoxFit.contain : BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                            errorBuilder: (_, _, _) => const Center(
+                              child: Text(
+                                'Photo unavailable. Retake or upload an image.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   const SizedBox(height: 18),
@@ -369,6 +385,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           else
                             DropdownButtonFormField<int>(
                               initialValue: _categoryId,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: AppStrings.category,
                                 border: OutlineInputBorder(),
@@ -379,7 +396,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   .map(
                                     (c) => DropdownMenuItem(
                                       value: c.id,
-                                      child: Text(c.name),
+                                      child: Text(
+                                        c.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   )
                                   .toList(),
@@ -393,25 +414,45 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             ),
                           const SizedBox(height: 16),
                           if (!_usesSmartPackaging)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _field(
-                                    _purchase,
-                                    AppStrings.piecePurchasePrice,
-                                    money: true,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _field(
-                                    _selling,
-                                    AppStrings.sellingPrice,
-                                    money: true,
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                              ],
+                            LayoutBuilder(
+                              builder: (_, constraints) =>
+                                  constraints.maxWidth < 420
+                                  ? Column(
+                                      children: [
+                                        _field(
+                                          _purchase,
+                                          AppStrings.piecePurchasePrice,
+                                          money: true,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _field(
+                                          _selling,
+                                          AppStrings.sellingPrice,
+                                          money: true,
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        Expanded(
+                                          child: _field(
+                                            _purchase,
+                                            AppStrings.piecePurchasePrice,
+                                            money: true,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: _field(
+                                            _selling,
+                                            AppStrings.sellingPrice,
+                                            money: true,
+                                            onChanged: (_) => setState(() {}),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                             ),
                           const SizedBox(height: 22),
                           if (_unitsLoading)

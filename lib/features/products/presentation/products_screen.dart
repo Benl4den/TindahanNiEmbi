@@ -96,6 +96,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: nextArchive,
                     decoration: const InputDecoration(
                       labelText: 'Product status',
@@ -115,6 +116,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<int>(
+                    isExpanded: true,
                     initialValue: nextCategory,
                     decoration: const InputDecoration(labelText: 'Category'),
                     hint: const Text('All categories'),
@@ -133,6 +135,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: const Text('Clear category'),
                   ),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: nextGroup,
                     decoration: const InputDecoration(labelText: 'Group'),
                     hint: const Text('All groups'),
@@ -150,6 +153,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: const Text('Clear group'),
                   ),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: nextOwnership,
                     decoration: const InputDecoration(labelText: 'Ownership'),
                     hint: const Text('All ownership'),
@@ -163,6 +167,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: const Text('Clear ownership'),
                   ),
                   DropdownButtonFormField<ProductStockStatus>(
+                    isExpanded: true,
                     initialValue: nextStatus,
                     decoration: const InputDecoration(
                       labelText: 'Stock status',
@@ -189,6 +194,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: const Text('Clear stock status'),
                   ),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: nextSort,
                     decoration: const InputDecoration(labelText: 'Sort by'),
                     items:
@@ -365,6 +371,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
   void _message(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
+  List<Product> _visibleProducts(List<Product> source) {
+    final query = _search.text.trim().toLowerCase();
+    return source
+        .where(
+          (product) =>
+              query.isEmpty || product.name.toLowerCase().contains(query),
+        )
+        .where(
+          (product) =>
+              stockStatus == null || product.stockStatus == stockStatus,
+        )
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -375,29 +395,28 @@ class _ProductsScreenState extends State<ProductsScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: AppStrings.searchProducts,
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _search.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Clear search',
-                              onPressed: _clearSearch,
-                              icon: const Icon(Icons.close),
-                            ),
-                    ),
-                    onChanged: _searchNow,
+            padding: EdgeInsets.all(
+              MediaQuery.sizeOf(context).width < 600 ? 16 : 20,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final search = TextField(
+                  controller: _search,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: AppStrings.searchProducts,
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close),
+                          ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                ToggleButtons(
+                  onChanged: _searchNow,
+                );
+                final archive = ToggleButtons(
                   isSelected: [
                     archiveFilter == 'ACTIVE',
                     archiveFilter == 'ARCHIVED',
@@ -406,26 +425,52 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       _setArchiveFilter(index == 0 ? 'ACTIVE' : 'ARCHIVED'),
                   borderRadius: BorderRadius.circular(10),
                   constraints: const BoxConstraints(minHeight: 48),
-                  children: const [
+                  children: [
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('Active'),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: constraints.maxWidth < 320 ? 8 : 12,
+                      ),
+                      child: const Text('Active'),
                     ),
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('Archived'),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: constraints.maxWidth < 320 ? 8 : 12,
+                      ),
+                      child: const Text('Archived'),
                     ),
                   ],
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
+                );
+                final filters = OutlinedButton.icon(
                   onPressed: _filterSort,
                   icon: const Icon(Icons.tune),
                   label: Text(
                     'Filter & Sort${_activeFilters == 0 ? '' : ' ($_activeFilters)'}',
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 650) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      search,
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [archive, filters],
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: search),
+                    const SizedBox(width: 10),
+                    archive,
+                    const SizedBox(width: 10),
+                    filters,
+                  ],
+                );
+              },
             ),
           ),
           Expanded(
@@ -445,18 +490,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   );
                 }
                 final query = _search.text.trim().toLowerCase();
-                final products = (snapshot.data ?? const <Product>[])
-                    .where(
-                      (product) =>
-                          query.isEmpty ||
-                          product.name.toLowerCase().contains(query),
-                    )
-                    .where(
-                      (product) =>
-                          stockStatus == null ||
-                          product.stockStatus == stockStatus,
-                    )
-                    .toList();
+                final products = _visibleProducts(
+                  snapshot.data ?? const <Product>[],
+                );
                 products.sort(
                   (a, b) => switch (sort) {
                     'Lowest Stock' => a.currentQuantity.compareTo(
@@ -485,13 +521,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 }
                 final width = MediaQuery.sizeOf(context).width;
                 return GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  padding: EdgeInsets.fromLTRB(
+                    width < 600 ? 16 : 20,
+                    0,
+                    width < 600 ? 16 : 20,
+                    100,
+                  ),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: width >= 1000
                         ? 4
                         : width >= 650
                         ? 3
-                        : 2,
+                        : 1,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                     mainAxisExtent: 430,
@@ -516,10 +557,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
         ],
       ),
     ),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _form,
-      icon: const Icon(Icons.add, size: 30),
-      label: const Text(AppStrings.addProduct),
+    floatingActionButton: FutureBuilder<List<Product>>(
+      future: _products,
+      builder: (_, snapshot) {
+        if (snapshot.hasData &&
+            _search.text.trim().isEmpty &&
+            _visibleProducts(snapshot.data!).isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return FloatingActionButton.extended(
+          onPressed: _form,
+          icon: const Icon(Icons.add, size: 30),
+          label: const Text(AppStrings.addProduct),
+        );
+      },
     ),
   );
 
@@ -539,23 +590,29 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
     final edit = await showDialog<bool>(
       context: context,
-      builder: (dialog) => Dialog(
-        insetPadding: const EdgeInsets.all(18),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920, maxHeight: 820),
-          child: ProductDetailsScreen(
-            product: product,
-            repository: widget.repository as SqliteProductRepository,
-            access: widget.access!,
-            categoryName: categories
-                .where((category) => category.id == product.categoryId)
-                .map((category) => category.name)
-                .firstOrNull,
-            onEdit: () => Navigator.of(dialog).pop(true),
+      builder: (dialog) {
+        final details = ProductDetailsScreen(
+          product: product,
+          repository: widget.repository as SqliteProductRepository,
+          access: widget.access!,
+          categoryName: categories
+              .where((category) => category.id == product.categoryId)
+              .map((category) => category.name)
+              .firstOrNull,
+          onEdit: () => Navigator.of(dialog).pop(true),
+        );
+        if (MediaQuery.sizeOf(dialog).width < 600) {
+          return Dialog.fullscreen(child: details);
+        }
+        return Dialog(
+          insetPadding: const EdgeInsets.all(18),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 820),
+            child: details,
           ),
-        ),
-      ),
+        );
+      },
     );
     if (edit == true && mounted) await _form(product);
     if (mounted) setState(_reload);

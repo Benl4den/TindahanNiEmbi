@@ -441,11 +441,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
       title: const Text(AppStrings.inventory),
       actions: [
         const HelpButton(topic: HelpTopicId.inventory),
-        TextButton.icon(
-          onPressed: _showHistory,
-          icon: const Icon(Icons.history),
-          label: const Text('Inventory History'),
-        ),
+        if (MediaQuery.sizeOf(context).width < 600)
+          IconButton(
+            tooltip: 'Inventory History',
+            onPressed: _showHistory,
+            icon: const Icon(Icons.history),
+          )
+        else
+          TextButton.icon(
+            onPressed: _showHistory,
+            icon: const Icon(Icons.history),
+            label: const Text('Inventory History'),
+          ),
         const SizedBox(width: 8),
       ],
     ),
@@ -640,7 +647,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           children: [
             search,
             const SizedBox(height: 10),
-            Row(children: [filter, const SizedBox(width: 10), sort]),
+            Wrap(spacing: 10, runSpacing: 8, children: [filter, sort]),
           ],
         );
       },
@@ -705,9 +712,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'Owned Inventory Summary',
-                style: Theme.of(context).textTheme.titleLarge,
+              Expanded(
+                child: Text(
+                  'Owned Inventory Summary',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
               const SizedBox(width: 6),
               const Tooltip(
@@ -871,15 +880,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Icon(Icons.bar_chart, color: Color(0xFF65D7A6)),
-            const SizedBox(width: 8),
             Text(
               'Inventory Health',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(width: 10),
             const Chip(
               label: Text('PRO'),
               visualDensity: VisualDensity.compact,

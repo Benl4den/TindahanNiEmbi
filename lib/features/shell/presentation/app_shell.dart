@@ -98,8 +98,13 @@ class _State extends State<AppShell> {
   final _backController = SectionBackController();
   bool _handlingBack = false;
   int selected = 0;
+  bool _phoneLandingSet = false;
+  bool _staffHomeSelected = false;
+  bool _phoneOpenedFromMore = false;
+  final ValueNotifier<bool> _phoneSaleDetailVisible = ValueNotifier(false);
   bool dashboardAddExpense = false;
   int salesRevision = 0;
+  Future<List<Object>>? _salesFuture;
   int restockCount = 0;
   int productCount = 0;
   int? pendingConsignorId;
@@ -368,17 +373,78 @@ class _State extends State<AppShell> {
   void dispose() {
     AppRefreshController.instance.removeListener(_dataChanged);
     AppPlanController.instance.removeListener(_planChanged);
+    _phoneSaleDetailVisible.dispose();
     super.dispose();
   }
 
   void _select(int destination) {
     setState(() {
+      if (selected == -1 && destination != -1) {
+        _phoneOpenedFromMore = true;
+      } else if (destination == -1 || const {0, 6, 13}.contains(destination)) {
+        _phoneOpenedFromMore = false;
+      }
+      _staffHomeSelected = false;
+      _phoneSaleDetailVisible.value = false;
       pendingConsignorId = null;
       pendingConsignmentProductId = null;
       selected = destination;
       if (destination == 13) dashboardRevision++;
       if (destination != 7) dashboardAddExpense = false;
-      if (destination == 0) salesRevision++;
+      if (destination == 0) {
+        salesRevision++;
+        _salesFuture = null;
+      }
+    });
+  }
+
+  Future<List<Object>> _loadSalesData() =>
+      _salesFuture ??= Future.wait<Object>([
+        SqliteProductRepository(widget.database).searchActive(),
+        SqliteCategoryRepository(widget.database).getActive(),
+        ReportsRepository(widget.database).frequentProductIds(),
+        SpecialInventoryRepository(widget.database).products('SELECTA'),
+      ]);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_phoneLandingSet) {
+      _phoneLandingSet = true;
+      if (MediaQuery.sizeOf(context).width < 900 &&
+          widget.role == UserRole.owner) {
+        selected = 13;
+      }
+    }
+  }
+
+  void _selectPhoneTab(int index) {
+    if (widget.role != UserRole.owner &&
+        selected == 0 &&
+        (index == 0 || index == 1)) {
+      setState(() => _staffHomeSelected = index == 0);
+      return;
+    }
+    if ((index == 0 && selected == 13) ||
+        (index == 1 && selected == 0 && !_staffHomeSelected) ||
+        (index == 2 && selected == 6) ||
+        (index == 3 && selected == -1)) {
+      return;
+    }
+    if (index == 0 && widget.role != UserRole.owner) {
+      if (selected == 0) {
+        setState(() => _staffHomeSelected = true);
+      } else {
+        _select(0);
+        _staffHomeSelected = true;
+      }
+      return;
+    }
+    _select(switch (index) {
+      0 => 13,
+      1 => 0,
+      2 => 6,
+      _ => -1,
     });
   }
 
@@ -391,6 +457,12 @@ class _State extends State<AppShell> {
     _handlingBack = true;
     try {
       if (await _backController.handleBack() || !mounted) return;
+      if (_phoneOpenedFromMore &&
+          MediaQuery.sizeOf(context).width < 900 &&
+          selected != -1) {
+        _select(-1);
+        return;
+      }
       if (selected != 0) {
         _select(0);
       } else {
@@ -523,22 +595,63 @@ class _State extends State<AppShell> {
                   _sidebar(destinations, allowedTargets, updateSidebar),
             ),
           if (wide) const VerticalDivider(width: 1),
-          Expanded(child: body),
+          Expanded(
+            child: wide
+                ? body
+                : Column(
+                    children: [
+                      if (selected == 0)
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _phoneSaleDetailVisible,
+                          builder: (_, hidden, _) => hidden
+                              ? const SizedBox.shrink()
+                              : _phoneSalesHeader(),
+                        ),
+                      Expanded(child: body),
+                    ],
+                  ),
+          ),
         ],
       ),
       bottomNavigationBar: wide
           ? null
-          : NavigationBar(
-              selectedIndex: const [0, 6, 3].contains(selected)
-                  ? const [0, 6, 3].indexOf(selected)
-                  : 3,
-              onDestinationSelected: (i) => _select(i == 3 ? 10 : [0, 6, 3][i]),
-              destinations: [
-                bodyDestinations[0],
-                bodyDestinations[6],
-                bodyDestinations[3],
-                bodyDestinations[10],
-              ],
+          : ValueListenableBuilder<bool>(
+              valueListenable: _phoneSaleDetailVisible,
+              builder: (_, hidden, _) => hidden
+                  ? const SizedBox.shrink()
+                  : NavigationBar(
+                      selectedIndex: _staffHomeSelected
+                          ? 0
+                          : selected == 13
+                          ? 0
+                          : selected == 0
+                          ? 1
+                          : selected == 6
+                          ? 2
+                          : 3,
+                      onDestinationSelected: _selectPhoneTab,
+                      destinations: const [
+                        NavigationDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home),
+                          label: 'Home',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.point_of_sale_outlined),
+                          selectedIcon: Icon(Icons.point_of_sale),
+                          label: 'Sales',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.people_alt_outlined),
+                          selectedIcon: Icon(Icons.people_alt),
+                          label: 'UTANG',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.more_horiz),
+                          label: 'More',
+                        ),
+                      ],
+                    ),
             ),
     );
     return PopScope<Object?>(
@@ -553,6 +666,7 @@ class _State extends State<AppShell> {
   int dashboardRevision = 0;
 
   Widget _body() => switch (selected) {
+    -1 => _phoneMoreHub(),
     13 =>
       widget.role == UserRole.owner
           ? DashboardScreen(
@@ -566,25 +680,22 @@ class _State extends State<AppShell> {
             )
           : _denied(),
     0 => FutureBuilder<List<Object>>(
-      future: Future.wait<Object>([
-        SqliteProductRepository(widget.database).searchActive(),
-        SqliteCategoryRepository(widget.database).getActive(),
-        ReportsRepository(widget.database).frequentProductIds(),
-        SpecialInventoryRepository(widget.database).products('SELECTA'),
-      ]),
+      future: _loadSalesData(),
       builder: (_, s) {
         if (s.hasError) {
           return AppStateView.error(
             title: 'Could not load Sales',
             message: 'Please check the store data and try again.',
             actionLabel: 'Try Again',
-            onAction: () => setState(() {}),
+            onAction: () => setState(() => _salesFuture = null),
           );
         }
         if (!s.hasData) return const AppLoadingView(label: 'Loading Sales…');
         return CashSaleScreen(
           key: ValueKey('sales-$salesRevision'),
           embedded: true,
+          onPhoneDetailVisibilityChanged: (visible) =>
+              _phoneSaleDetailVisible.value = visible,
           products: s.data![0] as List<Product>,
           categoryNames: {
             for (final c in s.data![1] as List<Category>) c.id: c.name,
@@ -1074,6 +1185,131 @@ class _State extends State<AppShell> {
     message:
         'Lock the app and sign in with the owner PIN to open this section.',
   );
+
+  Widget _phoneSalesHeader() => SafeArea(
+    bottom: false,
+    child: Material(
+      color: Theme.of(context).colorScheme.surface,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 58,
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Open More',
+                  onPressed: () => _select(-1),
+                  icon: const Icon(Icons.menu),
+                ),
+                const Expanded(child: BrandLogo(horizontal: true, size: 34)),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Tooltip(
+                    message: widget.role == UserRole.owner ? 'Owner' : 'Staff',
+                    child: CircleAvatar(
+                      radius: 17,
+                      child: Icon(
+                        Icons.person_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+        ],
+      ),
+    ),
+  );
+
+  Widget _phoneMoreHub() {
+    final owner = widget.role == UserRole.owner;
+    Widget group(String title, List<(int, String, IconData)> entries) {
+      if (entries.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var i = 0; i < entries.length; i++) ...[
+                    if (i > 0) const Divider(height: 1),
+                    ListTile(
+                      leading: Icon(entries[i].$3),
+                      title: Text(entries[i].$2),
+                      trailing:
+                          owner &&
+                              AppPlanController.instance.plan == AppPlan.free &&
+                              const {1, 2, 12, 15, 16}.contains(entries[i].$1)
+                          ? const Chip(label: Text('PRO'))
+                          : const Icon(Icons.chevron_right),
+                      onTap: () => _select(entries[i].$1),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SafeArea(
+      child: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Text(
+              'More',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+          ),
+          group('STORE', [
+            (3, 'Inventory', Icons.inventory_2_outlined),
+            (4, 'Restock', Icons.add_shopping_cart),
+            if (owner) (5, 'Products', Icons.inventory_outlined),
+            if (owner) (14, 'Supplier Contacts', Icons.contact_phone_outlined),
+          ]),
+          group('MONEY', [
+            (12, 'GCash', Icons.account_balance_wallet_outlined),
+            (16, 'Maya', Icons.account_balance_wallet_outlined),
+            (7, 'Expenses', Icons.receipt_long_outlined),
+            if (owner)
+              (15, '5/6 Loan Management', Icons.account_balance_outlined),
+          ]),
+          if (owner)
+            group('MANAGEMENT', [
+              (1, 'Managed Brands / Selecta', Icons.sell_outlined),
+              (2, 'Consignment', Icons.handshake_outlined),
+            ]),
+          group('RECORDS & INSIGHTS', [
+            (11, 'Transaction History', Icons.history),
+            if (owner) (8, 'Daily Closing', Icons.today_outlined),
+            if (owner) (9, 'Reports', Icons.assessment_outlined),
+          ]),
+          group('SYSTEM', [(10, 'Settings', Icons.settings_outlined)]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: OutlinedButton.icon(
+              onPressed: widget.lock,
+              icon: const Icon(Icons.lock_outline),
+              label: const Text('Lock App'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _more() {
     final owner = widget.role == UserRole.owner;
     final items =

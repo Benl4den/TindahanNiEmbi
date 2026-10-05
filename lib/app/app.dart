@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import '../widgets/brand_logo.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../core/constants/app_strings.dart';
@@ -9,6 +13,7 @@ import '../database/app_database.dart';
 import '../features/security/presentation/auth_gate.dart';
 import '../features/shell/presentation/app_shell.dart';
 import '../services/auth_service.dart';
+import '../services/device_orientation_policy.dart';
 import '../repositories/category_repository.dart';
 import '../services/settings_service.dart';
 import '../widgets/app_state_view.dart';
@@ -20,17 +25,43 @@ class TindahanNiEmbiApp extends StatefulWidget {
   State<TindahanNiEmbiApp> createState() => _State();
 }
 
-class _State extends State<TindahanNiEmbiApp> {
+class _State extends State<TindahanNiEmbiApp> with WidgetsBindingObserver {
   late final AppDatabase db;
   late Future<Database> startup;
   AppThemePreference themePreference = AppThemePreference.system;
   int _sessionVersion = 0;
+  ui.FlutterView? _view;
+  bool? _lastCompactDisplay;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     db = widget.database ?? AppDatabase();
     startup = _bootstrap();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _view = View.maybeOf(context);
+    _syncOrientation();
+  }
+
+  @override
+  void didChangeMetrics() => _syncOrientation();
+
+  void _syncOrientation() {
+    final display = _view?.display;
+    if (display == null) return;
+    final isCompact = isCompactDisplay(display.size, display.devicePixelRatio);
+    if (_lastCompactDisplay == isCompact) return;
+    _lastCompactDisplay = isCompact;
+    unawaited(
+      SystemChrome.setPreferredOrientations(
+        preferredOrientationsForDisplay(display),
+      ),
+    );
   }
 
   Future<Database> _bootstrap() async {
@@ -56,6 +87,7 @@ class _State extends State<TindahanNiEmbiApp> {
   });
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     db.close();
     super.dispose();
   }

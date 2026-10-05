@@ -39,6 +39,7 @@ class CashSaleScreen extends StatefulWidget {
     this.selectaProductIds = const {},
     this.reversals,
     this.drafts,
+    this.onPhoneDetailVisibilityChanged,
   }) : assert(repository != null || saveSale != null);
   final List<Product> products;
   final CashSaleRepository? repository;
@@ -52,6 +53,7 @@ class CashSaleScreen extends StatefulWidget {
   final Set<int> selectaProductIds;
   final ReversalRepository? reversals;
   final SaleDraftRepository? drafts;
+  final ValueChanged<bool>? onPhoneDetailVisibilityChanged;
   @override
   State<CashSaleScreen> createState() => _State();
 }
@@ -74,6 +76,30 @@ class _State extends State<CashSaleScreen> {
   Timer? _feedbackTimer;
   String? _highlightedLine;
   String? _cartFeedback;
+  bool _phoneCartOpen = false;
+  CashSaleResult? _phoneCompletedSale;
+  PaymentMethod _phonePaymentMethod = PaymentMethod.cash;
+  bool _utangSubmitting = false;
+  final Set<int> _addingProducts = {};
+
+  bool get _phoneLayout => MediaQuery.sizeOf(context).width < 900;
+
+  void _showPhoneCart() {
+    if (saving || c.lines.isEmpty) return;
+    setState(() => _phoneCartOpen = true);
+    widget.onPhoneDetailVisibilityChanged?.call(true);
+  }
+
+  void _closePhoneDetail() {
+    setState(() {
+      if (_phoneCompletedSale != null) {
+        _phonePaymentMethod = PaymentMethod.cash;
+      }
+      _phoneCartOpen = false;
+      _phoneCompletedSale = null;
+    });
+    widget.onPhoneDetailVisibilityChanged?.call(false);
+  }
 
   @override
   void dispose() {
@@ -265,11 +291,41 @@ class _State extends State<CashSaleScreen> {
   }
 
   Future<void> _addProduct(Product product) async {
+    if (!_addingProducts.add(product.id)) return;
+    try {
+      await _addProductUnlocked(product);
+    } finally {
+      _addingProducts.remove(product.id);
+    }
+  }
+
+  Future<void> _addProductUnlocked(Product product) async {
+    if (saving || _utangSubmitting) return;
     if (product.currentQuantity <= 0) {
       await showStockAlert(context, product.name, product.currentQuantity);
       return;
     }
-    final choices = options[product.id] ?? const <SellingOption>[];
+    List<SellingOption> choices;
+    if (options.containsKey(product.id)) {
+      choices = options[product.id]!;
+    } else if (widget.repository != null) {
+      try {
+        choices = await ProductUnitRepository(widget.repository!.db)
+            .sellingOptions(product.id);
+      } catch (_) {
+        if (mounted) {
+          await showFriendlyError(
+            context,
+            title: 'Could Not Load Selling Options',
+            message: 'Please try this product again in a moment.',
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+    } else {
+      choices = const <SellingOption>[];
+    }
     final usable = choices.isEmpty
         ? [
             SellingOption(
@@ -289,7 +345,21 @@ class _State extends State<CashSaleScreen> {
       _changeCart(() => c.add(product, usable.single));
       return;
     }
-    var selected = usable.first;
+    if (_phoneLayout) {
+      final result = await _phoneOptionSheet(product, usable);
+      if (result != null && mounted) {
+        _changeCart(
+          () => c.add(
+            product,
+            result.option,
+            quantityValue: result.value,
+            quantityScale: result.scale,
+          ),
+        );
+      }
+      return;
+    }
+    var selected = usable.where((x) => x.isDefault).firstOrNull ?? usable.first;
     final quantity = TextEditingController(text: '1');
     String? error;
     final result = await showDialog<({SellingOption option, int value, int scale})>(
@@ -399,6 +469,292 @@ class _State extends State<CashSaleScreen> {
     }
   }
 
+  Future<({SellingOption option, int value, int scale})?> _phoneOptionSheet(
+    Product product,
+    List<SellingOption> usable,
+  ) async {
+    var selected = usable.where((x) => x.isDefault).firstOrNull ?? usable.first;
+    final quantity = TextEditingController(text: '1');
+    String? error;
+    final result =
+        await showModalBottomSheet<
+          ({SellingOption option, int value, int scale})
+        >(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          builder: (sheetContext) => StatefulBuilder(
+            builder: (_, setSheetState) {
+              final measured =
+                  product.baseUnitCode == 'GRAM' &&
+                  selected.baseQuantity == 1000;
+              ({int value, int scale})? parsed;
+              try {
+                parsed = parseSaleQuantity(quantity.text, measured: measured);
+              } on FormatException {
+                // Keep the preview blank until a valid quantity is entered.
+              }
+              final total = parsed == null
+                  ? 0
+                  : (selected.priceCentavos * parsed.value +
+                            parsed.scale ~/ 2) ~/
+                        parsed.scale;
+              void adjust(int direction) {
+                final current = double.tryParse(quantity.text) ?? 0;
+                final next = current + (measured ? .25 : 1) * direction;
+                quantity.text = next <= 0
+                    ? (measured ? '0.25' : '1')
+                    : measured
+                    ? next
+                          .toStringAsFixed(2)
+                          .replaceFirst(RegExp(r'0+$'), '')
+                          .replaceFirst(RegExp(r'\.$'), '')
+                    : next.toInt().toString();
+                setSheetState(() => error = null);
+              }
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight:
+                        (MediaQuery.sizeOf(sheetContext).height -
+                            MediaQuery.viewInsetsOf(sheetContext).bottom) *
+                        .85,
+                  ),
+                  child: Center(
+                    heightFactor: 1,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 58,
+                                  height: 58,
+                                  child: ProductImage(path: product.photoPath),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product.name,
+                                        style: Theme.of(sheetContext)
+                                            .textTheme
+                                            .titleLarge,
+                                      ),
+                                      const Text('Select selling option'),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Close',
+                                  onPressed: () => Navigator.pop(sheetContext),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Selling Option',
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            for (final option in usable)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 7),
+                                child: Material(
+                                  color: selected.id == option.id
+                                      ? Theme.of(sheetContext)
+                                            .colorScheme
+                                            .primaryContainer
+                                      : Theme.of(sheetContext)
+                                            .colorScheme
+                                            .surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => setSheetState(() {
+                                      selected = option;
+                                      quantity.text = '1';
+                                      error = null;
+                                    }),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            selected.id == option.id
+                                                ? Icons.radio_button_checked
+                                                : Icons.radio_button_unchecked,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(child: Text(option.name)),
+                                          Text(
+                                            money(option.priceCentavos),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 10),
+                            Text(
+                              measured ? 'Quantity (kg)' : 'Quantity',
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .titleSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                IconButton.filledTonal(
+                                  onPressed: () => adjust(-1),
+                                  icon: const Icon(Icons.remove),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: quantity,
+                                    textAlign: TextAlign.center,
+                                    keyboardType:
+                                        TextInputType.numberWithOptions(
+                                          decimal: measured,
+                                        ),
+                                    onChanged: (_) =>
+                                        setSheetState(() => error = null),
+                                    decoration: InputDecoration(
+                                      errorText: error,
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton.filled(
+                                  onPressed: () => adjust(1),
+                                  icon: const Icon(Icons.add),
+                                ),
+                              ],
+                            ),
+                            if (measured) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final amount in const [
+                                    '0.25',
+                                    '0.5',
+                                    '1',
+                                    '2',
+                                    '5',
+                                  ])
+                                    ActionChip(
+                                      label: Text(amount),
+                                      onPressed: () => setSheetState(() {
+                                        quantity.text = amount;
+                                        error = null;
+                                      }),
+                                    ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Text('Available stock: ${_stockText(product)}'),
+                            const Divider(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Total',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  money(total),
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton(
+                              onPressed: () {
+                                try {
+                                  final chosen = parseSaleQuantity(
+                                    quantity.text,
+                                    measured: measured,
+                                  );
+                                  if (chosen.value *
+                                          selected.baseQuantity %
+                                          chosen.scale !=
+                                      0) {
+                                    throw const FormatException(
+                                      'Quantity cannot be converted exactly.',
+                                    );
+                                  }
+                                  final reserved = c.lines
+                                      .where(
+                                        (line) => line.product.id == product.id,
+                                      )
+                                      .fold<int>(
+                                        0,
+                                        (sum, line) => sum + line.baseQuantity,
+                                      );
+                                  if (reserved +
+                                          chosen.value *
+                                              selected.baseQuantity ~/
+                                              chosen.scale >
+                                      product.currentQuantity) {
+                                    throw const FormatException(
+                                      'Not enough stock for this quantity.',
+                                    );
+                                  }
+                                  Navigator.pop(sheetContext, (
+                                    option: selected,
+                                    value: chosen.value,
+                                    scale: chosen.scale,
+                                  ));
+                                } on FormatException catch (e) {
+                                  setSheetState(() => error = e.message);
+                                }
+                              },
+                              child: const Text('Add to Sale'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+    quantity.dispose();
+    return result;
+  }
+
   Future<void> _loadSummary() async {
     if (widget.repository == null) return;
     final values = await Future.wait<Object?>([
@@ -419,7 +775,7 @@ class _State extends State<CashSaleScreen> {
 
   Future<void> save() async {
     if (saving || c.totalCentavos == 0) return;
-    var paymentMethod = PaymentMethod.cash;
+    var paymentMethod = _phoneLayout ? _phonePaymentMethod : PaymentMethod.cash;
     final saleTotal = c.totalCentavos;
     var received = (saleTotal / 100).toStringAsFixed(2);
     final receivedController = TextEditingController(text: received);
@@ -442,7 +798,7 @@ class _State extends State<CashSaleScreen> {
             children: [
               Icon(Icons.receipt_long),
               SizedBox(width: 10),
-              Text('Review Sale'),
+              Expanded(child: Text('Review Sale')),
             ],
           ),
           contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
@@ -451,28 +807,29 @@ class _State extends State<CashSaleScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SegmentedButton<PaymentMethod>(
-                  segments: const [
-                    ButtonSegment(
-                      value: PaymentMethod.cash,
-                      icon: Icon(Icons.payments_outlined),
-                      label: Text('Cash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.gcash,
-                      icon: Icon(Icons.phone_android),
-                      label: Text('GCash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.maya,
-                      icon: Icon(Icons.account_balance_wallet_outlined),
-                      label: Text('Maya'),
-                    ),
-                  ],
-                  selected: {paymentMethod},
-                  onSelectionChanged: (value) =>
-                      setDialog(() => paymentMethod = value.single),
-                ),
+                if (!_phoneLayout)
+                  SegmentedButton<PaymentMethod>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PaymentMethod.cash,
+                        icon: Icon(Icons.payments_outlined),
+                        label: Text('Cash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.gcash,
+                        icon: Icon(Icons.phone_android),
+                        label: Text('GCash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.maya,
+                        icon: Icon(Icons.account_balance_wallet_outlined),
+                        label: Text('Maya'),
+                      ),
+                    ],
+                    selected: {paymentMethod},
+                    onSelectionChanged: (value) =>
+                        setDialog(() => paymentMethod = value.single),
+                  ),
                 if (paymentMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: 10),
                   TextField(
@@ -664,6 +1021,14 @@ class _State extends State<CashSaleScreen> {
       await _clearSavedDraft();
       await _loadSummary();
       if (result != null && mounted) {
+        if (_phoneLayout) {
+          setState(() {
+            _phoneCartOpen = false;
+            _phoneCompletedSale = result;
+          });
+          widget.onPhoneDetailVisibilityChanged?.call(true);
+          return;
+        }
         await showDialog<void>(
           context: context,
           builder: (x) => AlertDialog(
@@ -745,24 +1110,39 @@ class _State extends State<CashSaleScreen> {
 
   List<UtangItemDraft> get _items => c.drafts;
   Future<void> checkoutUtang() async {
-    if (widget.onUtang == null || c.totalCentavos == 0) return;
-    final ok = await widget.onUtang!(_items);
-    if (ok) {
-      final fresh =
-          await (widget.loadProducts?.call() ?? Future.value(products));
-      if (mounted) {
-        setState(() {
-          products = fresh;
-          c = ProductSelectionController(fresh);
-        });
-        await _clearSavedDraft();
+    if (_utangSubmitting || widget.onUtang == null || c.totalCentavos == 0) {
+      return;
+    }
+    setState(() => _utangSubmitting = true);
+    try {
+      final ok = await widget.onUtang!(_items);
+      if (ok) {
+        final fresh =
+            await (widget.loadProducts?.call() ?? Future.value(products));
+        if (mounted) {
+          setState(() {
+            products = fresh;
+            c = ProductSelectionController(fresh);
+          });
+          await _clearSavedDraft();
+          await _loadSummary();
+          if (mounted && _phoneCartOpen) {
+            _phonePaymentMethod = PaymentMethod.cash;
+            _closePhoneDetail();
+          }
+        }
       }
-      await _loadSummary();
+    } finally {
+      if (mounted) setState(() => _utangSubmitting = false);
     }
   }
 
   Future<bool> _handleDeviceBack() async {
     if (saving) return true;
+    if (_phoneCompletedSale != null || _phoneCartOpen) {
+      _closePhoneDetail();
+      return true;
+    }
     if (c.lines.isEmpty) return false;
     final leave = await confirmLeavingPage(
       context,
@@ -808,13 +1188,24 @@ class _State extends State<CashSaleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final landscape = MediaQuery.sizeOf(context).width >= 900;
-    final content = Row(
-      children: [
-        Expanded(flex: landscape ? 3 : 1, child: _catalog()),
-        if (landscape) SizedBox(width: 360, child: _cart()),
-      ],
-    );
+    final landscape = !_phoneLayout;
+    final content = landscape
+        ? Row(
+            children: [
+              Expanded(flex: 3, child: _catalog()),
+              SizedBox(width: 360, child: _cart()),
+            ],
+          )
+        : _phoneCompletedSale != null
+        ? _phoneSuccess(_phoneCompletedSale!)
+        : _phoneCartOpen
+        ? _phoneCurrentSale()
+        : Column(
+            children: [
+              Expanded(child: _catalog()),
+              if (c.lines.isNotEmpty) _phoneCartBar(),
+            ],
+          );
     if (widget.embedded) {
       return SectionBackHandler(onBack: _handleDeviceBack, child: content);
     }
@@ -831,23 +1222,385 @@ class _State extends State<CashSaleScreen> {
           actions: const [HelpButton(topic: HelpTopicId.cashSale)],
         ),
         body: content,
-        floatingActionButton: landscape
-            ? null
-            : FloatingActionButton.extended(
-                onPressed: () => showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => SizedBox(
-                    height: MediaQuery.sizeOf(context).height * .8,
-                    child: _cart(),
-                  ),
-                ),
-                icon: const Icon(Icons.shopping_cart),
-                label: Text('Cart (${c.selectedProducts.length})'),
-              ),
       ),
     );
   }
+
+  Widget _phoneCartBar() => SafeArea(
+    top: false,
+    bottom: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
+      child: Material(
+        color: Theme.of(context).colorScheme.primary,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _showPhoneCart,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                const Icon(Icons.shopping_cart_outlined, color: Colors.white),
+                const SizedBox(width: 10),
+                Text(
+                  '${c.lines.length} ${c.lines.length == 1 ? 'item' : 'items'}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  money(c.totalCentavos),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right, color: Colors.white),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _phoneCurrentSale() {
+    final colors = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Add more products',
+                  onPressed: saving ? null : _closePhoneDetail,
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                Expanded(
+                  child: Text(
+                    'Current Sale',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                for (final line in c.lines)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 54,
+                                height: 54,
+                                child: ProductImage(
+                                  path: line.product.photoPath,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            line.product.name,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        PopupMenuButton<String>(
+                                          tooltip: 'Item actions',
+                                          onSelected: (_) => _changeCart(
+                                            () => c.removeLine(line),
+                                          ),
+                                          itemBuilder: (_) => const [
+                                            PopupMenuItem(
+                                              value: 'remove',
+                                              child: Text('Remove item'),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '${money(line.option.priceCentavos)} / ${line.displayUnit}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      children: [
+                                        IconButton.filledTonal(
+                                          tooltip: 'Decrease quantity',
+                                          onPressed: saving
+                                              ? null
+                                              : () => _changeCart(
+                                                  () => c.adjustLine(line, -1),
+                                                ),
+                                          icon: const Icon(Icons.remove),
+                                        ),
+                                        Text(
+                                          line.quantityText,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        IconButton.filledTonal(
+                                          tooltip: 'Increase quantity',
+                                          onPressed: saving
+                                              ? null
+                                              : () => _changeCart(
+                                                  () => c.adjustLine(line, 1),
+                                                ),
+                                          icon: const Icon(Icons.add),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              money(line.lineTotalCentavos),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: saving ? null : _closePhoneDetail,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add more products'),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Items (${c.lines.length})'),
+                            Text(money(c.totalCentavos)),
+                          ],
+                        ),
+                        const Divider(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                              ),
+                            ),
+                            Text(
+                              money(c.totalCentavos),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Payment Method',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<PaymentMethod>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: PaymentMethod.cash,
+                      label: Text('Cash'),
+                      icon: Icon(Icons.payments_outlined),
+                    ),
+                    ButtonSegment(
+                      value: PaymentMethod.gcash,
+                      label: Text('GCash'),
+                    ),
+                    ButtonSegment(
+                      value: PaymentMethod.maya,
+                      label: Text('Maya'),
+                    ),
+                  ],
+                  selected: {_phonePaymentMethod},
+                  onSelectionChanged: saving
+                      ? null
+                      : (value) =>
+                            setState(() => _phonePaymentMethod = value.single),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: c.totalCentavos == 0 || saving ? null : save,
+                    child: Text(saving ? 'Saving…' : 'Complete Sale'),
+                  ),
+                ),
+                if (widget.onUtang != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange.shade800,
+                      ),
+                      onPressed:
+                          c.totalCentavos == 0 || saving || _utangSubmitting
+                          ? null
+                          : checkoutUtang,
+                      child: const Text('UTANG'),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colors.error,
+                    ),
+                    onPressed: c.lines.isEmpty || saving ? null : clearCart,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Clear Sale'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _phoneSuccess(CashSaleResult result) {
+    final local = result.occurredAt.toLocal();
+    final date = MaterialLocalizations.of(context).formatMediumDate(local);
+    final time = TimeOfDay.fromDateTime(local).format(context);
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 30),
+          Center(
+            child: CircleAvatar(
+              radius: 44,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              child: Icon(
+                Icons.check,
+                size: 54,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Center(
+            child: Text(
+              'Sale Completed!',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Center(child: Text('Transaction has been recorded.')),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Text('Total Amount'),
+                  Text(
+                    money(result.totalCentavos),
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const Divider(height: 26),
+                  _successRow('Payment Method', result.paymentMethod.label),
+                  _successRow('Date & Time', '$date $time'),
+                  _successRow('Reference No.', result.reference),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: _closePhoneDetail,
+            icon: const Icon(Icons.add_shopping_cart),
+            label: const Text('New Sale'),
+          ),
+          const SizedBox(height: 18),
+          Text('Last Sale', style: Theme.of(context).textTheme.titleMedium),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: Text(money(result.totalCentavos)),
+              subtitle: Text(
+                '${result.itemCount} items • ${result.paymentMethod.label} • $time',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showHistory(todayOnly: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _successRow(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _catalog() {
     final shown = products
@@ -871,6 +1624,17 @@ class _State extends State<CashSaleScreen> {
     }
     return Column(
       children: [
+        if (_phoneLayout && widget.embedded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Sales',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -944,17 +1708,88 @@ class _State extends State<CashSaleScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: cols,
-                  mainAxisExtent: 360,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  mainAxisExtent: _phoneLayout ? 230 : 360,
+                  crossAxisSpacing: _phoneLayout ? 8 : 12,
+                  mainAxisSpacing: _phoneLayout ? 8 : 12,
                 ),
                 itemCount: shown.length,
-                itemBuilder: (_, i) => _product(shown[i]),
+                itemBuilder: (_, i) =>
+                    _phoneLayout ? _phoneProduct(shown[i]) : _product(shown[i]),
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _phoneProduct(Product p) {
+    final out = p.currentQuantity <= 0;
+    final low = !out && p.currentQuantity <= p.minimumStockLevel;
+    final productOptions = options[p.id] ?? const <SellingOption>[];
+    final chosen = productOptions.where((x) => x.isDefault).firstOrNull;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _addProduct(p),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ColoredBox(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                child: ProductImage(path: p.photoPath),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 36,
+                    child: Text(
+                      p.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    money(chosen?.priceCentavos ?? p.sellingPriceCentavos),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    _stockText(p),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Text(
+                    out
+                        ? 'Out of Stock'
+                        : low
+                        ? 'Low Stock'
+                        : 'In Stock',
+                    style: TextStyle(
+                      color: out
+                          ? Theme.of(context).colorScheme.error
+                          : low
+                          ? Colors.orange.shade800
+                          : context.semanticColors.success,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

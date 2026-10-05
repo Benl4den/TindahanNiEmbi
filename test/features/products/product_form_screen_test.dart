@@ -9,6 +9,101 @@ import 'package:tindahan_ni_embi/repositories/product_repository.dart';
 import 'package:tindahan_ni_embi/services/product_photo_service.dart';
 
 void main() {
+  testWidgets(
+    'Add Product form fits Android phone dialogs and long categories',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewInsets);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showDialog<bool>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    insetPadding: const EdgeInsets.all(16),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: 840,
+                        maxHeight: 920,
+                      ),
+                      child: ProductFormScreen(
+                        repository: _FakeProducts(),
+                        photoService: _FakePhotos(),
+                        categories: [
+                          Category(
+                            id: 1,
+                            name: 'Very Long Laundry Supplies and Household Products Category',
+                            isArchived: false,
+                            createdAt: DateTime(2026),
+                            updatedAt: DateTime(2026),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('Open Product Form'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open Product Form'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Take Photo'));
+      await tester.pumpAndSettle();
+
+      for (final size in const [
+        Size(280, 600),
+        Size(320, 700),
+        Size(390, 844),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        expect(find.text('Product Name'), findsOneWidget);
+        expect(find.text('Piece Purchase Price'), findsOneWidget);
+        expect(find.text('Selling Price'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+
+      tester.view.physicalSize = const Size(280, 600);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Category'));
+      await tester.tap(find.text('Category'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find
+            .text('Very Long Laundry Supplies and Household Products Category')
+            .last,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Units & Packaging'));
+      await tester.tap(find.text('Units & Packaging'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(320, 600);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('new product requires camera step before details', (
     tester,
   ) async {

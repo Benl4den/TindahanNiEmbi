@@ -37,6 +37,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('login fits portrait phones and keeps the full PIN pad usable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 48, bottom: 24);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final database = await tester.runAsync(() => app.database);
+    final auth = _LayoutAuth(database!);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: AuthGate(auth: auth, builder: (_, _) => const SizedBox()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final size in const [Size(390, 844), Size(320, 640)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome back!'), findsOneWidget);
+      expect(find.text('Ready  •  Data saved on this device'), findsOneWidget);
+      await tester.ensureVisible(find.text('Unlock'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    await tester.ensureVisible(find.text('1'));
+    await tester.tap(find.text('1'));
+    await tester.pump();
+    expect(
+      tester.widgetList<Semantics>(find.byType(Semantics)).any(
+        (widget) => widget.properties.label == '1 PIN digits entered',
+      ),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('first PIN setup locks back to login without app restart', (
     tester,
   ) async {

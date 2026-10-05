@@ -110,10 +110,11 @@ class _GCashScreenState extends State<GCashScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$wallet Services'),
-              const Text(
-                'Manage Cash-In, Cash-Out, and service fees in one place',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
-              ),
+              if (MediaQuery.sizeOf(context).width >= 600)
+                const Text(
+                  'Manage Cash-In, Cash-Out, and service fees in one place',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
+                ),
             ],
           ),
           actions: [
@@ -155,7 +156,9 @@ class _GCashScreenState extends State<GCashScreen> {
                       await Future.wait([data, feeTotal, serviceHistory]);
                     },
                     child: ListView(
-                      padding: const EdgeInsets.all(24),
+                      padding: EdgeInsets.all(
+                        MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+                      ),
                       children: [
                         Container(
                           padding: const EdgeInsets.all(18),
@@ -168,29 +171,26 @@ class _GCashScreenState extends State<GCashScreen> {
                             ),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'CURRENT ${wallet.toUpperCase()} BALANCE',
-                                      style: TextStyle(color: Colors.white70),
+                          child: LayoutBuilder(
+                            builder: (_, box) {
+                              final balance = Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'CURRENT ${wallet.toUpperCase()} BALANCE',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                  Text(
+                                    standardMoney(summary.balance),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: box.maxWidth < 300 ? 24 : 30,
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                    Text(
-                                      standardMoney(summary.balance),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 30,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Container(
+                                  ),
+                                ],
+                              );
+                              final transactions = Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 14,
                                   vertical: 10,
@@ -225,8 +225,25 @@ class _GCashScreenState extends State<GCashScreen> {
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
+                              );
+                              if (box.maxWidth < 360) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    balance,
+                                    const SizedBox(height: 12),
+                                    transactions,
+                                  ],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  Expanded(child: balance),
+                                  const SizedBox(width: 16),
+                                  transactions,
+                                ],
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -1045,6 +1062,7 @@ class _GCashScreenState extends State<GCashScreen> {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
+                              isExpanded: true,
                               initialValue: feeOption,
                               decoration: const InputDecoration(
                                 labelText: 'Fee Option',

@@ -43,7 +43,17 @@ class SaleCartLine {
   static String _decimal(int value, int scale) {
     final whole = value ~/ scale, remainder = value % scale;
     if (remainder == 0) return '$whole';
-    return '$whole.${remainder.toString().padLeft(scale.toString().length - 1, '0').replaceFirst(RegExp(r'0+$'), '')}';
+    var power = 10;
+    for (var places = 1; places <= 9; places++, power *= 10) {
+      if (power % scale == 0) {
+        final fraction = (remainder * (power ~/ scale))
+            .toString()
+            .padLeft(places, '0')
+            .replaceFirst(RegExp(r'0+$'), '');
+        return '$whole.$fraction';
+      }
+    }
+    return '$value/$scale';
   }
 }
 
@@ -120,6 +130,41 @@ class ProductSelectionController {
     quantityValue: line.quantityScale,
     quantityScale: line.quantityScale,
   );
+  void adjustLine(SaleCartLine line, int direction) {
+    if (direction != 1 && direction != -1) {
+      throw ArgumentError('Direction must be 1 or -1.');
+    }
+    final stepScale =
+        line.product.baseUnitCode == 'GRAM' && line.option.baseQuantity == 1000
+        ? 4
+        : 1;
+    final scale =
+        line.quantityScale * stepScale ~/ line.quantityScale.gcd(stepScale);
+    final value =
+        line.quantityValue * (scale ~/ line.quantityScale) +
+        direction * (scale ~/ stepScale);
+    if (value <= 0) {
+      _lines.remove(line.key);
+      return;
+    }
+    if (value * line.option.baseQuantity % scale != 0) {
+      throw StateError('Quantity cannot be converted exactly.');
+    }
+    final reserved = lines
+        .where((x) => x.product.id == line.product.id && x.key != line.key)
+        .fold<int>(0, (sum, x) => sum + x.baseQuantity);
+    if (reserved + value * line.option.baseQuantity ~/ scale >
+        line.product.currentQuantity) {
+      throw StateError('Not enough stock.');
+    }
+    _lines[line.key] = SaleCartLine(
+      product: line.product,
+      option: line.option,
+      quantityValue: value,
+      quantityScale: scale,
+    );
+  }
+
   void decrease(Product p) {
     final found = lines.where((x) => x.product.id == p.id).firstOrNull;
     if (found != null) decreaseLine(found);

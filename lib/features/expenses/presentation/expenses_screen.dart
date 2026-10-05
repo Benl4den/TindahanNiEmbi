@@ -90,7 +90,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     body: RefreshIndicator(
       onRefresh: () async => _refresh(),
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(
+          MediaQuery.sizeOf(context).width < 600 ? 16 : 20,
+        ),
         children: [
           Text(
             "TODAY'S EXPENSES",
@@ -109,24 +111,34 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               if (s.hasError) return _error(s.error);
               if (!s.hasData) return const LinearProgressIndicator();
               final x = s.data!;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SummaryCard(
-                    label: 'Total Expenses Today',
-                    value: money(x.total),
-                  ),
-                  SummaryCard(label: 'Number of Expenses', value: '${x.count}'),
-                  SummaryCard(
-                    label: 'Largest Expense',
-                    value: money(x.largest),
-                  ),
-                  SummaryCard(
-                    label: 'Most Used Category',
-                    value: x.topCategory ?? '—',
-                  ),
-                ],
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final cards = [
+                    SummaryCard(
+                      label: 'Total Expenses Today',
+                      value: money(x.total),
+                    ),
+                    SummaryCard(
+                      label: 'Number of Expenses',
+                      value: '${x.count}',
+                    ),
+                    SummaryCard(
+                      label: 'Largest Expense',
+                      value: money(x.largest),
+                    ),
+                    SummaryCard(
+                      label: 'Most Used Category',
+                      value: x.topCategory ?? '—',
+                    ),
+                  ];
+                  if (constraints.maxWidth < 600) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [for (final card in cards) card],
+                    );
+                  }
+                  return Wrap(spacing: 12, runSpacing: 12, children: cards);
+                },
               );
             },
           ),
@@ -140,60 +152,65 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              SizedBox(
-                width: 300,
-                child: FutureBuilder<List<ExpenseCategory>>(
-                  future: categoryData,
-                  builder: (_, snapshot) => DropdownButtonFormField<int?>(
-                    initialValue: categoryId,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.category_outlined),
-                      labelText: 'Category',
-                    ),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                        value: null,
-                        child: Text('All Categories'),
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth < 300
+                      ? constraints.maxWidth
+                      : 300,
+                  child: FutureBuilder<List<ExpenseCategory>>(
+                    future: categoryData,
+                    builder: (_, snapshot) => DropdownButtonFormField<int?>(
+                      isExpanded: true,
+                      initialValue: categoryId,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.category_outlined),
+                        labelText: 'Category',
                       ),
-                      ...?snapshot.data
-                          ?.where((x) => !x.isArchived)
-                          .map(
-                            (x) => DropdownMenuItem<int?>(
-                              value: x.id,
-                              child: Text(x.name),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('All Categories'),
+                        ),
+                        ...?snapshot.data
+                            ?.where((x) => !x.isArchived)
+                            .map(
+                              (x) => DropdownMenuItem<int?>(
+                                value: x.id,
+                                child: Text(x.name),
+                              ),
                             ),
-                          ),
-                    ],
-                    onChanged: (value) {
-                      categoryId = value;
-                      _refresh();
-                    },
+                      ],
+                      onChanged: (value) {
+                        categoryId = value;
+                        _refresh();
+                      },
+                    ),
                   ),
                 ),
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_month),
-                label: Text(
-                  date == null
-                      ? 'All Dates'
-                      : MaterialLocalizations.of(context)
-                            .formatMediumDate(date!),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_month),
+                  label: Text(
+                    date == null
+                        ? 'All Dates'
+                        : MaterialLocalizations.of(context)
+                              .formatMediumDate(date!),
+                  ),
+                  onPressed: _pickDate,
                 ),
-                onPressed: _pickDate,
-              ),
-              if (date != null)
-                TextButton(
-                  onPressed: () {
-                    date = null;
-                    _refresh();
-                  },
-                  child: const Text('Clear date'),
-                ),
-            ],
+                if (date != null)
+                  TextButton(
+                    onPressed: () {
+                      date = null;
+                      _refresh();
+                    },
+                    child: const Text('Clear date'),
+                  ),
+              ],
+            ),
           ),
           FutureBuilder<List<Expense>>(
             future: data,
@@ -214,27 +231,59 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 children: s.data!
                     .map(
                       (x) => Card(
-                        child: ListTile(
-                          minVerticalPadding: 16,
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.receipt_long),
-                          ),
-                          title: Text(
-                            x.description,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            '${x.categoryName}\n${_when(x.expenseDateTime.toLocal())} • ${x.status}',
-                          ),
-                          trailing: Text(
-                            money(x.amountCentavos),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          onTap: () => _details(x.id),
-                        ),
+                        child: MediaQuery.sizeOf(context).width < 600
+                            ? InkWell(
+                                onTap: () => _details(x.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        x.description,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${x.categoryName}\n${_when(x.expenseDateTime.toLocal())} • ${x.status}',
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        money(x.amountCentavos),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListTile(
+                                minVerticalPadding: 16,
+                                leading: const CircleAvatar(
+                                  child: Icon(Icons.receipt_long),
+                                ),
+                                title: Text(
+                                  x.description,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${x.categoryName}\n${_when(x.expenseDateTime.toLocal())} • ${x.status}',
+                                ),
+                                trailing: Text(
+                                  money(x.amountCentavos),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onTap: () => _details(x.id),
+                              ),
                       ),
                     )
                     .toList(),
@@ -626,6 +675,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                 ),
               ),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: categoryId,
               decoration: const InputDecoration(labelText: 'Expense Category'),
               items: widget.categories
@@ -649,29 +699,53 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               ),
             ),
             const SizedBox(height: 12),
-            SegmentedButton<PaymentMethod>(
-              segments: const [
-                ButtonSegment(
-                  value: PaymentMethod.cash,
-                  icon: Icon(Icons.payments_outlined),
-                  label: Text('Cash'),
-                ),
-                ButtonSegment(
-                  value: PaymentMethod.gcash,
-                  icon: Icon(Icons.phone_android),
-                  label: Text('GCash'),
-                ),
-                ButtonSegment(
-                  value: PaymentMethod.maya,
-                  icon: Icon(Icons.account_balance_wallet_outlined),
-                  label: Text('Maya'),
-                ),
-              ],
-              selected: {paymentMethod},
-              onSelectionChanged: busy
-                  ? null
-                  : (value) => setState(() => paymentMethod = value.single),
-            ),
+            if (MediaQuery.sizeOf(context).width < 600)
+              DropdownButtonFormField<PaymentMethod>(
+                isExpanded: true,
+                initialValue: paymentMethod,
+                decoration: const InputDecoration(labelText: 'Paid via'),
+                items: const [
+                  DropdownMenuItem(
+                    value: PaymentMethod.cash,
+                    child: Text('Cash'),
+                  ),
+                  DropdownMenuItem(
+                    value: PaymentMethod.gcash,
+                    child: Text('GCash'),
+                  ),
+                  DropdownMenuItem(
+                    value: PaymentMethod.maya,
+                    child: Text('Maya'),
+                  ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (value) => setState(() => paymentMethod = value!),
+              )
+            else
+              SegmentedButton<PaymentMethod>(
+                segments: const [
+                  ButtonSegment(
+                    value: PaymentMethod.cash,
+                    icon: Icon(Icons.payments_outlined),
+                    label: Text('Cash'),
+                  ),
+                  ButtonSegment(
+                    value: PaymentMethod.gcash,
+                    icon: Icon(Icons.phone_android),
+                    label: Text('GCash'),
+                  ),
+                  ButtonSegment(
+                    value: PaymentMethod.maya,
+                    icon: Icon(Icons.account_balance_wallet_outlined),
+                    label: Text('Maya'),
+                  ),
+                ],
+                selected: {paymentMethod},
+                onSelectionChanged: busy
+                    ? null
+                    : (value) => setState(() => paymentMethod = value.single),
+              ),
             if (paymentMethod != PaymentMethod.cash)
               TextField(
                 controller: gcashReference,
