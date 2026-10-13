@@ -76,6 +76,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
   Widget _buildContent(BuildContext context) {
     final editing = widget.category != null;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -88,7 +89,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
+            padding: EdgeInsets.all(compact ? 16 : 32),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 700),
               child: Form(

@@ -5,7 +5,10 @@ import 'package:tindahan_ni_embi/features/utang/presentation/customer_account_de
 import 'package:tindahan_ni_embi/models/customer.dart';
 
 void main() {
-  CustomerDetails details({bool contact = true}) => CustomerDetails(
+  CustomerDetails details({
+    bool contact = true,
+    List<UtangProductHistory> products = const [],
+  }) => CustomerDetails(
     customer: Customer(
       id: 1,
       fullName: 'Paksiw Santos',
@@ -35,6 +38,7 @@ void main() {
         itemCount: 2,
       ),
     ],
+    products: products,
   );
 
   testWidgets(
@@ -141,5 +145,55 @@ void main() {
     await tester.tap(find.text('Products on UTANG'));
     await tester.pumpAndSettle();
     expect(find.text('No products on UTANG yet.'), findsOneWidget);
+  });
+
+  testWidgets('phone product history stacks long details and large amounts', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(280, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final productName =
+        'Extra Long Brand Product Name That Must Wrap Without Clipping';
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: CustomerAccountDetailsView(
+            details: details(
+              products: [
+                UtangProductHistory(
+                  transactionId: 1,
+                  name: productName,
+                  quantity: '12',
+                  option: 'Carton',
+                  lineTotalCentavos: 123456789,
+                  occurredAt: DateTime(2026, 10, 6, 9),
+                ),
+              ],
+            ),
+            currentBalanceCentavos: 123456789012,
+            outstandingCount: 12,
+            filter: 'Products on UTANG',
+            onFilterChanged: (_) {},
+            onEditProfile: () {},
+            onRecordPayment: () {},
+            onNewUtang: () {},
+            onViewEntry: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('₱1,234,567,890.12'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text(productName),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text(productName), findsOneWidget);
+    expect(find.text('₱1,234,567.89'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -53,6 +53,7 @@ class _State extends State<StorageManagementScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialog) => AlertDialog(
+        scrollable: true,
         title: const Text('Manage Local Backups'),
         content: SizedBox(
           width: 620,
@@ -73,6 +74,7 @@ class _State extends State<StorageManagementScreen> {
                               final confirmed = await showDialog<bool>(
                                 context: dialog,
                                 builder: (confirm) => AlertDialog(
+                                  scrollable: true,
                                   title: const Text('Delete this old backup?'),
                                   content: Text(files[i].path.split('/').last),
                                   actions: [
@@ -110,7 +112,13 @@ class _State extends State<StorageManagementScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Storage Management')),
+    appBar: AppBar(
+      title: Text(
+        MediaQuery.sizeOf(context).width < 360
+            ? 'Storage'
+            : 'Storage Management',
+      ),
+    ),
     body: FutureBuilder<StorageSummary>(
       future: data,
       builder: (_, s) {
@@ -124,7 +132,9 @@ class _State extends State<StorageManagementScreen> {
         if (!s.hasData) return const Center(child: CircularProgressIndicator());
         final x = s.data!;
         return ListView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(
+            MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+          ),
           children: [
             Card(
               child: ListTile(
@@ -175,12 +185,33 @@ class _State extends State<StorageManagementScreen> {
     ),
   );
   Widget _row(String label, String value) => Card(
-    child: ListTile(
-      title: Text(label),
-      trailing: Text(
-        value,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 500) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  softWrap: true,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          );
+        }
+        return ListTile(
+          title: Text(label),
+          trailing: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        );
+      },
     ),
   );
 }

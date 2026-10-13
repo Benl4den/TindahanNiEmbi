@@ -79,20 +79,33 @@ class _StaffActivityScreenState extends State<StaffActivityScreen> {
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    MaterialLocalizations.of(context).formatFullDate(day),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                OutlinedButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final date = Text(
+                  MaterialLocalizations.of(context).formatFullDate(day),
+                  style: Theme.of(context).textTheme.titleLarge,
+                );
+                final chooseDate = OutlinedButton.icon(
                   onPressed: _pickDay,
                   icon: const Icon(Icons.calendar_month_outlined),
                   label: const Text('Choose date'),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 420) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      date,
+                      Align(alignment: Alignment.centerLeft, child: chooseDate),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: date),
+                    chooseDate,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             const Text(

@@ -40,6 +40,7 @@ class CashSaleScreen extends StatefulWidget {
     this.reversals,
     this.drafts,
     this.onPhoneDetailVisibilityChanged,
+    this.cashServicesLauncher,
   }) : assert(repository != null || saveSale != null);
   final List<Product> products;
   final CashSaleRepository? repository;
@@ -54,6 +55,7 @@ class CashSaleScreen extends StatefulWidget {
   final ReversalRepository? reversals;
   final SaleDraftRepository? drafts;
   final ValueChanged<bool>? onPhoneDetailVisibilityChanged;
+  final Widget? cashServicesLauncher;
   @override
   State<CashSaleScreen> createState() => _State();
 }
@@ -373,6 +375,7 @@ class _State extends State<CashSaleScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<SellingOption>(
+                  isExpanded: true,
                   initialValue: selected,
                   decoration: const InputDecoration(
                     labelText: 'How do you sell this product?',
@@ -1192,7 +1195,7 @@ class _State extends State<CashSaleScreen> {
     final content = landscape
         ? Row(
             children: [
-              Expanded(flex: 3, child: _catalog()),
+              Expanded(flex: 3, child: _catalogWithShortcut()),
               SizedBox(width: 360, child: _cart()),
             ],
           )
@@ -1202,7 +1205,7 @@ class _State extends State<CashSaleScreen> {
         ? _phoneCurrentSale()
         : Column(
             children: [
-              Expanded(child: _catalog()),
+              Expanded(child: _catalogWithShortcut()),
               if (c.lines.isNotEmpty) _phoneCartBar(),
             ],
           );
@@ -1226,12 +1229,25 @@ class _State extends State<CashSaleScreen> {
     );
   }
 
+  Widget _catalogWithShortcut() {
+    final launcher = widget.cashServicesLauncher;
+    if (launcher == null) return _catalog();
+    return Stack(
+      children: [
+        Positioned.fill(child: _catalog()),
+        if (MediaQuery.viewInsetsOf(context).bottom == 0)
+          Positioned(right: 16, bottom: 16, child: launcher),
+      ],
+    );
+  }
+
   Widget _phoneCartBar() => SafeArea(
     top: false,
     bottom: false,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
       child: Material(
+        key: const ValueKey('phone-current-sale-bar'),
         color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
@@ -1419,20 +1435,28 @@ class _State extends State<CashSaleScreen> {
                         ),
                         const Divider(height: 20),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              'Total',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 20,
+                            const Expanded(
+                              child: Text(
+                                'Total',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 20,
+                                ),
                               ),
                             ),
-                            Text(
-                              money(c.totalCentavos),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 20,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  money(c.totalCentavos),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 20,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -1442,34 +1466,66 @@ class _State extends State<CashSaleScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Payment Method',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                SegmentedButton<PaymentMethod>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                      value: PaymentMethod.cash,
-                      label: Text('Cash'),
-                      icon: Icon(Icons.payments_outlined),
+                if (MediaQuery.sizeOf(context).width < 360)
+                  DropdownButtonFormField<PaymentMethod>(
+                    isExpanded: true,
+                    initialValue: _phonePaymentMethod,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment Method',
                     ),
-                    ButtonSegment(
-                      value: PaymentMethod.gcash,
-                      label: Text('GCash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.maya,
-                      label: Text('Maya'),
-                    ),
-                  ],
-                  selected: {_phonePaymentMethod},
-                  onSelectionChanged: saving
-                      ? null
-                      : (value) =>
-                            setState(() => _phonePaymentMethod = value.single),
-                ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: PaymentMethod.cash,
+                        child: Text('Cash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.gcash,
+                        child: Text('GCash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.maya,
+                        child: Text('Maya'),
+                      ),
+                    ],
+                    onChanged: saving
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => _phonePaymentMethod = value);
+                            }
+                          },
+                  )
+                else ...[
+                  Text(
+                    'Payment Method',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<PaymentMethod>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: PaymentMethod.cash,
+                        label: Text('Cash'),
+                        icon: Icon(Icons.payments_outlined),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.gcash,
+                        label: Text('GCash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.maya,
+                        label: Text('Maya'),
+                      ),
+                    ],
+                    selected: {_phonePaymentMethod},
+                    onSelectionChanged: saving
+                        ? null
+                        : (value) => setState(
+                            () => _phonePaymentMethod = value.single,
+                          ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
@@ -1705,7 +1761,12 @@ class _State extends State<CashSaleScreen> {
                 );
               }
               return GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  widget.cashServicesLauncher == null ? 16 : 88,
+                ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: cols,
                   mainAxisExtent: _phoneLayout ? 230 : 360,

@@ -30,6 +30,28 @@ void main() {
     expect(find.text('Archive'), findsOneWidget);
     expect(find.byTooltip('Back'), findsOneWidget);
   });
+
+  testWidgets('category creation form fits compact phone width', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(280, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CategoriesScreen(repository: _FakeCategoryRepository([])),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Category').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Category name'), findsOneWidget);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FakeCategoryRepository implements CategoryRepository {

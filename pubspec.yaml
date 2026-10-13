@@ -68,6 +68,8 @@ flutter:
     - assets/branding/tindasari_icon_dark.png
     - assets/branding/tindasari_ts_transparent.png
     - assets/branding/tindasari_ts_light_clear.png
+    - assets/branding/tindasari_lightbulb_clean.png
+    - assets/branding/tindasari_storefront_clean.png
 
   fonts:
     - family: Inter

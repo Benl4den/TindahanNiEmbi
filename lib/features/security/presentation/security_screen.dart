@@ -14,10 +14,12 @@ class SecurityScreen extends StatefulWidget {
 
 class _State extends State<SecurityScreen> {
   late Future<List<StaffAccount>> staff;
+  late Future<int> autoLockMinutes;
   @override
   void initState() {
     super.initState();
     staff = widget.auth.staffAccounts();
+    autoLockMinutes = SettingsService(widget.auth.db).autoLockMinutes;
   }
 
   void reload() => staff = widget.auth.staffAccounts();
@@ -75,43 +77,7 @@ class _State extends State<SecurityScreen> {
                 ),
               );
             }
-            return Column(
-              children: snapshot.data!
-                  .map(
-                    (x) => Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          child: Text(x.name.substring(0, 1).toUpperCase()),
-                        ),
-                        title: Text(
-                          x.name,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          '${x.active ? 'Active' : 'Disabled'}${x.lastLoginAt == null ? ' • Never logged in' : ' • Last login recorded'}',
-                        ),
-                        trailing: Wrap(
-                          spacing: 8,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () => staffDialog(account: x),
-                              icon: const Icon(Icons.password),
-                              label: const Text('Reset PIN'),
-                            ),
-                            Switch(
-                              value: x.active,
-                              onChanged: (value) async {
-                                await widget.auth.setStaffActive(x.id, value);
-                                if (mounted) setState(reload);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            );
+            return Column(children: snapshot.data!.map(_staffCard).toList());
           },
         ),
         const SizedBox(height: 28),
@@ -122,8 +88,9 @@ class _State extends State<SecurityScreen> {
         ),
         const SizedBox(height: 10),
         FutureBuilder<int>(
-          future: SettingsService(widget.auth.db).autoLockMinutes,
+          future: autoLockMinutes,
           builder: (_, s) => DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: s.data,
             decoration: const InputDecoration(
               labelText: 'Lock after inactivity',
@@ -149,6 +116,88 @@ class _State extends State<SecurityScreen> {
       ],
     ),
   );
+
+  Widget _staffCard(StaffAccount account) {
+    final compact = MediaQuery.sizeOf(context).width < 520;
+    Future<void> setActive(bool value) async {
+      await widget.auth.setStaffActive(account.id, value);
+      if (mounted) setState(reload);
+    }
+
+    final resetButton = TextButton.icon(
+      onPressed: () => staffDialog(account: account),
+      icon: const Icon(Icons.password),
+      label: const Text('Reset PIN'),
+    );
+    final activeControl = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(account.active ? 'Active' : 'Disabled'),
+        Switch(value: account.active, onChanged: setActive),
+      ],
+    );
+
+    if (compact) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    child: Text(account.name.substring(0, 1).toUpperCase()),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          account.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${account.active ? 'Active' : 'Disabled'}${account.lastLoginAt == null ? ' • Never logged in' : ' • Last login recorded'}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [resetButton, activeControl],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          child: Text(account.name.substring(0, 1).toUpperCase()),
+        ),
+        title: Text(
+          account.name,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          '${account.active ? 'Active' : 'Disabled'}${account.lastLoginAt == null ? ' • Never logged in' : ' • Last login recorded'}',
+        ),
+        trailing: Wrap(spacing: 8, children: [resetButton, activeControl]),
+      ),
+    );
+  }
 }
 
 class _StaffEditorDialog extends StatefulWidget {
@@ -218,6 +267,7 @@ class _StaffEditorDialogState extends State<_StaffEditorDialog> {
   );
 
   Widget _buildContent(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: Text(widget.account == null ? 'Add Staff' : 'Reset Staff PIN'),
     content: SizedBox(
       width: 460,

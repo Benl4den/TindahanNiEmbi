@@ -17,11 +17,24 @@ List<DeviceOrientation> preferredOrientationsForMetrics(
   if (isCompactDisplay(physicalSize, devicePixelRatio)) {
     return const [DeviceOrientation.portraitUp];
   }
-  // An empty list delegates to the platform and keeps tablets rotatable.
-  return const [];
+  return const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ];
 }
 
 List<DeviceOrientation> preferredOrientationsForDisplay(ui.Display? display) =>
     display == null
     ? const []
     : preferredOrientationsForMetrics(display.size, display.devicePixelRatio);
+
+// Android can ignore orientation requests for large displays. Keep the tablet
+// interface inaccessible in a portrait window even when the OS does so.
+bool requiresTabletLandscapePrompt(
+  ui.Size physicalDisplaySize,
+  double devicePixelRatio,
+  ui.Size windowSize,
+) =>
+    devicePixelRatio > 0 &&
+    !isCompactDisplay(physicalDisplaySize, devicePixelRatio) &&
+    windowSize.height > windowSize.width;

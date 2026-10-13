@@ -37,7 +37,7 @@ void main() {
         );
         await Future<void>.delayed(const Duration(milliseconds: 180));
       });
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('GCash Services'), findsOneWidget);
       expect(find.text('Maya Services'), findsOneWidget);
       expect(find.text('PRO'), findsWidgets);

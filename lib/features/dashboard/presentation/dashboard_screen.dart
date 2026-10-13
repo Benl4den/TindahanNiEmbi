@@ -4,12 +4,15 @@ import 'package:sqflite/sqflite.dart';
 import '../../../core/formatters/number_format.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../repositories/dashboard_repository.dart';
+import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/operations_repository.dart';
 import '../../../services/app_refresh_controller.dart';
+import '../../../services/settings_service.dart';
 import '../../../widgets/store_summary_card.dart';
 import '../../../widgets/balanced_card_grid.dart';
 import '../../../widgets/product_image.dart';
 import '../../../widgets/store_overview_panel.dart';
+import '../../../widgets/brand_logo.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
 
@@ -32,6 +35,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardState extends State<DashboardScreen> {
   int period = 0;
   late Future<List<Object>> data;
+  late Future<String> storeName;
   late DateTime start, end;
   DateTime? updatedAt;
   int _request = 0;
@@ -63,6 +67,7 @@ class _DashboardState extends State<DashboardScreen> {
   }
 
   void reload() {
+    storeName = SettingsService(widget.database).storeName;
     final request = ++_request;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -111,6 +116,7 @@ class _DashboardState extends State<DashboardScreen> {
               end.toUtc().toIso8601String(),
             ],
           ),
+          InventoryRepository(widget.database).ownedHealth(),
         ]).then((result) {
           if (mounted && request == _request) updatedAt = DateTime.now();
           return result;
@@ -165,6 +171,7 @@ class _DashboardState extends State<DashboardScreen> {
                   const HelpButton(topic: HelpTopicId.dashboard),
                 ],
               ),
+              _storeNameLabel(theme),
               Text(
                 'Your quick store overview. Keep track of sales, expenses, inventory and more.',
                 style: theme.textTheme.bodySmall,
@@ -188,6 +195,7 @@ class _DashboardState extends State<DashboardScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  _storeNameLabel(theme),
                   Text(
                     'Your quick store overview. Keep track of sales, expenses, inventory and more.',
                     style: theme.textTheme.bodySmall,
@@ -203,6 +211,21 @@ class _DashboardState extends State<DashboardScreen> {
         );
       },
     ),
+  );
+
+  Widget _storeNameLabel(ThemeData theme) => FutureBuilder<String>(
+    future: storeName,
+    builder: (_, snapshot) => snapshot.hasData
+        ? Text(
+            snapshot.data!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          )
+        : const SizedBox.shrink(),
   );
 
   Widget _periodControls() {
@@ -333,6 +356,13 @@ class _DashboardState extends State<DashboardScreen> {
           if (x.mayaSales != 0) 'Maya ${standardMoney(x.mayaSales)}',
           'UTANG ${standardMoney(x.newUtang)}',
         ].join(' • ');
+        if (MediaQuery.sizeOf(context).width < 600) {
+          return _phoneDashboard(
+            x,
+            snapshot.data![7] as OwnedInventoryHealth,
+            counts,
+          );
+        }
         return _frame(
           RefreshIndicator(
             onRefresh: () async {
@@ -529,6 +559,484 @@ class _DashboardState extends State<DashboardScreen> {
       },
     ),
   );
+
+  Widget _phoneDashboard(
+    DailyClosingSummary summary,
+    OwnedInventoryHealth inventory,
+    List<Map<String, Object?>> counts,
+  ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final now = DateTime.now();
+    final date =
+        '${const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][now.weekday - 1]}, ${MaterialLocalizations.of(context).formatMediumDate(now)}';
+    final salesCount = counts.fold<int>(
+      0,
+      (total, row) => total + (row['count'] as int? ?? 0),
+    );
+    final utangCount = counts.length > 1 ? counts[1]['count'] as int? ?? 0 : 0;
+    const headerGreen = Color(0xFF07553B);
+    final warning = context.semanticColors.warning;
+    final danger = context.semanticColors.danger;
+
+    Widget metricCard(
+      String key,
+      String label,
+      String value,
+      String caption,
+      IconData icon,
+      Color accent,
+    ) => Container(
+      key: ValueKey('phone-metric-$key'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 31,
+                height: 31,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 19, color: accent),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall,
+          ),
+        ],
+      ),
+    );
+
+    Widget actionCard(
+      String key,
+      String label,
+      IconData icon,
+      Color accent,
+      VoidCallback action,
+    ) => Material(
+      key: ValueKey('phone-quick-$key'),
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        onTap: action,
+        borderRadius: BorderRadius.circular(13),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+          decoration: BoxDecoration(
+            border: Border.all(color: colors.outlineVariant),
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 21, color: accent),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 10,
+                  color: colors.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Widget stockCard(
+      String key,
+      String label,
+      int value,
+      IconData icon,
+      Color accent,
+    ) => Container(
+      key: ValueKey('phone-stock-$key'),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: accent, size: 23),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            maxLines: 2,
+            style: theme.textTheme.labelSmall?.copyWith(fontSize: 10),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '$value',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Scaffold(
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            color: headerGreen,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF139C68),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: BrandLogo(size: 34, dark: true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FutureBuilder<String>(
+                            future: storeName,
+                            builder: (_, snapshot) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  snapshot.data ??
+                                      SettingsService.fallbackStoreName,
+                                  key: const ValueKey(
+                                    'phone-dashboard-store-name',
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  'TindaSari PH',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: const Color(0xFFDDF4E8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.notifications_none_outlined,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    Text(
+                      'Good day!',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      date,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFDDF4E8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                setState(reload);
+                try {
+                  await data;
+                } catch (_) {
+                  /* Retry UI shows the error. */
+                }
+              },
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                children: [
+                  Row(
+                    children: [
+                      for (var i = 0; i < 3; i++)
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: i == 2 ? 0 : 6),
+                            child: Material(
+                              color: period == i
+                                  ? colors.primary
+                                  : colors.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(20),
+                              child: InkWell(
+                                key: ValueKey('phone-period-$i'),
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () => setState(() {
+                                  period = i;
+                                  reload();
+                                }),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 9,
+                                  ),
+                                  child: Text(
+                                    const [
+                                      'Today',
+                                      'This Week',
+                                      'This Month',
+                                    ][i],
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: period == i
+                                          ? colors.onPrimary
+                                          : colors.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (_, box) => GridView.count(
+                      crossAxisCount: 2,
+                      childAspectRatio: box.maxWidth < 300
+                          ? 1.1
+                          : box.maxWidth < 340
+                          ? 1.3
+                          : 1.55,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        metricCard(
+                          'sales',
+                          'Total Sales',
+                          standardMoney(summary.totalSales + summary.newUtang),
+                          '$salesCount ${salesCount == 1 ? 'transaction' : 'transactions'}',
+                          Icons.shopping_cart_outlined,
+                          colors.primary,
+                        ),
+                        metricCard(
+                          'gcash',
+                          'GCash Fees',
+                          widget.walletServicesAllowed
+                              ? standardMoney(
+                                  summary.cashInServiceFees +
+                                      summary.cashOutServiceFees,
+                                )
+                              : '—',
+                          widget.walletServicesAllowed
+                              ? '${summary.cashInServiceCount + summary.cashOutServiceCount} services'
+                              : 'PRO',
+                          Icons.account_balance_wallet_outlined,
+                          const Color(0xFF2368D3),
+                        ),
+                        metricCard(
+                          'utang',
+                          'New UTANG',
+                          standardMoney(summary.newUtang),
+                          '$utangCount ${utangCount == 1 ? 'transaction' : 'transactions'}',
+                          Icons.receipt_long_outlined,
+                          danger,
+                        ),
+                        metricCard(
+                          'expenses',
+                          'Expenses',
+                          standardMoney(summary.operatingExpenses),
+                          '${summary.expenseCount ?? 0} expenses',
+                          Icons.receipt_outlined,
+                          warning,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 17),
+                  Text(
+                    'Quick Actions',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  LayoutBuilder(
+                    builder: (_, box) {
+                      final columns = box.maxWidth >= 308 ? 4 : 2;
+                      final actions = [
+                        actionCard(
+                          'sale',
+                          'Start Sale',
+                          Icons.shopping_cart_checkout,
+                          colors.primary,
+                          () => widget.navigate(0),
+                        ),
+                        actionCard(
+                          'expense',
+                          'Add Expense',
+                          Icons.receipt_long_outlined,
+                          const Color(0xFFB341A4),
+                          () => widget.navigate(7),
+                        ),
+                        actionCard(
+                          'consignment',
+                          'Receive Consignment',
+                          Icons.inventory_2_outlined,
+                          const Color(0xFF6550BB),
+                          () => widget.navigate(2),
+                        ),
+                        actionCard(
+                          'reports',
+                          'View Reports',
+                          Icons.assessment_outlined,
+                          const Color(0xFF1785C7),
+                          () => widget.navigate(9),
+                        ),
+                      ];
+                      return GridView.count(
+                        crossAxisCount: columns,
+                        childAspectRatio: columns == 4 ? .86 : 1.25,
+                        mainAxisSpacing: 7,
+                        crossAxisSpacing: 7,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: actions,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Inventory Summary',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Open Inventory',
+                        onPressed: () => widget.navigate(3),
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  LayoutBuilder(
+                    builder: (_, box) => GridView.count(
+                      crossAxisCount: 3,
+                      childAspectRatio: box.maxWidth < 300
+                          ? .78
+                          : box.maxWidth < 340
+                          ? .9
+                          : 1.05,
+                      mainAxisSpacing: 6,
+                      crossAxisSpacing: 6,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        stockCard(
+                          'active',
+                          'Active Products',
+                          inventory.activeProducts,
+                          Icons.inventory_2_outlined,
+                          colors.primary,
+                        ),
+                        stockCard(
+                          'low',
+                          'Low Stock',
+                          inventory.lowStock,
+                          Icons.warning_amber_outlined,
+                          warning,
+                        ),
+                        stockCard(
+                          'out',
+                          'Out of Stock',
+                          inventory.outOfStock,
+                          Icons.cancel_outlined,
+                          danger,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _quickActions() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,

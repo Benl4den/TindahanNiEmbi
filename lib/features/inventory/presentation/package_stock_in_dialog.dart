@@ -63,6 +63,7 @@ Future<bool> showPackageStockInDialog({
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<PurchasePackage>(
+                    isExpanded: true,
                     initialValue: selected,
                     decoration: InputDecoration(
                       labelText: 'Purchase package',

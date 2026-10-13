@@ -16,9 +16,9 @@ void main() {
       tester.view.devicePixelRatio = 1;
       tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
       addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPadding);
-    addTearDown(tester.view.resetViewInsets);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewInsets);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -91,16 +91,16 @@ void main() {
       await tester.tap(find.text('Units & Packaging'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
 
-    tester.view.physicalSize = const Size(320, 600);
-    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -329,6 +329,10 @@ void main() {
   });
 
   testWidgets('new soft drink uses ordinary price fields', (tester) async {
+    tester.view.physicalSize = const Size(280, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: ProductFormScreen(
@@ -352,6 +356,9 @@ void main() {
     expect(find.text('Piece Purchase Price'), findsOneWidget);
     expect(find.text('Selling Price'), findsOneWidget);
     expect(find.text('Units & Packaging'), findsOneWidget);
+    await tester.ensureVisible(find.text('Starting Stock'));
+    expect(find.text('Low Stock Alert At'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 

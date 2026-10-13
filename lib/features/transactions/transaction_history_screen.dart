@@ -124,7 +124,9 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(
+                MediaQuery.sizeOf(context).width < 360 ? 12 : 16,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -135,7 +137,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       }),
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
-                        hintText: 'Search transactions...',
+                        hintText: 'Search history...',
                       ),
                     ),
                   ),
@@ -371,6 +373,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
     if (!mounted) return;
     final items = (details['items'] as List<Map<String, Object?>>?) ?? const [];
+    final compact = MediaQuery.sizeOf(context).width < 600;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -442,20 +445,49 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     'PRODUCTS',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  ...items.map(
-                    (item) => ListTile(
+                  ...items.map((item) {
+                    final name = '${item['product_name_snapshot']}';
+                    final quantity = _itemQuantity(item);
+                    final amount = _money(item['line_total_centavos']! as int);
+                    if (compact) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(quantity),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                amount,
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text('${item['product_name_snapshot']}'),
-                      subtitle: Text(_itemQuantity(item)),
-                      trailing: Text(
-                        _money(item['line_total_centavos']! as int),
-                      ),
-                    ),
-                  ),
+                      title: Text(name),
+                      subtitle: Text(quantity),
+                      trailing: Text(amount),
+                    );
+                  }),
                 ],
                 const Divider(height: 26),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
                   children: [
                     const Text(
                       'TOTAL',

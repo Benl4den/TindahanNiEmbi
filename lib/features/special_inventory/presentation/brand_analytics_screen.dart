@@ -19,7 +19,13 @@ class BrandAnalyticsScreen extends StatelessWidget {
   final FeatureAccessService access;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('$groupName Analytics')),
+    appBar: AppBar(
+      title: Text(
+        '$groupName Analytics',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
     body: FeatureAccessBuilder(
       access: access,
       feature: ProFeature.managedBrandAnalytics,
@@ -104,16 +110,55 @@ class BrandAnalyticsScreen extends StatelessWidget {
                       children: products.data!
                           .map(
                             (x) => Card(
-                              child: ListTile(
-                                title: Text(x['name']! as String),
-                                subtitle: Text(
-                                  '${x['current_quantity']} in stock • ${x['stock_status']}',
-                                ),
-                                trailing: Text(
-                                  standardMoney(
+                              child: LayoutBuilder(
+                                builder: (_, constraints) {
+                                  final name = x['name']! as String;
+                                  final stock =
+                                      '${x['current_quantity']} in stock • ${x['stock_status']}';
+                                  final price = standardMoney(
                                     x['selling_price_centavos']! as int,
-                                  ),
-                                ),
+                                  );
+                                  if (constraints.maxWidth < 500) {
+                                    return Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 12,
+                                            runSpacing: 4,
+                                            alignment:
+                                                WrapAlignment.spaceBetween,
+                                            children: [
+                                              Text(stock),
+                                              Text(
+                                                price,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                  return ListTile(
+                                    title: Text(name),
+                                    subtitle: Text(stock),
+                                    trailing: Text(price),
+                                  );
+                                },
                               ),
                             ),
                           )

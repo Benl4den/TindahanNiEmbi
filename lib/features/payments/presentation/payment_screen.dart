@@ -116,10 +116,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         builder: (context, constraints) => SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: EdgeInsets.fromLTRB(
-            28,
-            28,
-            28,
-            28 + MediaQuery.viewInsetsOf(context).bottom,
+            constraints.maxWidth < 360 ? 16 : 28,
+            constraints.maxWidth < 360 ? 20 : 28,
+            constraints.maxWidth < 360 ? 16 : 28,
+            (constraints.maxWidth < 360 ? 20 : 28) +
+                MediaQuery.viewInsetsOf(context).bottom,
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight - 56),
@@ -135,28 +136,64 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 24),
-                SegmentedButton<PaymentMethod>(
-                  segments: const [
-                    ButtonSegment(
-                      value: PaymentMethod.cash,
-                      icon: Icon(Icons.payments_outlined),
-                      label: Text('Cash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.gcash,
-                      icon: Icon(Icons.phone_android),
-                      label: Text('GCash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.maya,
-                      icon: Icon(Icons.account_balance_wallet_outlined),
-                      label: Text('Maya'),
-                    ),
-                  ],
-                  selected: {paymentMethod},
-                  onSelectionChanged: saving
-                      ? null
-                      : (value) => setState(() => paymentMethod = value.single),
+                LayoutBuilder(
+                  builder: (context, selectorConstraints) {
+                    if (selectorConstraints.maxWidth < 360) {
+                      return DropdownButtonFormField<PaymentMethod>(
+                        initialValue: paymentMethod,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment method',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: PaymentMethod.cash,
+                            child: Text('Cash'),
+                          ),
+                          DropdownMenuItem(
+                            value: PaymentMethod.gcash,
+                            child: Text('GCash'),
+                          ),
+                          DropdownMenuItem(
+                            value: PaymentMethod.maya,
+                            child: Text('Maya'),
+                          ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  setState(() => paymentMethod = value);
+                                }
+                              },
+                      );
+                    }
+                    return SegmentedButton<PaymentMethod>(
+                      segments: const [
+                        ButtonSegment(
+                          value: PaymentMethod.cash,
+                          icon: Icon(Icons.payments_outlined),
+                          label: Text('Cash'),
+                        ),
+                        ButtonSegment(
+                          value: PaymentMethod.gcash,
+                          icon: Icon(Icons.phone_android),
+                          label: Text('GCash'),
+                        ),
+                        ButtonSegment(
+                          value: PaymentMethod.maya,
+                          icon: Icon(Icons.account_balance_wallet_outlined),
+                          label: Text('Maya'),
+                        ),
+                      ],
+                      selected: {paymentMethod},
+                      onSelectionChanged: saving
+                          ? null
+                          : (value) =>
+                                setState(() => paymentMethod = value.single),
+                    );
+                  },
                 ),
                 if (paymentMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: 12),

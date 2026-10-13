@@ -103,8 +103,11 @@ class ProFeaturePreview extends StatelessWidget {
                                 ? 2
                                 : 1)
                           : (space.maxWidth >= 660 ? 3 : 1);
+                      // Keep fractional pixels from making the last card wrap
+                      // onto an unintended extra row inside a constrained panel.
                       final cardWidth =
-                          (space.maxWidth - gap * (columns - 1)) / columns;
+                          ((space.maxWidth - gap * (columns - 1)) / columns)
+                              .floorToDouble();
                       return Wrap(
                         spacing: gap,
                         runSpacing: gap,

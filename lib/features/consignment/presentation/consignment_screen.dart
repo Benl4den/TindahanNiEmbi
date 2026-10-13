@@ -441,6 +441,7 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: party,
                   decoration: const InputDecoration(
                     labelText: 'Supplier',
@@ -466,29 +467,60 @@ class _RemittanceDialogState extends State<_RemittanceDialog> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 14),
-                SegmentedButton<PaymentMethod>(
-                  segments: const [
-                    ButtonSegment(
-                      value: PaymentMethod.cash,
-                      icon: Icon(Icons.payments_outlined),
-                      label: Text('Cash'),
+                if (MediaQuery.sizeOf(context).width < 600)
+                  DropdownButtonFormField<PaymentMethod>(
+                    isExpanded: true,
+                    initialValue: paymentMethod,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment method',
                     ),
-                    ButtonSegment(
-                      value: PaymentMethod.gcash,
-                      icon: Icon(Icons.phone_android),
-                      label: Text('GCash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.maya,
-                      icon: Icon(Icons.account_balance_wallet_outlined),
-                      label: Text('Maya'),
-                    ),
-                  ],
-                  selected: {paymentMethod},
-                  onSelectionChanged: saving
-                      ? null
-                      : (value) => setState(() => paymentMethod = value.single),
-                ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: PaymentMethod.cash,
+                        child: Text('Cash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.gcash,
+                        child: Text('GCash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.maya,
+                        child: Text('Maya'),
+                      ),
+                    ],
+                    onChanged: saving
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => paymentMethod = value);
+                            }
+                          },
+                  )
+                else
+                  SegmentedButton<PaymentMethod>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PaymentMethod.cash,
+                        icon: Icon(Icons.payments_outlined),
+                        label: Text('Cash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.gcash,
+                        icon: Icon(Icons.phone_android),
+                        label: Text('GCash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.maya,
+                        icon: Icon(Icons.account_balance_wallet_outlined),
+                        label: Text('Maya'),
+                      ),
+                    ],
+                    selected: {paymentMethod},
+                    onSelectionChanged: saving
+                        ? null
+                        : (value) =>
+                              setState(() => paymentMethod = value.single),
+                  ),
                 if (paymentMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: 14),
                   TextField(
@@ -720,7 +752,9 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Consignment Product')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: EdgeInsets.all(
+          MediaQuery.sizeOf(context).width < 600 ? 16 : 28,
+        ),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 680),
@@ -745,28 +779,36 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                     ),
                   ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: choosingPhoto
-                            ? null
-                            : () => _choosePhoto(gallery: false),
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Take Photo'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: choosingPhoto
-                            ? null
-                            : () => _choosePhoto(gallery: true),
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Upload Image'),
-                      ),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final camera = OutlinedButton.icon(
+                      onPressed: choosingPhoto
+                          ? null
+                          : () => _choosePhoto(gallery: false),
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Take Photo'),
+                    );
+                    final gallery = OutlinedButton.icon(
+                      onPressed: choosingPhoto
+                          ? null
+                          : () => _choosePhoto(gallery: true),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Upload Image'),
+                    );
+                    if (box.maxWidth < 400) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [camera, const SizedBox(height: 8), gallery],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: camera),
+                        const SizedBox(width: 10),
+                        Expanded(child: gallery),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -794,6 +836,7 @@ class _NewCompanyProductFlowState extends State<_NewCompanyProductFlow> {
                   )
                 else
                   DropdownButtonFormField<int>(
+                    isExpanded: true,
                     initialValue: categoryId,
                     decoration: InputDecoration(
                       labelText: 'Category',
@@ -1157,6 +1200,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
                     ),
                     if (!createNew)
                       DropdownButtonFormField<int>(
+                        isExpanded: true,
                         initialValue: product,
                         decoration: const InputDecoration(
                           labelText: 'Existing Product',
@@ -1539,6 +1583,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: batchId,
                   decoration: const InputDecoration(labelText: 'Receipt batch'),
                   items: batches
@@ -1984,6 +2029,7 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
           (x) => x['id'] == selectedConsignorId,
         );
         return ListView(
+          key: const Key('consignor-detail-list'),
           padding: const EdgeInsets.all(20),
           children: [
             Text(
@@ -2063,18 +2109,37 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Products')),
-                ButtonSegment(value: 1, label: Text('Deliveries')),
-                ButtonSegment(value: 2, label: Text('Supplier Payments')),
-                ButtonSegment(value: 3, label: Text('Returns')),
-                ButtonSegment(value: 4, label: Text('Archived')),
-              ],
-              selected: {_companyTab},
-              onSelectionChanged: (value) =>
-                  setState(() => _companyTab = value.single),
-            ),
+            if (MediaQuery.sizeOf(context).width < 600)
+              DropdownButtonFormField<int>(
+                isExpanded: true,
+                initialValue: _companyTab,
+                decoration: const InputDecoration(
+                  labelText: 'Supplier section',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Products')),
+                  DropdownMenuItem(value: 1, child: Text('Deliveries')),
+                  DropdownMenuItem(value: 2, child: Text('Supplier Payments')),
+                  DropdownMenuItem(value: 3, child: Text('Returns')),
+                  DropdownMenuItem(value: 4, child: Text('Archived')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _companyTab = value);
+                },
+              )
+            else
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 0, label: Text('Products')),
+                  ButtonSegment(value: 1, label: Text('Deliveries')),
+                  ButtonSegment(value: 2, label: Text('Supplier Payments')),
+                  ButtonSegment(value: 3, label: Text('Returns')),
+                  ButtonSegment(value: 4, label: Text('Archived')),
+                ],
+                selected: {_companyTab},
+                onSelectionChanged: (value) =>
+                    setState(() => _companyTab = value.single),
+              ),
             const SizedBox(height: 12),
             if (_companyTab == 0 && cards.isEmpty)
               const Padding(
@@ -2229,18 +2294,43 @@ class _ConsignmentScreenState extends State<ConsignmentScreen> {
         );
       }
       final rows = snapshot.data!;
+      final compact = MediaQuery.sizeOf(context).width < 420;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text('Amount Owed to Supplier'),
-              trailing: Text(
-                money(payable),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
+            child: compact
+                ? Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.account_balance_wallet_outlined),
+                            SizedBox(width: 10),
+                            Expanded(child: Text('Amount Owed to Supplier')),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            money(payable),
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListTile(
+                    leading: const Icon(Icons.account_balance_wallet_outlined),
+                    title: const Text('Amount Owed to Supplier'),
+                    trailing: Text(
+                      money(payable),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
           ),
           const SizedBox(height: 8),
           Text(

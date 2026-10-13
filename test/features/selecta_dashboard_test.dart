@@ -27,6 +27,7 @@ void main() {
   sqfliteFfiInit();
 
   for (final variant in [
+    (size: const Size(280, 800), theme: AppTheme.dark, name: 'phone'),
     (
       size: const Size(1600, 1000),
       theme: AppTheme.dark,
@@ -175,8 +176,9 @@ void main() {
       await tester.enterText(find.byType(TextField), 'not a product');
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('No matching products found.'), findsOneWidget);
-      await tester.tap(find.byTooltip('Clear search'));
-      await tester.pump();
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Low Stock'));
       await tester.tap(find.text('Low Stock'));
       await tester.pump();
@@ -189,7 +191,11 @@ void main() {
       await tester.pump();
       expect(find.byTooltip('Sort products, currently Price'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('Sale History'));
+      await tester.scrollUntilVisible(
+        find.text('Sale History'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Sale History'));
       await tester.pump();
       await tester.runAsync(

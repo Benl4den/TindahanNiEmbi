@@ -146,6 +146,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
           content: SizedBox(
             width: 480,
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: selected,
               decoration: const InputDecoration(
                 labelText: 'Product',
@@ -272,7 +273,11 @@ class _SelectaScreenState extends State<SelectaScreen> {
         ),
         content: SizedBox(
           width: 620,
-          height: 500,
+          height: MediaQuery.sizeOf(context).width < 600
+              ? (MediaQuery.sizeOf(context).height * .52)
+                    .clamp(240.0, 500.0)
+                    .toDouble()
+              : 500,
           child: FutureBuilder<List<Map<String, Object?>>>(
             future: widget.special.productSalesHistory(product.id),
             builder: (_, snapshot) {
@@ -341,26 +346,67 @@ class _SelectaScreenState extends State<SelectaScreen> {
                           row['occurred_at']! as String,
                         ).toLocal();
                         final source = row['source']! as String;
+                        final icon = source == 'UTANG sale'
+                            ? Icons.people_outline
+                            : source == 'GCash sale'
+                            ? Icons.account_balance_wallet_outlined
+                            : Icons.payments_outlined;
+                        final details =
+                            '${MaterialLocalizations.of(context).formatMediumDate(occurredAt)} • ${TimeOfDay.fromDateTime(occurredAt).format(context)}\nRecorded by ${row['actor_name']! as String}';
+                        final total = standardMoney(
+                          row['line_total_centavos']! as int,
+                        );
+                        if (MediaQuery.sizeOf(context).width < 600) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(icon),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '$source • ${productQuantityText(product, row['quantity']! as int)}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 32),
+                                  child: Text(details),
+                                ),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    total,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(
                             vertical: 5,
                           ),
-                          leading: Icon(
-                            source == 'UTANG sale'
-                                ? Icons.people_outline
-                                : source == 'GCash sale'
-                                ? Icons.account_balance_wallet_outlined
-                                : Icons.payments_outlined,
-                          ),
+                          leading: Icon(icon),
                           title: Text(
                             '$source • ${productQuantityText(product, row['quantity']! as int)}',
                           ),
-                          subtitle: Text(
-                            '${MaterialLocalizations.of(context).formatMediumDate(occurredAt)} • ${TimeOfDay.fromDateTime(occurredAt).format(context)}\nRecorded by ${row['actor_name']! as String}',
-                          ),
+                          subtitle: Text(details),
                           isThreeLine: true,
                           trailing: Text(
-                            standardMoney(row['line_total_centavos']! as int),
+                            total,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         );
@@ -421,8 +467,10 @@ class _SelectaScreenState extends State<SelectaScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         Text(
                           title,
@@ -515,7 +563,14 @@ class _SelectaScreenState extends State<SelectaScreen> {
         itemCount: cards.length,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: columns,
-          mainAxisExtent: columns == 4 ? 136 : 150,
+          // At phone widths the metric's horizontal layout wraps its label,
+          // value, and optional detail into a taller column. Give it enough
+          // vertical room so long values do not overflow the fixed grid tile.
+          mainAxisExtent: columns == 4
+              ? 136
+              : columns == 2
+              ? 150
+              : 196,
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
         ),
@@ -553,7 +608,7 @@ class _SelectaScreenState extends State<SelectaScreen> {
     ],
     child: Container(
       height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outline),
         borderRadius: BorderRadius.circular(12),
@@ -561,10 +616,17 @@ class _SelectaScreenState extends State<SelectaScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.calendar_today_outlined, size: 20),
-          const SizedBox(width: 10),
-          Text(period, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(width: 14),
+          const Icon(Icons.calendar_today_outlined, size: 18),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              period,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+          const SizedBox(width: 8),
           const Icon(Icons.keyboard_arrow_down),
         ],
       ),
@@ -1172,7 +1234,14 @@ class _SelectaScreenState extends State<SelectaScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.groupName), toolbarHeight: 64),
+    appBar: AppBar(
+      title: Text(
+        widget.groupName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      toolbarHeight: 64,
+    ),
     body:
         FutureBuilder<
           ({
@@ -1193,8 +1262,14 @@ class _SelectaScreenState extends State<SelectaScreen> {
               return AppLoadingView(label: 'Loading ${widget.groupName}…');
             }
             final data = snapshot.data!;
+            final compact = MediaQuery.sizeOf(context).width < 600;
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
+              padding: EdgeInsets.fromLTRB(
+                compact ? 12 : 28,
+                22,
+                compact ? 12 : 28,
+                compact ? 16 : 28,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

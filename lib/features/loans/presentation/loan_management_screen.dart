@@ -151,11 +151,13 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
 
   Future<void> _details(Map<String, Object?> loan) async {
     final loanId = loan['id']! as int;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     Map<String, Object?>? paymentToCancel;
     var recordPayment = false;
     var correctBorrowed = false;
     await _showLoanDialog<void>(
       (dialog) => AlertDialog(
+        actionsOverflowAlignment: compact ? OverflowBarAlignment.end : null,
         title: Row(
           children: [
             Expanded(
@@ -164,7 +166,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                 children: [
                   Text(
                     loan['lender_name']! as String,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
@@ -214,19 +216,6 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                         final progress = total == 0
                             ? 0.0
                             : (paid / total).clamp(0.0, 1.0);
-                        Widget metric(String label, int amount) => Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(label),
-                              const SizedBox(height: 4),
-                              Text(
-                                standardMoney(amount),
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ],
-                          ),
-                        );
                         return Card(
                           child: Padding(
                             padding: const EdgeInsets.all(20),
@@ -245,12 +234,45 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                                       .headlineMedium,
                                 ),
                                 const SizedBox(height: 22),
-                                Row(
-                                  children: [
-                                    metric('Borrowed', borrowed),
-                                    metric('Paid', paid),
-                                    metric('Remaining', remaining),
-                                  ],
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final columns = constraints.maxWidth >= 480
+                                        ? 3
+                                        : constraints.maxWidth >= 340
+                                        ? 2
+                                        : 1;
+                                    final metricWidth =
+                                        (constraints.maxWidth -
+                                            12 * (columns - 1)) /
+                                        columns;
+                                    Widget metric(String label, int amount) =>
+                                        SizedBox(
+                                          width: metricWidth,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(label),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                standardMoney(amount),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                    return Wrap(
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      children: [
+                                        metric('Borrowed', borrowed),
+                                        metric('Paid', paid),
+                                        metric('Remaining', remaining),
+                                      ],
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 20),
                                 Wrap(
@@ -290,15 +312,13 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                       )?.toLocal();
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Row(
+                        title: Wrap(
+                          spacing: 12,
+                          runSpacing: 2,
                           children: [
-                            Expanded(
-                              child: Text(
-                                standardMoney(
-                                  payment['amount_centavos']! as int,
-                                ),
-                                style: Theme.of(dialog).textTheme.titleMedium,
-                              ),
+                            Text(
+                              standardMoney(payment['amount_centavos']! as int),
+                              style: Theme.of(dialog).textTheme.titleMedium,
                             ),
                             Text(
                               PaymentMethod.fromDatabase(
@@ -681,24 +701,51 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SegmentedButton<PaymentMethod>(
-                  segments: const [
-                    ButtonSegment(
-                      value: PaymentMethod.cash,
-                      label: Text('Cash'),
+                if (MediaQuery.sizeOf(d).width < 420)
+                  DropdownButtonFormField<PaymentMethod>(
+                    isExpanded: true,
+                    initialValue: method,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment method',
                     ),
-                    ButtonSegment(
-                      value: PaymentMethod.gcash,
-                      label: Text('GCash'),
-                    ),
-                    ButtonSegment(
-                      value: PaymentMethod.maya,
-                      label: Text('Maya'),
-                    ),
-                  ],
-                  selected: {method},
-                  onSelectionChanged: (v) => setDialog(() => method = v.single),
-                ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: PaymentMethod.cash,
+                        child: Text('Cash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.gcash,
+                        child: Text('GCash'),
+                      ),
+                      DropdownMenuItem(
+                        value: PaymentMethod.maya,
+                        child: Text('Maya'),
+                      ),
+                    ],
+                    onChanged: busy
+                        ? null
+                        : (value) => setDialog(() => method = value!),
+                  )
+                else
+                  SegmentedButton<PaymentMethod>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PaymentMethod.cash,
+                        label: Text('Cash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.gcash,
+                        label: Text('GCash'),
+                      ),
+                      ButtonSegment(
+                        value: PaymentMethod.maya,
+                        label: Text('Maya'),
+                      ),
+                    ],
+                    selected: {method},
+                    onSelectionChanged: (v) =>
+                        setDialog(() => method = v.single),
+                  ),
                 TextField(
                   controller: note,
                   decoration: const InputDecoration(
@@ -1383,6 +1430,7 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
     final remaining = (agreed - paid).clamp(0, agreed);
     final progress = agreed <= 0 ? 0.0 : (paid / agreed).clamp(0.0, 1.0);
     final lenderId = lender['id']! as int;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     void open() {
       if (loan == null) {
         _add(lenderId: lenderId);
@@ -1391,6 +1439,65 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
       }
     }
 
+    final status = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: loan == null
+            ? scheme.secondaryContainer
+            : scheme.primary.withValues(alpha: .15),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        loan == null
+            ? 'No active loan'
+            : completed
+            ? 'Completed'
+            : 'Active',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: loan == null ? scheme.onSecondaryContainer : scheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+    final menu = PopupMenuButton<String>(
+      tooltip: 'Lender actions',
+      onSelected: (_) => open(),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'open',
+          child: Text(loan == null ? 'Add Loan' : 'View Loan'),
+        ),
+      ],
+    );
+    Widget identity() => Row(
+      children: [
+        CircleAvatar(
+          backgroundColor: scheme.primary.withValues(alpha: .14),
+          child: Icon(Icons.account_balance_outlined, color: scheme.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: compact ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                '${_schedule(lender, loan)} • ${_method(lender)}',
+                maxLines: compact ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
@@ -1401,78 +1508,28 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
         borderRadius: BorderRadius.circular(16),
         onTap: open,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(compact ? 12 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: scheme.primary.withValues(alpha: .14),
-                    child: Icon(
-                      Icons.account_balance_outlined,
-                      color: scheme.primary,
-                    ),
+              if (compact) ...[
+                identity(),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [status, menu],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        Text(
-                          '${_schedule(lender, loan)} • ${_method(lender)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: loan == null
-                          ? scheme.secondaryContainer
-                          : scheme.primary.withValues(alpha: .15),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: Text(
-                      loan == null
-                          ? 'No active loan'
-                          : completed
-                          ? 'Completed'
-                          : 'Active',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: loan == null
-                            ? scheme.onSecondaryContainer
-                            : scheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Lender actions',
-                    onSelected: (_) => open(),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'open',
-                        child: Text(loan == null ? 'Add Loan' : 'View Loan'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ] else
+                Row(
+                  children: [
+                    Expanded(child: identity()),
+                    const SizedBox(width: 8),
+                    status,
+                    menu,
+                  ],
+                ),
               const SizedBox(height: 12),
               if (loan == null)
                 Container(
@@ -1562,24 +1619,41 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 5,
+                if (compact) ...[
+                  LinearProgressIndicator(value: progress, minHeight: 5),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${standardMoney(paid)} of ${standardMoney(agreed)} paid',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        '${standardMoney(paid)} of ${standardMoney(agreed)} paid',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 5,
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          '${standardMoney(paid)} of ${standardMoney(agreed)} paid',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
               ],
             ],
           ),
@@ -1748,11 +1822,16 @@ class _LoanManagementScreenState extends State<LoanManagementScreen> {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('5/6 Loan Management'),
           Text(
-            'Manage your lenders, loans, and collections.',
-            style: Theme.of(context).textTheme.bodySmall,
+            MediaQuery.sizeOf(context).width < 600
+                ? '5/6 Loans'
+                : '5/6 Loan Management',
           ),
+          if (MediaQuery.sizeOf(context).width >= 600)
+            Text(
+              'Manage your lenders, loans, and collections.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
       ),
     ),

@@ -31,7 +31,7 @@ void main() {
   testWidgets('Brands overview ignores Selecta sales for an empty brand', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.physicalSize = const Size(280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -87,6 +87,18 @@ void main() {
       () async => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pumpAndSettle();
+    for (final width in [280.0, 320.0, 390.0, 700.0, 1400.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'Brands at ${width}dp');
+    }
+    tester.view.physicalSize = const Size(280, 800);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('New Brand'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('New Brand'), findsOneWidget);
     expect(find.text('0 products'), findsWidgets);
     expect(find.text('₱0.00'), findsNWidgets(2));
@@ -189,6 +201,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No brands yet'), findsOneWidget);
     expect(find.text('Add Brand'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Selecta appears in Managed Brands only after adding it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = await tester.runAsync(() => app.database);
+    if (db == null) throw StateError('Test database did not open.');
+    final special = SpecialInventoryRepository(db);
+    final source = _PlanSource()..current = AppPlan.pro;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ManagedBrandsScreen(
+          special: special,
+          products: SqliteProductRepository(db),
+          inventory: InventoryRepository(db),
+          categories: SqliteCategoryRepository(db),
+          photoService: LocalProductPhotoService(),
+          analytics: BrandAnalyticsRepository(db),
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(source),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No brands yet'), findsOneWidget);
+    expect(find.text('Selecta'), findsNothing);
+
+    await tester.tap(find.text('Add Brand').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Selecta');
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Selecta'), findsOneWidget);
+    expect((await tester.runAsync(() => special.managedBrands()))?.length, 1);
+    await tester.ensureVisible(find.text('Selecta'));
+    await tester.tap(find.text('Selecta'));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+    }
+    await tester.pump();
+    expect(find.text('Products in Selecta'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

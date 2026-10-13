@@ -12,10 +12,11 @@ void main() {
   testWidgets('Edit Customer modal saves contact without altering balance', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(800, 1100);
+    tester.view.physicalSize = const Size(280, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
     final app = AppDatabase(
       factory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
@@ -64,12 +65,17 @@ void main() {
       find.widgetWithText(TextFormField, 'Phone Number'),
       '0999 111 2222',
     );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Save Changes'));
     await tester.tap(find.text('Save Changes'));
     await tester.runAsync(
       () async => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(find.text('Edit Customer'), findsNothing);
     final after = await tester.runAsync(() => repository.details(customer.id));
     expect(after!.customer.mobileNumber, '0999 111 2222');
     expect(after.customer.balanceCentavos, before!.customer.balanceCentavos);

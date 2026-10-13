@@ -90,8 +90,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     body: RefreshIndicator(
       onRefresh: () async => _refresh(),
       child: ListView(
-        padding: EdgeInsets.all(
+        padding: EdgeInsets.fromLTRB(
           MediaQuery.sizeOf(context).width < 600 ? 16 : 20,
+          MediaQuery.sizeOf(context).width < 600 ? 16 : 20,
+          MediaQuery.sizeOf(context).width < 600 ? 16 : 20,
+          MediaQuery.sizeOf(context).width < 600 ? 112 : 20,
         ),
         children: [
           Text(
@@ -446,6 +449,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       barrierDismissible: false,
       builder: (outer) => StatefulBuilder(
         builder: (_, setLocal) => AlertDialog(
+          scrollable: true,
           title: const Text('Cancel Expense Record?'),
           content: SizedBox(
             width: 520,

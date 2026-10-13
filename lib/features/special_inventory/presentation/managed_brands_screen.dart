@@ -53,7 +53,11 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
   _brandFuture;
 
   void _refreshBrands() {
-    if (mounted) setState(() => _brandFuture = _brandData());
+    if (mounted) {
+      setState(() {
+        _brandFuture = _brandData();
+      });
+    }
   }
 
   Future<
@@ -174,7 +178,7 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
         ? _buildPro(context)
         : Scaffold(
             appBar: AppBar(
-              title: _headerTitle,
+              title: _appBarTitle(context),
               actions: const [HelpButton(topic: HelpTopicId.brands)],
             ),
             body: const ProFeaturePreview(
@@ -204,24 +208,37 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
     ],
   );
 
+  Widget _appBarTitle(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 520
+      ? const Text('Brands')
+      : _headerTitle;
+
   Widget _buildPro(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: _headerTitle,
+      title: _appBarTitle(context),
       actions: [
         const HelpButton(topic: HelpTopicId.brands),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: FilledButton.icon(
+        if (MediaQuery.sizeOf(context).width < 520)
+          IconButton(
+            tooltip: 'Add Brand',
             onPressed: _add,
             icon: const Icon(Icons.add),
-            label: const Text('Add Brand'),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: FilledButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Brand'),
+            ),
           ),
-        ),
       ],
     ),
     body: FutureBuilder<({List<ManagedBrandSummary> brands, Map<int, ({int sales, int profit})> totals})>(
       future: _brandFuture ??= _brandData(),
       builder: (_, snapshot) {
+        final compact = MediaQuery.sizeOf(context).width < 520;
         if (snapshot.hasError) {
           return AppStateView.error(
             title: 'Could not load brands',
@@ -268,7 +285,12 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 24,
+                      20,
+                      compact ? 12 : 24,
+                      0,
+                    ),
                     child: ProOverviewPanel(
                       title: 'Brand Overview',
                       subtitle: 'A summary of your brand performance.',
@@ -301,23 +323,30 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 24,
+                      16,
+                      compact ? 12 : 24,
+                      0,
+                    ),
                     child: Wrap(
                       spacing: 12,
                       runSpacing: 10,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        SizedBox(
-                          width: 340,
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              prefixIcon: Icon(Icons.search),
-                              hintText: 'Search brands...',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (value) => setState(
-                              () => _search = value.trim().toLowerCase(),
+                        LayoutBuilder(
+                          builder: (_, box) => SizedBox(
+                            width: box.maxWidth < 500 ? box.maxWidth : 340,
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.search),
+                                hintText: 'Search brands...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (value) => setState(
+                                () => _search = value.trim().toLowerCase(),
+                              ),
                             ),
                           ),
                         ),
@@ -361,7 +390,12 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 24,
+                      24,
+                      compact ? 12 : 24,
+                      0,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -505,9 +539,13 @@ class _ManagedBrandsScreenState extends State<ManagedBrandsScreen> {
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     ),

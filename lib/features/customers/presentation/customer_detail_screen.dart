@@ -68,78 +68,116 @@ class _State extends State<CustomerDetailScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text(AppStrings.customers)),
-    body: FutureBuilder<CustomerDetails>(
-      future: data,
-      builder: (context, s) {
-        if (s.hasError) {
-          return Center(
-            child: TextButton(
-              onPressed: () => setState(reload),
-              child: const Text('Could not load this account. Try again'),
+    body: SafeArea(
+      top: false,
+      child: FutureBuilder<CustomerDetails>(
+        future: data,
+        builder: (context, s) {
+          if (s.hasError) {
+            return Center(
+              child: TextButton(
+                onPressed: () => setState(reload),
+                child: const Text('Could not load this account. Try again'),
+              ),
+            );
+          }
+          if (!s.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final d = s.data!;
+          final currentBalance =
+              visibleBalanceCentavos ?? d.customer.balanceCentavos;
+          final compact = MediaQuery.sizeOf(context).width < 600;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 16 : 24,
+              compact ? 16 : 24,
+              compact ? 16 : 24,
+              compact ? 32 : 24,
             ),
-          );
-        }
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
-        final d = s.data!;
-        final currentBalance =
-            visibleBalanceCentavos ?? d.customer.balanceCentavos;
-        return ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            Text(
-              d.customer.fullName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const Text(AppStrings.totalUtang),
-                    Text(
-                      standardMoney(currentBalance),
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    FilledButton(
-                      onPressed: currentBalance == 0
-                          ? null
-                          : () async {
-                              final ok = await Navigator.push<bool>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PaymentScreen(
-                                    customer: d.customer,
-                                    repository: widget.payments,
-                                    onRecorded: (amount) =>
-                                        applyCommittedPayment(
-                                          currentBalance,
-                                          amount,
-                                        ),
+            children: [
+              Text(
+                d.customer.fullName,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      const Text(AppStrings.totalUtang),
+                      Text(
+                        standardMoney(currentBalance),
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      FilledButton(
+                        onPressed: currentBalance == 0
+                            ? null
+                            : () async {
+                                final ok = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PaymentScreen(
+                                      customer: d.customer,
+                                      repository: widget.payments,
+                                      onRecorded: (amount) =>
+                                          applyCommittedPayment(
+                                            currentBalance,
+                                            amount,
+                                          ),
+                                    ),
                                   ),
-                                ),
-                              );
-                              if (ok == true && mounted) {
-                                await refreshDetailsNow();
-                              }
-                            },
-                      child: const Text('Payment'),
+                                );
+                                if (ok == true && mounted) {
+                                  await refreshDetailsNow();
+                                }
+                              },
+                        child: const Text('Payment'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              ...d.ledger.map((e) {
+                final amount =
+                    '${e.amountCentavos < 0 ? '-' : '+'}${standardMoney(e.amountCentavos.abs())}';
+                if (compact) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            type(e.type),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(e.occurredAt.toLocal().toString()),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              amount,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            ...d.ledger.map(
-              (e) => ListTile(
-                title: Text(type(e.type)),
-                subtitle: Text(e.occurredAt.toLocal().toString()),
-                trailing: Text(
-                  '${e.amountCentavos < 0 ? '-' : '+'}${standardMoney(e.amountCentavos.abs())}',
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+                  );
+                }
+                return ListTile(
+                  title: Text(type(e.type)),
+                  subtitle: Text(e.occurredAt.toLocal().toString()),
+                  trailing: Text(amount),
+                );
+              }),
+            ],
+          );
+        },
+      ),
     ),
   );
 }

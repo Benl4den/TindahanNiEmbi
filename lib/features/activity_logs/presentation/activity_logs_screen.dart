@@ -202,9 +202,9 @@ class _State extends State<ActivityLogsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    Container(
+                                LayoutBuilder(
+                                  builder: (_, constraints) {
+                                    final badge = Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
                                         vertical: 3,
@@ -215,15 +215,16 @@ class _State extends State<ActivityLogsScreen> {
                                       ),
                                       child: Text(
                                         _eventLabel(x.eventType),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           color: color,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 12,
                                         ),
                                       ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
+                                    );
+                                    final time = Text(
                                       MaterialLocalizations.of(context)
                                           .formatTimeOfDay(
                                             TimeOfDay.fromDateTime(
@@ -233,8 +234,27 @@ class _State extends State<ActivityLogsScreen> {
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w700,
                                       ),
-                                    ),
-                                  ],
+                                    );
+                                    if (constraints.maxWidth < 340) {
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: badge,
+                                          ),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: time,
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                    return Row(
+                                      children: [badge, const Spacer(), time],
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 8),
                                 Text(

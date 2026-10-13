@@ -131,6 +131,7 @@ class _UnitsPackagingEditorState extends State<UnitsPackagingEditor> {
             ),
             const SizedBox(height: 18),
             DropdownButtonFormField<BaseUnit>(
+              isExpanded: true,
               initialValue: value.baseUnit,
               decoration: const InputDecoration(
                 labelText: 'Stock Counting Unit',

@@ -231,6 +231,7 @@ class SaleDetailsScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<int>(
+                              isExpanded: true,
                               initialValue: addId,
                               items: products
                                   .map(
@@ -383,6 +384,7 @@ class SaleDetailsScreen extends StatelessWidget {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (_, set) => AlertDialog(
+          scrollable: true,
           title: const Text('Cancel Sale?'),
           content: SizedBox(
             width: 500,

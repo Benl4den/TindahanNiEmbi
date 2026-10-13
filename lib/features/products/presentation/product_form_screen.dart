@@ -356,31 +356,71 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           ),
                           const SizedBox(height: 16),
                           if (_categoryLocked)
-                            ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                side: BorderSide(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outlineVariant,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              title: const Text('Category'),
-                              subtitle: Text(
-                                widget.categories
+                            LayoutBuilder(
+                              builder: (_, constraints) {
+                                final categoryName =
+                                    widget.categories
                                         .where((x) => x.id == _categoryId)
                                         .map((x) => x.name)
                                         .firstOrNull ??
-                                    '',
-                              ),
-                              trailing: TextButton(
-                                onPressed: () =>
-                                    setState(() => _categoryLocked = false),
-                                child: const Text('Change Category'),
-                              ),
+                                    '';
+                                final change = TextButton(
+                                  onPressed: () =>
+                                      setState(() => _categoryLocked = false),
+                                  child: const Text('Change Category'),
+                                );
+                                final border = RoundedRectangleBorder(
+                                  side: BorderSide(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                );
+                                if (constraints.maxWidth < 420) {
+                                  return Container(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      8,
+                                      8,
+                                    ),
+                                    decoration: ShapeDecoration(shape: border),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Category',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          categoryName,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
+                                        ),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: change,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  shape: border,
+                                  title: const Text('Category'),
+                                  subtitle: Text(categoryName),
+                                  trailing: change,
+                                );
+                              },
                             )
                           else
                             DropdownButtonFormField<int>(
@@ -515,20 +555,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               },
                             ),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              if (widget.product == null &&
+                          LayoutBuilder(
+                            builder: (_, constraints) {
+                              final hasStartingStock =
+                                  widget.product == null &&
                                   widget.allowStartingStock &&
-                                  !_usesSmartPackaging) ...[
-                                Expanded(
-                                  child: _field(_starting, _startingStockLabel),
-                                ),
-                                const SizedBox(width: 16),
-                              ],
-                              Expanded(
-                                child: _field(_minimum, 'Low Stock Alert At'),
-                              ),
-                            ],
+                                  !_usesSmartPackaging;
+                              final minimum = _field(
+                                _minimum,
+                                'Low Stock Alert At',
+                              );
+                              if (!hasStartingStock) return minimum;
+                              final starting = _field(
+                                _starting,
+                                _startingStockLabel,
+                              );
+                              if (constraints.maxWidth < 420) {
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [starting, minimum],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  Expanded(child: starting),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: minimum),
+                                ],
+                              );
+                            },
                           ),
                           if (widget.product != null) ...[
                             const SizedBox(height: 10),

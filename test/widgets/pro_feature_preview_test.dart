@@ -75,10 +75,15 @@ void main() {
             ),
           ),
         );
-        final cards = find.text('--');
-        expect(cards, findsNWidgets(4));
+        final metricLabels = [
+          'Current GCash Balance',
+          'Cash-In Today',
+          'Cash-Out Today',
+          'Service Fees\nAll time',
+        ];
         final y = [
-          for (var i = 0; i < 4; i++) tester.getTopLeft(cards.at(i)).dy,
+          for (final label in metricLabels)
+            tester.getTopLeft(find.text(label)).dy,
         ];
         expect(y[0], y[1]);
         if (size.width > 1000) {

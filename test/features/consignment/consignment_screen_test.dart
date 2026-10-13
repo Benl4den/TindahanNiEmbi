@@ -80,6 +80,10 @@ class _Repo extends ConsignmentRepository {
     for (final p in parties) p.id: companyBalances[p.id] ?? payable,
   };
   @override
+  Future<List<Map<String, Object?>>> remittancesForConsignor(
+    int consignorId,
+  ) async => [];
+  @override
   Future<int> createConsignor(
     String n, {
     String? contactDetails,
@@ -203,7 +207,7 @@ void main() {
     repo = _Repo(db);
   });
   tearDown(() => db.close());
-  Future<void> pump(WidgetTester t) async {
+  Future<void> pump(WidgetTester t, {int? initialConsignorId}) async {
     t.view.physicalSize = const Size(1400, 900);
     t.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -217,6 +221,7 @@ void main() {
           products: _Products(),
           categories: _Categories(),
           photoService: _Photo(),
+          initialConsignorId: initialConsignorId,
           access: FeatureAccessService(
             db,
             planController: AppPlanController(OpenAccessPlanSource()),
@@ -256,6 +261,73 @@ void main() {
     addTearDown(t.view.resetViewInsets);
     await t.pumpAndSettle();
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('phone supplier sections and remittance controls fit', (t) async {
+    addTearDown(t.view.resetViewInsets);
+    const supplier = 'A Long Supplier Company Name';
+    repo.parties.add(const Consignor(id: 1, name: supplier, isArchived: false));
+    repo.payable = 120000;
+    repo.companyBalances[1] = 120000;
+    await pump(t, initialConsignorId: 1);
+    t.view.physicalSize = const Size(280, 640);
+    await t.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await t.pumpAndSettle();
+    expect(find.text(supplier), findsOneWidget);
+    expect(t.takeException(), isNull);
+    final detailScroll = find
+        .descendant(
+          of: find.byKey(const Key('consignor-detail-list')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await t.scrollUntilVisible(
+      find.text('Record Supplier Payment'),
+      140,
+      scrollable: detailScroll,
+    );
+    await t.tap(find.text('Record Supplier Payment'));
+    await t.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await t.pumpAndSettle();
+
+    expect(find.text('Payment method'), findsOneWidget);
+    final paymentMethodField = find.byType(
+      DropdownButtonFormField<PaymentMethod>,
+    );
+    expect(paymentMethodField, findsOneWidget);
+    await t.ensureVisible(paymentMethodField);
+    await t.tap(paymentMethodField);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Maya').last);
+    await t.pumpAndSettle();
+    expect(find.text('Maya Reference (optional)'), findsOneWidget);
+    t.view.viewInsets = const FakeViewPadding(bottom: 220);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    t.view.resetViewInsets();
+    Navigator.of(t.element(find.text('Payment method'))).pop();
+    await t.pumpAndSettle();
+    expect(find.text('Payment method'), findsNothing);
+
+    await t.scrollUntilVisible(
+      find.text('Supplier section'),
+      180,
+      scrollable: detailScroll,
+    );
+    expect(find.text('Supplier section'), findsOneWidget);
+    await t.tap(find.byType(DropdownButtonFormField<int>));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Supplier Payments').last);
+    await t.pump();
+    await t.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await t.pump();
+    expect(find.text('No supplier payments recorded.'), findsOneWidget);
   });
 
   testWidgets(

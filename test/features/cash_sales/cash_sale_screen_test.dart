@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tindahan_ni_embi/features/cash_sales/presentation/cash_sale_screen.dart';
+import 'package:tindahan_ni_embi/models/payment_method.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
 
@@ -309,6 +310,13 @@ void main() {
       expect(find.text('₱20.00'), findsWidgets);
       tester.view.physicalSize = const Size(320, 700);
       await tester.pump();
+      expect(tester.takeException(), isNull);
+      tester.view.physicalSize = const Size(280, 700);
+      await tester.pump();
+      expect(
+        find.byType(DropdownButtonFormField<PaymentMethod>),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );

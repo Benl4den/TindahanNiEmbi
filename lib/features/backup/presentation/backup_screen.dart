@@ -127,14 +127,18 @@ class _State extends State<BackupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Backup & Restore'),
+      title: Text(
+        MediaQuery.sizeOf(context).width < 360 ? 'Backup' : 'Backup & Restore',
+      ),
       actions: const [HelpButton(topic: HelpTopicId.backupRestore)],
     ),
     body: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
+          padding: EdgeInsets.all(
+            MediaQuery.sizeOf(context).width < 600 ? 16 : 28,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -54,6 +54,9 @@ void main() {
     await tester.ensureVisible(find.text('Add Lender'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add Lender'));
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 220);
     await tester.pumpAndSettle();
@@ -70,8 +73,82 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Add Loan').first);
     await tester.tap(find.text('Add Loan').first);
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 220);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('loan detail and payment flow adapt to narrow phones', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(280, 640);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = await tester.runAsync(() => app.database);
+    if (db == null) throw StateError('Test database did not open.');
+    final repository = LoanRepository(db, actorRole: 'OWNER');
+    const lenderName = 'Juan Dela Cruz Community Lending';
+    await tester.runAsync(() async {
+      final lenderId = await repository.createLender(lenderName);
+      await repository.create(
+        lenderId: lenderId,
+        borrowed: 5000000,
+        agreed: 5500000,
+        sourceKind: 'EXISTING',
+        start: DateTime.now(),
+        frequency: 'DAILY',
+      );
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoanManagementScreen(
+          repository: repository,
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(OpenAccessPlanSource()),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text(lenderName),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text(lenderName), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text(lenderName));
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Loan details'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Record Payment'));
+    await tester.pumpAndSettle();
+    expect(find.text('Payment method'), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<PaymentMethod>), findsOneWidget);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

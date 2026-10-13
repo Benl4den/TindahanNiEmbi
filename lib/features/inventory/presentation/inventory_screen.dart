@@ -136,28 +136,52 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
             'Use this for physical count differences, damage, or missing stock. Purchases belong in Stock In.',
           ),
           const SizedBox(height: 16),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: false,
-                label: Text('Remove stock'),
-                icon: Icon(Icons.remove),
+          if (MediaQuery.sizeOf(context).width < 420)
+            DropdownButtonFormField<bool>(
+              isExpanded: true,
+              initialValue: adding,
+              decoration: const InputDecoration(
+                labelText: 'Stock correction',
+                border: OutlineInputBorder(),
               ),
-              ButtonSegment(
-                value: true,
-                label: Text('Add stock'),
-                icon: Icon(Icons.add),
-              ),
-            ],
-            selected: {adding},
-            onSelectionChanged: saving
-                ? null
-                : (selection) => setState(() {
-                    adding = selection.first;
-                    reason = null;
-                    error = null;
-                  }),
-          ),
+              items: const [
+                DropdownMenuItem(value: false, child: Text('Remove stock')),
+                DropdownMenuItem(value: true, child: Text('Add stock')),
+              ],
+              onChanged: saving
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        adding = value;
+                        reason = null;
+                        error = null;
+                      });
+                    },
+            )
+          else
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('Remove stock'),
+                  icon: Icon(Icons.remove),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Add stock'),
+                  icon: Icon(Icons.add),
+                ),
+              ],
+              selected: {adding},
+              onSelectionChanged: saving
+                  ? null
+                  : (selection) => setState(() {
+                      adding = selection.first;
+                      reason = null;
+                      error = null;
+                    }),
+            ),
           const SizedBox(height: 16),
           TextField(
             controller: quantity,
@@ -172,6 +196,7 @@ class _CorrectStockDialogState extends State<_CorrectStockDialog> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             key: ValueKey(adding),
             initialValue: reason,
             decoration: InputDecoration(
@@ -342,6 +367,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: productId,
                   decoration: const InputDecoration(
                     labelText: AppStrings.products,
@@ -1399,7 +1425,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
         content: SizedBox(
           width: 680,
-          height: 480,
+          height: MediaQuery.sizeOf(context).width < 600
+              ? (MediaQuery.sizeOf(context).height * .52)
+                    .clamp(240.0, 480.0)
+                    .toDouble()
+              : 480,
           child: FutureBuilder<List<InventoryMovement>>(
             future: _history,
             builder: (_, s) => s.hasError
@@ -1430,14 +1460,47 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         separatorBuilder: (_, _) => const Divider(),
                         itemBuilder: (_, i) {
                           final m = movements[i];
+                          final details =
+                              '${DisplayLabels.movement(m.type)} • ${_movementQuantity(m, m.quantityBefore)} → ${_movementQuantity(m, m.quantityAfter)}';
+                          final change =
+                              '${m.quantityChange >= 0 ? '+' : '-'}${_movementQuantity(m, m.quantityChange.abs())}';
+                          if (MediaQuery.sizeOf(context).width < 600) {
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    m.productName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(details),
+                                  if (m.notes?.trim().isNotEmpty == true)
+                                    Text(m.notes!),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      change,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
                           return ListTile(
                             title: Text(m.productName),
                             subtitle: Text(
-                              '${DisplayLabels.movement(m.type)} • ${_movementQuantity(m, m.quantityBefore)} → ${_movementQuantity(m, m.quantityAfter)}${m.notes == null || m.notes!.isEmpty ? '' : '\n${m.notes}'}',
+                              '$details${m.notes == null || m.notes!.isEmpty ? '' : '\n${m.notes}'}',
                             ),
-                            trailing: Text(
-                              '${m.quantityChange >= 0 ? '+' : '-'}${_movementQuantity(m, m.quantityChange.abs())}',
-                            ),
+                            trailing: Text(change),
                           );
                         },
                       );

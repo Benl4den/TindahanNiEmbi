@@ -99,28 +99,37 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           _field(2, AppStrings.phone, phone: true),
           _field(4, AppStrings.customerNotes, lines: 3),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : () => Navigator.maybePop(context),
-                  child: const Text('Cancel'),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 360;
+              final cancel = OutlinedButton(
+                onPressed: _saving ? null : () => Navigator.maybePop(context),
+                child: const Text('Cancel'),
+              );
+              final save = FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(
+                  _saving
+                      ? 'Saving…'
+                      : widget.customer != null
+                      ? 'Save Changes'
+                      : AppStrings.save,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: Text(
-                    _saving
-                        ? 'Saving…'
-                        : widget.customer != null
-                        ? 'Save Changes'
-                        : AppStrings.save,
-                  ),
-                ),
-              ),
-            ],
+              );
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [cancel, const SizedBox(height: 8), save],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: cancel),
+                  const SizedBox(width: 12),
+                  Expanded(child: save),
+                ],
+              );
+            },
           ),
         ],
       ),

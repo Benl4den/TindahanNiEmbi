@@ -10,14 +10,11 @@ import '../../../widgets/wallet_nav_logo.dart';
 
 import 'package:sqflite/sqflite.dart';
 
-import '../../../core/formatters/number_format.dart';
-
 import '../../../repositories/activity_log_repository.dart';
 import '../../../repositories/staff_activity_repository.dart';
 import '../../../repositories/cash_sale_repository.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/customer_repository.dart';
-import '../../../repositories/dashboard_repository.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../repositories/payment_repository.dart';
@@ -49,7 +46,9 @@ import '../../activity_logs/presentation/activity_logs_screen.dart';
 import '../../activity_logs/presentation/staff_activity_screen.dart';
 import '../../backup/presentation/backup_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
+import '../../store_profile/presentation/tindahan_profile_screen.dart';
 import '../../cash_sales/presentation/cash_sale_screen.dart';
+import '../../cash_sales/presentation/cash_services_shortcut.dart';
 import '../../categories/presentation/categories_screen.dart';
 import '../../consignment/presentation/consignment_screen.dart';
 import '../../inventory/presentation/inventory_screen.dart';
@@ -347,25 +346,29 @@ class _State extends State<AppShell> {
   }
 
   Future<void> _refreshRestockCount() async {
+    int? activeCount;
+    int? count;
     try {
-      final count = (await OperationsRepository(
-        widget.database,
-      ).restock()).length;
-      final activeCount =
+      activeCount =
           Sqflite.firstIntValue(
             await widget.database.rawQuery(
               'SELECT COUNT(*) FROM products WHERE is_archived=0',
             ),
           ) ??
           0;
-      if (mounted) {
-        setState(() {
-          restockCount = count;
-          productCount = activeCount;
-        });
-      }
     } catch (_) {
-      // Keep navigation usable if the indicator query cannot be loaded.
+      // Keep the previous count if products cannot be queried.
+    }
+    try {
+      count = (await OperationsRepository(widget.database).restock()).length;
+    } catch (_) {
+      // Restock may fail independently of the active-product count.
+    }
+    if (mounted && (activeCount != null || count != null)) {
+      setState(() {
+        if (activeCount != null) productCount = activeCount;
+        if (count != null) restockCount = count;
+      });
     }
   }
 
@@ -556,6 +559,24 @@ class _State extends State<AppShell> {
         label: 'Maya Services',
       ),
     );
+    bodyDestinations.addAll(const [
+      NavigationDestination(
+        icon: Icon(Icons.category_outlined),
+        label: 'Categories',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.history_toggle_off_outlined),
+        label: 'Activity Logs',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.groups_2_outlined),
+        label: 'Staff Activity Summary',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.help_outline),
+        label: 'Help & Guide',
+      ),
+    ]);
     const navTargets = [
       13,
       0,
@@ -564,6 +585,7 @@ class _State extends State<AppShell> {
       16,
       5,
       3,
+      17,
       4,
       1,
       2,
@@ -572,14 +594,18 @@ class _State extends State<AppShell> {
       7,
       8,
       9,
+      18,
+      19,
       15,
       10,
+      20,
     ];
     final allowedTargets = widget.role == UserRole.owner
         ? navTargets
         : navTargets
               .where(
-                (target) => const {0, 3, 4, 6, 7, 11, 12, 16}.contains(target),
+                (target) =>
+                    const {0, 3, 4, 6, 7, 10, 11, 12, 16, 20}.contains(target),
               )
               .toList();
     final destinations = [
@@ -665,6 +691,34 @@ class _State extends State<AppShell> {
 
   int dashboardRevision = 0;
 
+  Widget _managedBrands() => ManagedBrandsScreen(
+    special: SpecialInventoryRepository(widget.database, actorRole: role),
+    products: SqliteProductRepository(widget.database),
+    inventory: InventoryRepository(widget.database, actorRole: role),
+    categories: SqliteCategoryRepository(widget.database),
+    photoService: LocalProductPhotoService(),
+    analytics: BrandAnalyticsRepository(widget.database),
+    access: FeatureAccessService(widget.database),
+  );
+
+  Widget _walletScreen(PaymentMethod provider, {String? initialServiceType}) =>
+      GCashScreen(
+        key: ValueKey('${provider.dbValue}-wallet-screen'),
+        repository: PaymentAccountingRepository(
+          widget.database,
+          actorRole: role,
+          provider: provider,
+        ),
+        services: GCashServiceRepository(
+          widget.database,
+          actorRole: role,
+          provider: provider,
+        ),
+        auth: AuthService(widget.database),
+        access: FeatureAccessService(widget.database),
+        initialServiceType: initialServiceType,
+      );
+
   Widget _body() => switch (selected) {
     -1 => _phoneMoreHub(),
     13 =>
@@ -710,6 +764,32 @@ class _State extends State<AppShell> {
               ? ReversalRepository(widget.database)
               : null,
           drafts: SaleDraftRepository(widget.database),
+          cashServicesLauncher: CashServicesShortcut(
+            access: FeatureAccessService(widget.database),
+            gcash: PaymentAccountingRepository(
+              widget.database,
+              actorRole: role,
+            ),
+            maya: PaymentAccountingRepository(
+              widget.database,
+              actorRole: role,
+              provider: PaymentMethod.maya,
+            ),
+            onService: (provider, serviceType) => Navigator.of(context)
+                .push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => _walletScreen(
+                      provider,
+                      initialServiceType: serviceType,
+                    ),
+                  ),
+                ),
+            onHistory: (provider) async {
+              await Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => _walletScreen(provider)),
+              );
+            },
+          ),
           onUtang: (items) async {
             final ok = await showDialog<bool>(
               context: context,
@@ -736,21 +816,7 @@ class _State extends State<AppShell> {
         );
       },
     ),
-    1 =>
-      widget.role == UserRole.owner
-          ? ManagedBrandsScreen(
-              special: SpecialInventoryRepository(
-                widget.database,
-                actorRole: role,
-              ),
-              products: SqliteProductRepository(widget.database),
-              inventory: InventoryRepository(widget.database, actorRole: role),
-              categories: SqliteCategoryRepository(widget.database),
-              photoService: LocalProductPhotoService(),
-              analytics: BrandAnalyticsRepository(widget.database),
-              access: FeatureAccessService(widget.database),
-            )
-          : _denied(),
+    1 => widget.role == UserRole.owner ? _managedBrands() : _denied(),
     2 =>
       widget.role == UserRole.owner
           ? ConsignmentScreen(
@@ -835,28 +901,29 @@ class _State extends State<AppShell> {
       repository: TransactionHistoryRepository(widget.database),
       access: FeatureAccessService(widget.database),
     ),
-    12 => GCashScreen(
-      key: const ValueKey('gcash-wallet-screen'),
-      repository: PaymentAccountingRepository(widget.database, actorRole: role),
-      services: GCashServiceRepository(widget.database, actorRole: role),
-      auth: AuthService(widget.database),
-      access: FeatureAccessService(widget.database),
-    ),
-    16 => GCashScreen(
-      key: const ValueKey('maya-wallet-screen'),
-      repository: PaymentAccountingRepository(
-        widget.database,
-        actorRole: role,
-        provider: PaymentMethod.maya,
-      ),
-      services: GCashServiceRepository(
-        widget.database,
-        actorRole: role,
-        provider: PaymentMethod.maya,
-      ),
-      auth: AuthService(widget.database),
-      access: FeatureAccessService(widget.database),
-    ),
+    12 => _walletScreen(PaymentMethod.gcash),
+    16 => _walletScreen(PaymentMethod.maya),
+    17 =>
+      widget.role == UserRole.owner
+          ? CategoriesScreen(
+              repository: SqliteCategoryRepository(widget.database),
+            )
+          : _denied(),
+    18 =>
+      widget.role == UserRole.owner
+          ? ActivityLogsScreen(
+              repository: ActivityLogRepository(widget.database),
+              walletServicesAllowed: _walletServicesAllowed,
+            )
+          : _denied(),
+    19 =>
+      widget.role == UserRole.owner
+          ? StaffActivityScreen(
+              repository: StaffActivityRepository(widget.database),
+              walletServicesAllowed: _walletServicesAllowed,
+            )
+          : _denied(),
+    20 => const HelpGuideScreen(),
     _ => _more(),
   };
 
@@ -1173,9 +1240,9 @@ class _State extends State<AppShell> {
 
   String _navSection(int target) => switch (target) {
     13 || 0 || 6 || 12 || 16 => 'Daily Selling',
-    5 || 3 || 4 => 'Stock & Products',
+    5 || 3 || 17 || 4 => 'Stock & Products',
     1 || 2 || 14 => 'Supplier Products',
-    11 || 7 || 8 || 9 || 15 => 'Store Records',
+    11 || 7 || 8 || 9 || 18 || 19 || 15 => 'Store Records',
     _ => 'Administration',
   };
 
@@ -1228,31 +1295,76 @@ class _State extends State<AppShell> {
 
   Widget _phoneMoreHub() {
     final owner = widget.role == UserRole.owner;
-    Widget group(String title, List<(int, String, IconData)> entries) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    Future<void> openPage(Widget page) async {
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+      if (mounted) setState(() {});
+    }
+
+    Widget group(
+      String title,
+      List<(String, IconData, VoidCallback, int?)> entries,
+    ) {
       if (entries.isEmpty) return const SizedBox.shrink();
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              title,
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: colors.primary,
+                letterSpacing: .4,
+              ),
+            ),
             const SizedBox(height: 8),
-            Card(
+            Material(
+              color: colors.surface,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(16),
+              ),
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
                   for (var i = 0; i < entries.length; i++) ...[
                     if (i > 0) const Divider(height: 1),
                     ListTile(
-                      leading: Icon(entries[i].$3),
-                      title: Text(entries[i].$2),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                      ),
+                      leading: Icon(
+                        entries[i].$2,
+                        color: colors.primary,
+                        size: 23,
+                      ),
+                      title: entries[i].$4 == 5
+                          ? Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(text: entries[i].$1),
+                                  TextSpan(
+                                    text: '  ($productCount)',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Text(entries[i].$1),
                       trailing:
                           owner &&
                               AppPlanController.instance.plan == AppPlan.free &&
-                              const {1, 2, 12, 15, 16}.contains(entries[i].$1)
+                              const {1, 2, 12, 15, 16}.contains(entries[i].$4)
                           ? const Chip(label: Text('PRO'))
                           : const Icon(Icons.chevron_right),
-                      onTap: () => _select(entries[i].$1),
+                      onTap: entries[i].$3,
                     ),
                   ],
                 ],
@@ -1264,42 +1376,176 @@ class _State extends State<AppShell> {
     }
 
     return SafeArea(
-      child: ListView(
+      child: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Text(
-              'More',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+          ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
+                child: Text(
+                  'More',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (owner)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'YOUR TINDAHAN',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: colors.primary,
+                          letterSpacing: .4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Material(
+                        color: colors.primaryContainer.withValues(alpha: .45),
+                        borderRadius: BorderRadius.circular(16),
+                        child: ListTile(
+                          key: const ValueKey('more-tindahan-profile'),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 3,
+                          ),
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: colors.primary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.storefront_outlined,
+                              color: colors.onPrimary,
+                            ),
+                          ),
+                          title: const Text('Tindahan Profile'),
+                          subtitle: const Text(
+                            'View and edit your store details',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => openPage(
+                            TindahanProfileScreen(
+                              settings: SettingsService(widget.database),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              group('STORE MANAGEMENT', [
+                if (owner)
+                  ('Products', Icons.inventory_2_outlined, () => _select(5), 5),
+                ('Inventory', Icons.inventory_outlined, () => _select(3), 3),
+                ('Restock', Icons.add_shopping_cart, () => _select(4), 4),
+                if (owner)
+                  (
+                    'Categories',
+                    Icons.category_outlined,
+                    () => openPage(
+                      CategoriesScreen(
+                        repository: SqliteCategoryRepository(widget.database),
+                      ),
+                    ),
+                    null,
+                  ),
+                if (owner)
+                  (
+                    'Supplier Contacts',
+                    Icons.contact_phone_outlined,
+                    () => _select(14),
+                    14,
+                  ),
+              ]),
+              group('MONEY', [
+                ('Expenses', Icons.receipt_long_outlined, () => _select(7), 7),
+                (
+                  'GCash',
+                  Icons.account_balance_wallet_outlined,
+                  () => _select(12),
+                  12,
+                ),
+                (
+                  'Maya',
+                  Icons.account_balance_wallet_outlined,
+                  () => _select(16),
+                  16,
+                ),
+                if (owner)
+                  (
+                    '5/6 Loan Management',
+                    Icons.account_balance_outlined,
+                    () => _select(15),
+                    15,
+                  ),
+              ]),
+              group('RECORDS & INSIGHTS', [
+                ('Transaction History', Icons.history, () => _select(11), 11),
+                if (owner)
+                  ('Daily Closing', Icons.today_outlined, () => _select(8), 8),
+                if (owner)
+                  ('Reports', Icons.assessment_outlined, () => _select(9), 9),
+                if (owner)
+                  (
+                    'Activity Logs',
+                    Icons.history_toggle_off_outlined,
+                    () => openPage(
+                      ActivityLogsScreen(
+                        repository: ActivityLogRepository(widget.database),
+                        walletServicesAllowed: _walletServicesAllowed,
+                      ),
+                    ),
+                    null,
+                  ),
+                if (owner)
+                  (
+                    'Staff Activity Summary',
+                    Icons.groups_2_outlined,
+                    () => openPage(
+                      StaffActivityScreen(
+                        repository: StaffActivityRepository(widget.database),
+                        walletServicesAllowed: _walletServicesAllowed,
+                      ),
+                    ),
+                    null,
+                  ),
+              ]),
+              group('ADVANCED MANAGEMENT', [
+                if (owner)
+                  ('Managed Brands', Icons.sell_outlined, () => _select(1), 1),
+                if (owner)
+                  (
+                    'Consignment',
+                    Icons.handshake_outlined,
+                    () => _select(2),
+                    2,
+                  ),
+              ]),
+              group('SYSTEM', [
+                ('Settings', Icons.settings_outlined, () => _select(10), 10),
+                (
+                  'Help & Guide',
+                  Icons.help_outline,
+                  () => openPage(const HelpGuideScreen()),
+                  null,
+                ),
+              ]),
+              const SizedBox(height: 96),
+            ],
           ),
-          group('STORE', [
-            (3, 'Inventory', Icons.inventory_2_outlined),
-            (4, 'Restock', Icons.add_shopping_cart),
-            if (owner) (5, 'Products', Icons.inventory_outlined),
-            if (owner) (14, 'Supplier Contacts', Icons.contact_phone_outlined),
-          ]),
-          group('MONEY', [
-            (12, 'GCash', Icons.account_balance_wallet_outlined),
-            (16, 'Maya', Icons.account_balance_wallet_outlined),
-            (7, 'Expenses', Icons.receipt_long_outlined),
-            if (owner)
-              (15, '5/6 Loan Management', Icons.account_balance_outlined),
-          ]),
-          if (owner)
-            group('MANAGEMENT', [
-              (1, 'Managed Brands / Selecta', Icons.sell_outlined),
-              (2, 'Consignment', Icons.handshake_outlined),
-            ]),
-          group('RECORDS & INSIGHTS', [
-            (11, 'Transaction History', Icons.history),
-            if (owner) (8, 'Daily Closing', Icons.today_outlined),
-            if (owner) (9, 'Reports', Icons.assessment_outlined),
-          ]),
-          group('SYSTEM', [(10, 'Settings', Icons.settings_outlined)]),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            child: OutlinedButton.icon(
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              key: const ValueKey('more-lock-app'),
+              heroTag: 'more-lock-app',
               onPressed: widget.lock,
               icon: const Icon(Icons.lock_outline),
               label: const Text('Lock App'),
@@ -1314,23 +1560,6 @@ class _State extends State<AppShell> {
     final owner = widget.role == UserRole.owner;
     final items =
         <({String label, IconData icon, Widget? page, VoidCallback? action})>[
-          (
-            label: 'About TindaSari PH',
-            icon: Icons.info_outline,
-            page: null,
-            action: () => showAboutDialog(
-              context: context,
-              applicationName: 'TindaSari PH',
-              applicationIcon: const BrandLogo(size: 64),
-              children: [const Text('Simple to run. Built for your store.')],
-            ),
-          ),
-          (
-            label: 'Help & Guide',
-            icon: Icons.help_outline,
-            page: const HelpGuideScreen(),
-            action: null,
-          ),
           if (owner)
             (
               label: 'Appearance',
@@ -1340,79 +1569,18 @@ class _State extends State<AppShell> {
             ),
           if (owner)
             (
-              label: 'Brands',
-              icon: Icons.sell_outlined,
-              page: ManagedBrandsScreen(
-                special: SpecialInventoryRepository(
-                  widget.database,
-                  actorRole: role,
-                ),
-                products: SqliteProductRepository(widget.database),
-                inventory: InventoryRepository(
-                  widget.database,
-                  actorRole: role,
-                ),
-                categories: SqliteCategoryRepository(widget.database),
-                photoService: LocalProductPhotoService(),
-                analytics: BrandAnalyticsRepository(widget.database),
-                access: FeatureAccessService(widget.database),
-              ),
+              label: 'Security & Staff',
+              icon: Icons.security,
+              page: SecurityScreen(auth: AuthService(widget.database)),
               action: null,
             ),
           if (owner)
             (
-              label: 'Consignment',
-              icon: Icons.handshake_outlined,
-              page: ConsignmentScreen(
-                repository: ConsignmentRepository(
-                  widget.database,
-                  actorRole: role,
-                ),
-                products: SqliteProductRepository(widget.database),
-                categories: SqliteCategoryRepository(widget.database),
-                photoService: LocalProductPhotoService(),
-                initialConsignorId: pendingConsignorId,
-                initialReceiveProductId: pendingConsignmentProductId,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Restock',
-              icon: Icons.add_shopping_cart,
-              page: RestockScreen(
-                operations: OperationsRepository(widget.database),
-                inventory: InventoryRepository(
-                  widget.database,
-                  actorRole: role,
-                ),
-                openConsignment: (consignorId, productId) {
-                  Navigator.pop(context);
-                  setState(() {
-                    pendingConsignorId = consignorId;
-                    pendingConsignmentProductId = productId;
-                    selected = 2;
-                  });
-                },
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Daily Closing',
-              icon: Icons.today,
-              page: DailyClosingScreen(
-                repository: OperationsRepository(widget.database),
-                walletServicesAllowed: _walletServicesAllowed,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Check Data Integrity',
-              icon: Icons.fact_check_outlined,
-              page: IntegrityScreen(
-                service: DataIntegrityService(widget.database),
+              label: 'Backup & Restore',
+              icon: Icons.backup,
+              page: BackupScreen(
+                service: BackupService(widget.appDatabase),
+                onRestored: widget.onDatabaseRestored,
               ),
               action: null,
             ),
@@ -1428,80 +1596,23 @@ class _State extends State<AppShell> {
             ),
           if (owner)
             (
-              label: 'Products',
-              icon: Icons.inventory,
-              page: ProductsScreen(
-                repository: SqliteProductRepository(
-                  widget.database,
-                  actorRole: role,
-                ),
-                categoryRepository: SqliteCategoryRepository(widget.database),
-                photoService: LocalProductPhotoService(),
-                access: FeatureAccessService(widget.database),
+              label: 'Check Data Integrity',
+              icon: Icons.fact_check_outlined,
+              page: IntegrityScreen(
+                service: DataIntegrityService(widget.database),
               ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Categories',
-              icon: Icons.category,
-              page: CategoriesScreen(
-                repository: SqliteCategoryRepository(widget.database),
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Reports',
-              icon: Icons.assessment,
-              page: ReportsScreen(
-                repository: ReportsRepository(widget.database),
-                walletServicesAllowed: _walletServicesAllowed,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Activity Logs',
-              icon: Icons.history,
-              page: ActivityLogsScreen(
-                repository: ActivityLogRepository(widget.database),
-                walletServicesAllowed: _walletServicesAllowed,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Staff Activity Summary',
-              icon: Icons.groups_2_outlined,
-              page: StaffActivityScreen(
-                repository: StaffActivityRepository(widget.database),
-                walletServicesAllowed: _walletServicesAllowed,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Backup & Restore',
-              icon: Icons.backup,
-              page: BackupScreen(
-                service: BackupService(widget.appDatabase),
-                onRestored: widget.onDatabaseRestored,
-              ),
-              action: null,
-            ),
-          if (owner)
-            (
-              label: 'Security',
-              icon: Icons.security,
-              page: SecurityScreen(auth: AuthService(widget.database)),
               action: null,
             ),
           (
-            label: 'Lock App',
-            icon: Icons.lock,
+            label: 'About TindaSari PH',
+            icon: Icons.info_outline,
             page: null,
-            action: widget.lock,
+            action: () => showAboutDialog(
+              context: context,
+              applicationName: 'TindaSari PH',
+              applicationIcon: const BrandLogo(size: 64),
+              children: [const Text('Simple to run. Built for your store.')],
+            ),
           ),
         ];
     void open(
@@ -1513,41 +1624,24 @@ class _State extends State<AppShell> {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => x.page!),
-        ).then((_) => setState(() {}));
+        ).then((_) {
+          if (mounted) setState(() {});
+        });
       }
     }
 
-    final management = items
-        .where(
-          (x) => const {
-            'Brands',
-            'Consignment',
-            'Restock',
-            'Products',
-            'Categories',
-            'Supplier Contacts',
-            '5/6 Loan Management',
-          }.contains(x.label),
-        )
-        .toList();
-    final tools = items
-        .where(
-          (x) => const {
-            'Daily Closing',
-            'Check Data Integrity',
-            'Storage Management',
-            'Reports',
-            'Activity Logs',
-            'Staff Activity Summary',
-          }.contains(x.label),
-        )
-        .toList();
-    final security = items
-        .where((x) => const {'Security', 'Lock App'}.contains(x.label))
-        .toList();
     final appearance = items.where((x) => x.label == 'Appearance').toList();
-    final help = items.where((x) => x.label == 'Help & Guide').toList();
-    final backup = items.where((x) => x.label == 'Backup & Restore').toList();
+    final security = items.where((x) => x.label == 'Security & Staff').toList();
+    final maintenance = items
+        .where(
+          (x) => const {
+            'Backup & Restore',
+            'Storage Management',
+            'Check Data Integrity',
+          }.contains(x.label),
+        )
+        .toList();
+    final about = items.where((x) => x.label == 'About TindaSari PH').toList();
     Widget section(
       String title,
       String description,
@@ -1628,105 +1722,25 @@ class _State extends State<AppShell> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
         children: [
-          if (owner) SizedBox(height: 96, child: _ownerAlerts()),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
-              children: [
-                section(
-                  'MANAGEMENT',
-                  'Products, inventory groups, and suppliers',
-                  management,
-                ),
-                section(
-                  'SYSTEM & TOOLS',
-                  'Operational checks, reports, and audit history',
-                  tools,
-                ),
-                if (owner)
-                  section(
-                    'APPEARANCE',
-                    'Choose the light, dark, or device theme',
-                    appearance,
-                  ),
-                section('HELP', 'Simple guides for using TindaSari PH', help),
-                section(
-                  'SECURITY',
-                  'Access controls and app locking',
-                  security,
-                ),
-                section(
-                  'DATA & BACKUP',
-                  'Protect and restore store records',
-                  backup,
-                ),
-                if (showDeveloperPlanTools(
-                  debugBuild: kDebugMode,
-                  owner: owner,
-                ))
-                  _developerPlanSection(),
-              ],
-            ),
+          section(
+            'APP PREFERENCES',
+            'Choose the light, dark, or device theme',
+            appearance,
           ),
+          section('SECURITY', 'Manage owner and staff access', security),
+          section(
+            'DATA & MAINTENANCE',
+            'Protect and check your store records',
+            maintenance,
+          ),
+          section('ABOUT', 'App information', about),
+          if (showDeveloperPlanTools(debugBuild: kDebugMode, owner: owner))
+            _developerPlanSection(),
         ],
       ),
     );
   }
-
-  Widget _ownerAlerts() => FutureBuilder<List<Object?>>(
-    future: Future.wait<Object?>([
-      DashboardRepository(widget.database).summary(),
-      BackupService(widget.appDatabase).health(),
-    ]),
-    builder: (_, snapshot) {
-      if (!snapshot.hasData) return const SizedBox(height: 8);
-      final s = snapshot.data![0] as DashboardSummary,
-          backup = snapshot.data![1] as BackupHealth;
-      final old = backup.status != 'Recent';
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-        child: Row(
-          children: [
-            ActionChip(
-              label: Text('Low Stock (${s.lowStock})'),
-              onPressed: () => setState(() => selected = 3),
-            ),
-            const SizedBox(width: 8),
-            ActionChip(
-              label: Text('Out of Stock (${s.outOfStock})'),
-              onPressed: () => setState(() => selected = 3),
-            ),
-            const SizedBox(width: 8),
-            ActionChip(
-              label: Text(
-                'Outstanding UTANG ${standardMoney(s.outstandingCentavos)}',
-              ),
-              onPressed: () => setState(() => selected = 6),
-            ),
-            const SizedBox(width: 8),
-            ActionChip(
-              label: Text(
-                'Supplier Payable ${standardMoney(s.supplierPayableCentavos)}',
-              ),
-              onPressed: () => setState(() => selected = 2),
-            ),
-            if (old) ...[
-              const SizedBox(width: 8),
-              Chip(
-                avatar: Icon(Icons.backup_outlined),
-                label: Text(
-                  backup.status == 'Backup Overdue'
-                      ? 'Backup Overdue'
-                      : 'Backup Recommended',
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-    },
-  );
 }

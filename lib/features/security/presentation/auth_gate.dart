@@ -3,7 +3,18 @@ import 'package:flutter/services.dart';
 
 import '../../../services/auth_service.dart';
 import '../../../services/settings_service.dart';
+import 'first_run_setup.dart';
 import 'inactivity_lock_region.dart';
+
+class _StartupState {
+  const _StartupState(this.hasOwner, this.storeName, this.setupStage);
+  final bool hasOwner;
+  final String? storeName;
+  final OwnerSetupStage? setupStage;
+
+  bool get pendingOwnerSetup =>
+      hasOwner && setupStage != null && setupStage != OwnerSetupStage.complete;
+}
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key, required this.auth, required this.builder});
@@ -14,37 +25,45 @@ class AuthGate extends StatefulWidget {
 }
 
 class _State extends State<AuthGate> {
-  final pin = TextEditingController(), confirm = TextEditingController();
+  final pin = TextEditingController();
   final keyboardFocus = FocusNode();
-  late Future<bool> configured;
+  late Future<_StartupState> configured;
   late Future<List<StaffAccount>> staff;
   UserRole? role, sessionRole;
   StaffAccount? selectedStaff;
   Widget? session;
   String? error;
   bool submitting = false;
-  bool setupSubmitted = false;
+  bool showSetupSuccess = false;
   int failedAttempts = 0;
 
   @override
   void initState() {
     super.initState();
-    configured = widget.auth.hasOwner;
+    configured = _loadStartup();
     staff = widget.auth.staffAccounts(activeOnly: true);
   }
 
   @override
   void dispose() {
     pin.dispose();
-    confirm.dispose();
     keyboardFocus.dispose();
     super.dispose();
   }
 
   void retry() => setState(() {
-    configured = widget.auth.hasOwner;
+    configured = _loadStartup();
     staff = widget.auth.staffAccounts(activeOnly: true);
   });
+
+  Future<_StartupState> _loadStartup() async {
+    final settings = SettingsService(widget.auth.db);
+    final hasOwner = await widget.auth.hasOwner;
+    final name = await settings.savedStoreName;
+    final stage = await settings.ownerSetupStage;
+    return _StartupState(hasOwner, name, stage);
+  }
+
   void digit(String value) {
     if (pin.text.length < 4 && !submitting) {
       setState(() {
@@ -52,7 +71,7 @@ class _State extends State<AuthGate> {
         error = null;
       });
       if (pin.text.length == 4) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => submit(false));
+        WidgetsBinding.instance.addPostFrameCallback((_) => submit());
       }
     }
   }
@@ -63,61 +82,52 @@ class _State extends State<AuthGate> {
     }
   }
 
-  Future<void> submit(bool setup) async {
+  Future<void> submit() async {
     if (submitting) return;
-    if (setup &&
-        (!RegExp(r'^\d{4}$').hasMatch(pin.text) || pin.text != confirm.text)) {
-      setState(() => setupSubmitted = true);
-      return;
-    }
     setState(() {
       submitting = true;
       error = null;
     });
     try {
-      if (setup) {
-        await widget.auth.setPin(UserRole.owner, pin.text);
-        if (mounted) {
-          setState(() {
-            configured = Future.value(true);
-            role = UserRole.owner;
-          });
-        }
-      } else {
-        final found = await widget.auth.verify(
-          pin.text,
-          staffId: selectedStaff?.id,
-        );
-        if (!mounted) return;
-        setState(() {
-          if (found == null) {
-            failedAttempts++;
-            final remaining = (5 - failedAttempts).clamp(0, 5);
-            error = remaining > 0
-                ? 'Incorrect PIN • $remaining attempt${remaining == 1 ? '' : 's'} remaining'
-                : 'Too many attempts. Please wait before trying again.';
-          } else {
+      final found = await widget.auth.verify(
+        pin.text,
+        staffId: selectedStaff?.id,
+      );
+      if (!mounted) return;
+      final startup = await configured;
+      if (!mounted) return;
+      setState(() {
+        if (found == null) {
+          failedAttempts++;
+          final remaining = (5 - failedAttempts).clamp(0, 5);
+          error = remaining > 0
+              ? 'Incorrect PIN • $remaining attempt${remaining == 1 ? '' : 's'} remaining'
+              : 'Too many attempts. Please wait before trying again.';
+        } else if (startup.pendingOwnerSetup) {
+          if (found == UserRole.owner) {
             failedAttempts = 0;
-            role = found;
-            CurrentActor.staffName = found == UserRole.staff
-                ? selectedStaff?.name
-                : null;
+            showSetupSuccess = true;
+          } else {
+            error = 'Complete Owner setup before using a staff account.';
           }
-        });
-      }
+        } else {
+          failedAttempts = 0;
+          role = found;
+          CurrentActor.staffName = found == UserRole.staff
+              ? selectedStaff?.name
+              : null;
+        }
+      });
     } catch (e) {
       if (mounted) {
         setState(
           () => error = e is StateError
               ? e.message
-              : 'Use matching 4-digit PINs.',
+              : 'Could not verify PIN. Try again.',
         );
       }
     } finally {
-      if (!setup || role != null) {
-        pin.clear();
-        confirm.clear();
-      }
+      pin.clear();
       if (mounted) setState(() => submitting = false);
     }
   }
@@ -135,7 +145,7 @@ class _State extends State<AuthGate> {
       }
       return session!;
     }
-    return FutureBuilder<bool>(
+    return FutureBuilder<_StartupState>(
       future: configured,
       builder: (_, state) {
         if (state.hasError) return _startupError();
@@ -144,7 +154,28 @@ class _State extends State<AuthGate> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return state.data! ? _login() : _ownerSetup();
+        final startup = state.data!;
+        if (showSetupSuccess) {
+          return FirstRunSetup(
+            auth: widget.auth,
+            settings: SettingsService(widget.auth.db),
+            initialName: startup.storeName,
+            initialStep: FirstRunStep.complete,
+            onComplete: () => setState(() => role = UserRole.owner),
+          );
+        }
+        if (!startup.hasOwner) {
+          return FirstRunSetup(
+            auth: widget.auth,
+            settings: SettingsService(widget.auth.db),
+            initialName: startup.storeName,
+            initialStep: startup.storeName == null
+                ? FirstRunStep.welcome
+                : FirstRunStep.ownerPin,
+            onComplete: () => setState(() => role = UserRole.owner),
+          );
+        }
+        return _login(ownerOnly: startup.pendingOwnerSetup);
       },
     );
   }
@@ -154,7 +185,8 @@ class _State extends State<AuthGate> {
     setState(() {
       CurrentActor.staffName = null;
       role = null;
-      configured = widget.auth.hasOwner;
+      configured = _loadStartup();
+      showSetupSuccess = false;
       selectedStaff = null;
       failedAttempts = 0;
       error = null;
@@ -162,7 +194,7 @@ class _State extends State<AuthGate> {
     });
   }
 
-  Widget _login() => Scaffold(
+  Widget _login({bool ownerOnly = false}) => Scaffold(
     body: KeyboardListener(
       autofocus: true,
       focusNode: keyboardFocus,
@@ -173,7 +205,7 @@ class _State extends State<AuthGate> {
         if (event.logicalKey == LogicalKeyboardKey.backspace) backspace();
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             pin.text.length == 4) {
-          submit(false);
+          submit();
         }
       },
       child: LayoutBuilder(
@@ -188,7 +220,7 @@ class _State extends State<AuthGate> {
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 510),
-                child: _loginCard(compact: !wide),
+                child: _loginCard(compact: !wide, ownerOnly: ownerOnly),
               ),
             ),
           );
@@ -219,7 +251,7 @@ class _State extends State<AuthGate> {
     ),
   );
 
-  Widget _loginCard({required bool compact}) => Card(
+  Widget _loginCard({required bool compact, required bool ownerOnly}) => Card(
     elevation: 8,
     shadowColor: Colors.black.withValues(alpha: .12),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -275,7 +307,9 @@ class _State extends State<AuthGate> {
           FutureBuilder<List<StaffAccount>>(
             future: staff,
             builder: (_, s) {
-              final accounts = s.data ?? const <StaffAccount>[];
+              final accounts = ownerOnly
+                  ? const <StaffAccount>[]
+                  : s.data ?? const <StaffAccount>[];
               return SizedBox(
                 height: 76,
                 child: DropdownButtonFormField<int?>(
@@ -419,7 +453,7 @@ class _State extends State<AuthGate> {
           const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: pin.text.length == 4 && !submitting
-                ? () => submit(false)
+                ? () => submit()
                 : null,
             icon: const Icon(Icons.lock_open),
             label: Text(submitting ? 'Checking…' : 'Unlock'),
@@ -505,75 +539,6 @@ class _State extends State<AuthGate> {
           child: Text(
             value,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
-    ),
-  );
-
-  Widget _ownerSetup() => Scaffold(
-    body: Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(30),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(Icons.admin_panel_settings_outlined, size: 60),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Set Owner PIN',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: pin,
-                    onChanged: (_) => setState(() => error = null),
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                      labelText: 'New 4-digit PIN',
-                      errorText:
-                          setupSubmitted &&
-                              !RegExp(r'^\d{4}$').hasMatch(pin.text)
-                          ? 'Enter exactly four digits.'
-                          : null,
-                    ),
-                  ),
-                  TextField(
-                    controller: confirm,
-                    onChanged: (_) => setState(() => error = null),
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm PIN',
-                      errorText: setupSubmitted && confirm.text != pin.text
-                          ? 'PINs do not match.'
-                          : null,
-                    ),
-                  ),
-                  if (error != null)
-                    Text(
-                      error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  FilledButton(
-                    onPressed: submitting ? null : () => submit(true),
-                    child: const Text('Save Owner PIN'),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),

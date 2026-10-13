@@ -312,9 +312,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             'Get sales trends, profit history, stock forecasts, and more with Pro.',
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final icon = Container(
                 width: 68,
                 height: 72,
                 decoration: BoxDecoration(
@@ -326,20 +326,34 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   color: Color(0xFF63D3A4),
                   size: 40,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _grid(
-                  [
-                    _lockedTile(context, 'Total Sold'),
-                    _lockedTile(context, 'Total Sales'),
-                    _lockedTile(context, 'Gross Profit'),
+              );
+              final grid = _grid(
+                [
+                  _lockedTile(context, 'Total Sold'),
+                  _lockedTile(context, 'Total Sales'),
+                  _lockedTile(context, 'Gross Profit'),
+                ],
+                columns: 3,
+                height: 62,
+              );
+              if (constraints.maxWidth < 520) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(alignment: Alignment.centerLeft, child: icon),
+                    const SizedBox(height: 10),
+                    grid,
                   ],
-                  columns: 3,
-                  height: 72,
-                ),
-              ),
-            ],
+                );
+              }
+              return Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 10),
+                  Expanded(child: grid),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -372,18 +386,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Widget _businessInsights(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        children: [
-          Expanded(
-            child: _sectionHeading(
-              context,
-              Icons.analytics_outlined,
-              'Business Insights',
-              'Sales, profit, and stock insights to help you make better decisions.',
-            ),
-          ),
-          const SizedBox(width: 8),
-          DropdownButton<ProductInsightsRange>(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final heading = _sectionHeading(
+            context,
+            Icons.analytics_outlined,
+            'Business Insights',
+            'Sales, profit, and stock insights to help you make better decisions.',
+          );
+          final rangePicker = DropdownButton<ProductInsightsRange>(
             value: range,
             items: ProductInsightsRange.values
                 .map(
@@ -401,8 +412,25 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 );
               });
             },
-          ),
-        ],
+          );
+          if (constraints.maxWidth < 600) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading,
+                const SizedBox(height: 6),
+                Align(alignment: Alignment.centerRight, child: rangePicker),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: heading),
+              const SizedBox(width: 8),
+              rangePicker,
+            ],
+          );
+        },
       ),
       const SizedBox(height: 10),
       FutureBuilder<ProductInsights>(

@@ -48,7 +48,12 @@ class CustomerAccountDetailsView extends StatelessWidget {
           .add(entry);
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      padding: EdgeInsets.fromLTRB(
+        MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+        20,
+        MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+        32,
+      ),
       children: [
         _profile(context),
         const SizedBox(height: 20),
@@ -96,29 +101,55 @@ class CustomerAccountDetailsView extends StatelessWidget {
                   context,
                   Padding(
                     padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        _icon(context, Icons.shopping_bag_outlined),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: Theme.of(context).textTheme.titleMedium,
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        final identity = Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _icon(context, Icons.shopping_bag_outlined),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                  Text(
+                                    '${item.quantity} ${item.option} • ${_dateTime(context, item.occurredAt.toLocal())}',
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '${item.quantity} ${item.option} • ${_dateTime(context, item.occurredAt.toLocal())}',
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
+                            ),
+                          ],
+                        );
+                        final amount = Text(
                           standardMoney(item.lineTotalCentavos),
                           style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
+                        );
+                        return box.maxWidth >= 560
+                            ? Row(
+                                children: [
+                                  Expanded(child: identity),
+                                  const SizedBox(width: 12),
+                                  amount,
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  identity,
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: amount,
+                                  ),
+                                ],
+                              );
+                      },
                     ),
                   ),
                 ),
@@ -238,12 +269,17 @@ class CustomerAccountDetailsView extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 4),
-              Text(
-                standardMoney(currentBalanceCentavos),
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w800,
-                  color: context.semanticColors.utang,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  standardMoney(currentBalanceCentavos),
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w800,
+                    color: context.semanticColors.utang,
+                  ),
                 ),
               ),
               const SizedBox(height: 18),

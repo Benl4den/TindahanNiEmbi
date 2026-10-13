@@ -104,6 +104,26 @@ class _State extends State<TindahanNiEmbiApp> with WidgetsBindingObserver {
       AppThemePreference.dark => ThemeMode.dark,
     },
     themeAnimationDuration: Duration.zero,
+    builder: (context, child) {
+      if (child == null) return const SizedBox.shrink();
+      final display = View.maybeOf(context)?.display;
+      if (display == null ||
+          !requiresTabletLandscapePrompt(
+            display.size,
+            display.devicePixelRatio,
+            MediaQuery.sizeOf(context),
+          )) {
+        return child;
+      }
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          // Preserve the current route and form state until the tablet rotates.
+          IgnorePointer(ignoring: true, child: child),
+          const _TabletLandscapePrompt(),
+        ],
+      );
+    },
     home: FutureBuilder(
       future: startup,
       builder: (_, s) {
@@ -133,6 +153,44 @@ class _State extends State<TindahanNiEmbiApp> with WidgetsBindingObserver {
           ),
         );
       },
+    ),
+  );
+}
+
+class _TabletLandscapePrompt extends StatelessWidget {
+  const _TabletLandscapePrompt();
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surface,
+    child: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.screen_rotation_outlined,
+                size: 56,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Rotate your tablet to landscape',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'TindaSari PH is available in landscape on tablets.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }

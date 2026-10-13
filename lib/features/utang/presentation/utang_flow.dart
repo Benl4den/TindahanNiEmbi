@@ -421,6 +421,7 @@ class _UtangProductsScreenState extends State<UtangProductsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<SellingOption>(
+                      isExpanded: true,
                       initialValue: selected,
                       decoration: const InputDecoration(
                         labelText: 'Selling option',
@@ -1673,6 +1674,7 @@ class UtangDetailsDialog extends StatelessWidget {
                   ),
                   const Divider(),
                   DropdownButtonFormField<int>(
+                    isExpanded: true,
                     initialValue: customerId,
                     decoration: const InputDecoration(labelText: 'Customer'),
                     items: customers
@@ -1715,6 +1717,7 @@ class UtangDetailsDialog extends StatelessWidget {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<int>(
+                            isExpanded: true,
                             initialValue: addId,
                             decoration: const InputDecoration(
                               labelText: 'Add product',

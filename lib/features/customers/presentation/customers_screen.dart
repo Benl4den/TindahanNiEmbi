@@ -194,11 +194,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (_, index) {
                   final customer = accounts[index];
+                  final scheme = Theme.of(context).colorScheme;
+                  final hasBalance = customer.balanceCentavos > 0;
                   return Card(
                     clipBehavior: Clip.antiAlias,
-                    color: customer.balanceCentavos > 0
-                        ? const Color(0xFFFFFCF7)
-                        : const Color(0xFFF0F8F2),
+                    color: Color.alphaBlend(
+                      (hasBalance ? scheme.tertiary : scheme.primary)
+                          .withValues(alpha: .07),
+                      scheme.surface,
+                    ),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -251,9 +255,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w700,
-                                    color: customer.balanceCentavos > 0
-                                        ? const Color(0xFFA65314)
-                                        : const Color(0xFF17683E),
+                                    color: hasBalance
+                                        ? scheme.tertiary
+                                        : scheme.primary,
                                   ),
                                 ),
                                 const SizedBox(height: 5),

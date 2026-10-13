@@ -109,7 +109,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               );
             }
             return ListView.separated(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.fromLTRB(
+                MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+                MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+                MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+                MediaQuery.sizeOf(context).width < 600 ? 104 : 24,
+              ),
               itemCount: categories.length,
               separatorBuilder: (_, _) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
