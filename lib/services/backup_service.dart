@@ -19,26 +19,41 @@ class BackupManifest {
     required this.schemaVersion,
     required this.createdAt,
     required this.imageCount,
+    this.storePhotoFile,
   });
   final int formatVersion, schemaVersion, imageCount;
   final DateTime createdAt;
-  Map<String, Object> toJson() => {
+  final String? storePhotoFile;
+  Map<String, Object?> toJson() => {
     'format_version': formatVersion,
     'schema_version': schemaVersion,
     'created_at': createdAt.toUtc().toIso8601String(),
     'database': 'database/tindahan.db',
     'images': 'images',
     'image_count': imageCount,
+    if (formatVersion >= 2) 'store_photo': storePhotoFile,
   };
   factory BackupManifest.fromJson(Map<String, Object?> j) {
-    if (j['format_version'] != 1) {
+    final version = j['format_version'];
+    if (version != 1 && version != 2) {
       throw const InvalidBackupException('Unsupported backup format');
     }
+    final storePhotoFile = j['store_photo'];
+    if (version == 2 &&
+        (!j.containsKey('store_photo') ||
+            (storePhotoFile != null &&
+                (storePhotoFile is! String ||
+                    path.posix.dirname(storePhotoFile) != 'store_images' ||
+                    path.posix.basename(storePhotoFile) == '.' ||
+                    path.posix.normalize(storePhotoFile) != storePhotoFile)))) {
+      throw const InvalidBackupException('Invalid store photo manifest');
+    }
     return BackupManifest(
-      formatVersion: j['format_version']! as int,
+      formatVersion: version as int,
       schemaVersion: j['schema_version']! as int,
       createdAt: DateTime.parse(j['created_at']! as String),
       imageCount: j['image_count']! as int,
+      storePhotoFile: version == 2 ? storePhotoFile as String? : null,
     );
   }
 }
@@ -59,8 +74,10 @@ class BackupService {
     try {
       final dbDir = Directory(path.join(temp.path, 'database'));
       final images = Directory(path.join(temp.path, 'images'));
+      final storeImages = Directory(path.join(temp.path, 'store_images'));
       await dbDir.create();
       await images.create();
+      await storeImages.create();
       final db = await appDatabase.database;
       final snapshot = path.join(dbDir.path, 'tindahan.db');
       final escaped = snapshot.replaceAll("'", "''");
@@ -74,11 +91,31 @@ class BackupService {
           count++;
         }
       }
+      final photoRows = await db.query(
+        'app_settings',
+        columns: ['value'],
+        where: 'key=?',
+        whereArgs: ['store_photo_path'],
+        limit: 1,
+      );
+      final storePhotoPath = photoRows.isEmpty
+          ? ''
+          : photoRows.single['value'] as String;
+      String? storePhotoFile;
+      if (storePhotoPath.isNotEmpty && await File(storePhotoPath).exists()) {
+        storePhotoFile = path.posix.join(
+          'store_images',
+          path.basename(storePhotoPath),
+        );
+        await File(storePhotoPath)
+            .copy(path.join(storeImages.path, path.basename(storePhotoPath)));
+      }
       final manifest = BackupManifest(
-        formatVersion: 1,
+        formatVersion: 2,
         schemaVersion: AppDatabase.schemaVersion,
         createdAt: DateTime.now().toUtc(),
         imageCount: count,
+        storePhotoFile: storePhotoFile,
       );
       await File(path.join(temp.path, 'manifest.json'))
           .writeAsString(jsonEncode(manifest.toJson()));
@@ -162,6 +199,7 @@ class BackupService {
           filePath: file.path,
           fileSizeBytes: await file.length(),
           imageCount: manifest.imageCount,
+          storePhotoIncluded: manifest.storePhotoFile != null,
           schemaVersion: manifest.schemaVersion,
           valid: true,
         );
@@ -191,6 +229,7 @@ class BackupService {
     ArchiveFile? manifestFile, dbFile;
     var hasImages = false;
     var imageFiles = 0;
+    final storePhotoFiles = <ArchiveFile>[];
     for (final f in archive) {
       if (f.name == 'manifest.json') manifestFile = f;
       if (f.name == 'database/tindahan.db') dbFile = f;
@@ -199,6 +238,10 @@ class BackupService {
           f.name.startsWith('images/')) {
         hasImages = true;
         if (f.isFile) imageFiles++;
+      }
+      if (f.isFile &&
+          (f.name == 'store_images' || f.name.startsWith('store_images/'))) {
+        storePhotoFiles.add(f);
       }
     }
     if (manifestFile == null) {
@@ -217,6 +260,15 @@ class BackupService {
     }
     if (manifest.imageCount != imageFiles) {
       throw const InvalidBackupException('Backup image manifest mismatch');
+    }
+    if (manifest.formatVersion == 2 &&
+        (manifest.storePhotoFile == null
+            ? storePhotoFiles.isNotEmpty
+            : storePhotoFiles.length != 1 ||
+                  storePhotoFiles.single.name != manifest.storePhotoFile)) {
+      throw const InvalidBackupException(
+        'Backup store photo manifest mismatch',
+      );
     }
     final databaseBytes = dbFile.content as List<int>;
     if (databaseBytes.length < 16 ||
@@ -259,12 +311,13 @@ class BackupService {
   }
 
   Future<void> restore(String archivePath) async {
-    await validate(archivePath);
+    final manifest = await validate(archivePath);
     final temp = await Directory.systemTemp.createTemp('tindahan_restore_');
     final safety = await Directory.systemTemp.createTemp('tindahan_safety_');
     final dbPath = await appDatabase.resolvedPath;
     final docs = await _documents;
     final imageDir = Directory(path.join(docs.path, 'product_images'));
+    final storeImageDir = Directory(path.join(docs.path, 'store_images'));
     var safetyReady = false;
     try {
       final current = await appDatabase.database;
@@ -282,6 +335,12 @@ class BackupService {
         await _copyDirectory(
           imageDir,
           Directory(path.join(safety.path, 'images')),
+        );
+      }
+      if (await storeImageDir.exists()) {
+        await _copyDirectory(
+          storeImageDir,
+          Directory(path.join(safety.path, 'store_images')),
         );
       }
       safetyReady = true;
@@ -304,6 +363,17 @@ class BackupService {
       if (await restoredImages.exists()) {
         await _copyDirectory(restoredImages, imageDir);
       }
+      if (manifest.formatVersion == 2) {
+        if (await storeImageDir.exists()) {
+          await storeImageDir.delete(recursive: true);
+        }
+        final restoredStoreImages = Directory(
+          path.join(temp.path, 'store_images'),
+        );
+        if (await restoredStoreImages.exists()) {
+          await _copyDirectory(restoredStoreImages, storeImageDir);
+        }
+      }
       final db = await appDatabase.database;
       final rows = await db.query('products', columns: ['id', 'photo_path']);
       for (final row in rows) {
@@ -319,6 +389,34 @@ class BackupService {
           whereArgs: [row['id']],
         );
       }
+      final oldPhotoRows = await db.query(
+        'app_settings',
+        columns: ['value'],
+        where: 'key=?',
+        whereArgs: ['store_photo_path'],
+        limit: 1,
+      );
+      final oldPhotoPath = oldPhotoRows.isEmpty
+          ? ''
+          : oldPhotoRows.single['value'] as String;
+      String storePhotoPath;
+      if (manifest.formatVersion == 2) {
+        final file = manifest.storePhotoFile;
+        storePhotoPath = file == null
+            ? ''
+            : path.join(storeImageDir.path, path.posix.basename(file));
+      } else {
+        storePhotoPath =
+            path.isWithin(storeImageDir.path, oldPhotoPath) &&
+                await File(oldPhotoPath).exists()
+            ? oldPhotoPath
+            : '';
+      }
+      await db.insert('app_settings', {
+        'key': 'store_photo_path',
+        'value': storePhotoPath,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await db.insert('activity_logs', {
         'event_type': 'BACKUP_RESTORED',
         'description': 'Backup restored',
@@ -331,6 +429,15 @@ class BackupService {
         if (await imageDir.exists()) await imageDir.delete(recursive: true);
         final old = Directory(path.join(safety.path, 'images'));
         if (await old.exists()) await _copyDirectory(old, imageDir);
+        if (await storeImageDir.exists()) {
+          await storeImageDir.delete(recursive: true);
+        }
+        final oldStoreImages = Directory(
+          path.join(safety.path, 'store_images'),
+        );
+        if (await oldStoreImages.exists()) {
+          await _copyDirectory(oldStoreImages, storeImageDir);
+        }
       }
       rethrow;
     } finally {
@@ -356,6 +463,7 @@ class BackupHealth {
     this.filePath,
     this.fileSizeBytes = 0,
     this.imageCount = 0,
+    this.storePhotoIncluded = false,
     this.schemaVersion,
     this.valid = false,
   });
@@ -363,6 +471,7 @@ class BackupHealth {
   final DateTime? createdAt;
   final String? filePath;
   final int fileSizeBytes, imageCount;
+  final bool storePhotoIncluded;
   final int? schemaVersion;
   final bool valid;
 }

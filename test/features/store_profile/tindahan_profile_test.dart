@@ -7,16 +7,32 @@ import 'package:tindahan_ni_embi/core/theme/app_theme.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:tindahan_ni_embi/features/store_profile/presentation/tindahan_profile_screen.dart';
+import 'package:tindahan_ni_embi/services/app_refresh_controller.dart';
 import 'package:tindahan_ni_embi/services/settings_service.dart';
 import 'package:tindahan_ni_embi/services/store_photo_service.dart';
 
 class _FakePhotos implements StorePhotoService {
-  _FakePhotos(this.path);
-  final String path;
+  _FakePhotos(this.galleryPath, {String? cameraPath})
+    : cameraPath = cameraPath ?? galleryPath;
+  String galleryPath;
+  String? cameraPath;
+  int cameraCalls = 0;
+  int galleryCalls = 0;
+  final deletedPaths = <String>[];
   @override
-  Future<String?> chooseFromGallery() async => path;
+  Future<String?> capture() async {
+    cameraCalls++;
+    return cameraPath;
+  }
+
   @override
-  Future<void> delete(String photoPath) async {}
+  Future<String?> chooseFromGallery() async {
+    galleryCalls++;
+    return galleryPath;
+  }
+
+  @override
+  Future<void> delete(String photoPath) async => deletedPaths.add(photoPath);
 }
 
 void main() {
@@ -132,6 +148,8 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('change-store-photo')));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from gallery'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Save Changes'));
       await _flush(tester);
       expect(find.text('Updated Store'), findsWidgets);
@@ -152,6 +170,95 @@ void main() {
       );
       await _flush(tester);
       expect(find.text('Updated Store'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'profile camera badge saves camera and gallery photos on phone and tablet',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: inMemoryDatabasePath,
+      );
+      addTearDown(app.close);
+      final db = (await tester.runAsync(() => app.database))!;
+      final settings = SettingsService(db);
+      final original = File('assets/branding/tindasari_storefront_clean.png')
+          .absolute
+          .path;
+      final cameraPhoto = File('assets/branding/tindasari_logo.png')
+          .absolute
+          .path;
+      final galleryPhoto = File('assets/branding/tindasari_icon.png')
+          .absolute
+          .path;
+      final photos = _FakePhotos(galleryPhoto, cameraPath: cameraPhoto);
+      await tester.runAsync(
+        () => settings.saveStoreProfile(
+          StoreProfile(
+            storeName: 'Embi Store',
+            ownerName: 'Maria',
+            contactNumber: '09170000000',
+            address: 'Purok 1',
+            storePhotoPath: original,
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: TindahanProfileScreen(settings: settings, photos: photos),
+        ),
+      );
+      await _flush(tester);
+      final revision = AppRefreshController.instance.revision;
+
+      await tester.tap(find.byIcon(Icons.camera_alt_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Take photo'), findsOneWidget);
+      expect(find.text('Choose from gallery'), findsOneWidget);
+      await tester.tap(find.text('Take photo'));
+      await _flush(tester);
+      final afterCamera = (await tester.runAsync(() => settings.storeProfile))!;
+      expect(afterCamera.storePhotoPath, cameraPhoto);
+      expect(afterCamera.storeName, 'Embi Store');
+      expect(afterCamera.ownerName, 'Maria');
+      expect(afterCamera.contactNumber, '09170000000');
+      expect(afterCamera.address, 'Purok 1');
+      expect(photos.cameraCalls, 1);
+      expect(photos.galleryCalls, 0);
+      expect(photos.deletedPaths, contains(original));
+      expect(AppRefreshController.instance.revision, greaterThan(revision));
+      expect(tester.takeException(), isNull);
+
+      tester.view.physicalSize = const Size(1024, 700);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.camera_alt_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from gallery'));
+      await _flush(tester);
+      final afterGallery = (await tester.runAsync(
+        () => settings.storeProfile,
+      ))!;
+      expect(afterGallery.storePhotoPath, galleryPhoto);
+      expect(photos.galleryCalls, 1);
+      expect(photos.deletedPaths, contains(cameraPhoto));
+      expect(tester.takeException(), isNull);
+
+      photos.cameraPath = null;
+      await tester.tap(find.byIcon(Icons.camera_alt_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Take photo'));
+      await _flush(tester);
+      expect(
+        (await tester.runAsync(() => settings.storeProfile))!.storePhotoPath,
+        galleryPhoto,
+      );
       expect(tester.takeException(), isNull);
     },
   );

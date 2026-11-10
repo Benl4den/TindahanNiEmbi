@@ -412,7 +412,7 @@ const helpArticles = <HelpArticle>[
       'Read the confirmation, then restore only when you are sure.',
     ],
     notes: [
-      'A backup includes your store records and saved product images. The screen checks that a created backup is valid.',
+      'A new backup includes your store records, saved product images, and the selected Tindahan photo when its file is available. The screen checks that a created backup is valid.',
       'Restoring replaces the current app data with the selected backup. Create a fresh backup first if you may need the current records later.',
     ],
     keywords: ['backup restore data save'],

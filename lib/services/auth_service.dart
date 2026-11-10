@@ -72,12 +72,43 @@ class PermissionService {
   }
 }
 
+class _PinRetryState {
+  const _PinRetryState(this.failedAttempts, this.lockedUntil);
+
+  final int failedAttempts;
+  final DateTime? lockedUntil;
+
+  factory _PinRetryState.fromValue(String? value) {
+    if (value == null) return const _PinRetryState(0, null);
+    try {
+      final data = jsonDecode(value);
+      if (data is! Map<String, dynamic>) {
+        return const _PinRetryState(0, null);
+      }
+      final attempts = data['failed_attempts'];
+      final until = data['locked_until'];
+      return _PinRetryState(
+        attempts is int && attempts >= 0 ? attempts : 0,
+        until is String ? DateTime.tryParse(until) : null,
+      );
+    } on FormatException {
+      return const _PinRetryState(0, null);
+    }
+  }
+
+  String toValue() => jsonEncode({
+    'failed_attempts': failedAttempts,
+    'locked_until': lockedUntil?.toUtc().toIso8601String(),
+  });
+}
+
 class AuthService {
   AuthService(this.db);
   final Database db;
-  int _failedAttempts = 0;
-  DateTime? _lockedUntil;
   static const iterations = 50000;
+  static const _retrySettingKey = 'auth_pin_retry_state';
+  static const _maxFailedAttempts = 5;
+  static const _lockDuration = Duration(seconds: 30);
   Future<bool> get hasOwner async => (await db.query(
     'security_profiles',
     where: "role='OWNER'",
@@ -186,12 +217,50 @@ class AuthService {
     };
   }
 
-  Future<UserRole?> verify(String pin, {int? staffId}) async {
-    if (_lockedUntil?.isAfter(DateTime.now()) ?? false) {
+  Future<_PinRetryState> _readRetryState(DatabaseExecutor txn) async {
+    final rows = await txn.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key=?',
+      whereArgs: [_retrySettingKey],
+      limit: 1,
+    );
+    return _PinRetryState.fromValue(
+      rows.isEmpty ? null : rows.single['value'] as String,
+    );
+  }
+
+  Future<void> _writeRetryState(
+    DatabaseExecutor txn,
+    _PinRetryState state,
+  ) async {
+    await txn.insert('app_settings', {
+      'key': _retrySettingKey,
+      'value': state.toValue(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> get remainingAttempts async {
+    final retry = await _readRetryState(db);
+    if (retry.lockedUntil?.isAfter(DateTime.now()) ?? false) return 0;
+    if (retry.lockedUntil != null) return _maxFailedAttempts;
+    return (_maxFailedAttempts - retry.failedAttempts).clamp(
+      0,
+      _maxFailedAttempts,
+    );
+  }
+
+  Future<UserRole?> verify(String pin, {int? staffId}) => db.transaction((
+    txn,
+  ) async {
+    final retry = await _readRetryState(txn);
+    final now = DateTime.now();
+    if (retry.lockedUntil?.isAfter(now) ?? false) {
       throw StateError('Too many attempts. Try again later.');
     }
     final profiles = staffId == null
-        ? await db.query('security_profiles')
+        ? await txn.query('security_profiles')
         : const <Map<String, Object?>>[];
     for (final row in profiles) {
       final salt = base64Decode(row['salt']! as String),
@@ -207,10 +276,9 @@ class AuthService {
         diff |= expected[i] ^ actual[i];
       }
       if (diff == 0) {
-        _failedAttempts = 0;
-        _lockedUntil = null;
+        await _writeRetryState(txn, const _PinRetryState(0, null));
         final role = row['role'] == 'OWNER' ? UserRole.owner : UserRole.staff;
-        await db.insert('activity_logs', {
+        await txn.insert('activity_logs', {
           'event_type': 'AUTH_LOGIN',
           'description':
               '${role == UserRole.owner ? 'Owner' : 'Staff'} logged in',
@@ -221,38 +289,43 @@ class AuthService {
       }
     }
     if (staffId != null) {
-      final rows = await db.query(
+      final rows = await txn.query(
         'staff_accounts',
         where: 'id=? AND is_active=1',
         whereArgs: [staffId],
         limit: 1,
       );
       if (rows.isNotEmpty && _matches(pin, rows.single)) {
-        _failedAttempts = 0;
-        final now = DateTime.now().toUtc().toIso8601String();
-        await db.update(
+        await _writeRetryState(txn, const _PinRetryState(0, null));
+        final timestamp = now.toUtc().toIso8601String();
+        await txn.update(
           'staff_accounts',
-          {'last_login_at': now},
+          {'last_login_at': timestamp},
           where: 'id=?',
           whereArgs: [staffId],
         );
-        await db.insert('activity_logs', {
+        await txn.insert('activity_logs', {
           'event_type': 'AUTH_LOGIN',
           'description': '${rows.single['name']} logged in',
           'actor_role': 'STAFF',
           'related_entity_type': 'STAFF',
           'related_entity_id': staffId,
-          'created_at': now,
+          'created_at': timestamp,
         });
         return UserRole.staff;
       }
     }
-    _failedAttempts++;
-    if (_failedAttempts >= 5) {
-      _lockedUntil = DateTime.now().add(const Duration(seconds: 30));
-    }
+    final failedAttempts =
+        (retry.lockedUntil == null ? retry.failedAttempts : 0) + 1;
+    await _writeRetryState(
+      txn,
+      _PinRetryState(
+        failedAttempts,
+        failedAttempts >= _maxFailedAttempts ? now.add(_lockDuration) : null,
+      ),
+    );
     return null;
-  }
+  });
 
   bool _matches(String pin, Map<String, Object?> row) {
     final salt = base64Decode(row['salt']! as String);

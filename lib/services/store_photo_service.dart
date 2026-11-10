@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 abstract interface class StorePhotoService {
+  Future<String?> capture();
   Future<String?> chooseFromGallery();
   Future<void> delete(String photoPath);
 }
@@ -16,9 +17,14 @@ class LocalStorePhotoService implements StorePhotoService {
   final ImagePicker _picker;
 
   @override
-  Future<String?> chooseFromGallery() async {
+  Future<String?> capture() => _pick(ImageSource.camera);
+
+  @override
+  Future<String?> chooseFromGallery() => _pick(ImageSource.gallery);
+
+  Future<String?> _pick(ImageSource source) async {
     final photo = await _picker.pickImage(
-      source: ImageSource.gallery,
+      source: source,
       maxWidth: 1024,
       maxHeight: 1024,
       imageQuality: 75,

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:tindahan_ni_embi/features/shell/app_destination.dart';
 import 'package:tindahan_ni_embi/core/theme/app_theme.dart';
 import 'package:tindahan_ni_embi/services/app_refresh_controller.dart';
 import 'package:tindahan_ni_embi/features/operations/presentation/daily_closing_screen.dart';
@@ -227,7 +228,7 @@ void main() {
       );
       final db = await tester.runAsync(() => app.database);
       addTearDown(app.close);
-      int? target;
+      AppDestination? target;
       await tester.runAsync(() async {
         await tester.pumpWidget(
           MaterialApp(
@@ -333,7 +334,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(find.text('Start Sale'), 500);
       await tester.tap(find.text('Start Sale'));
-      expect(target, 0);
+      expect(target, AppDestination.sales);
       tester.platformDispatcher.textScaleFactorTestValue = 1.5;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       tester.view.physicalSize = const Size(600, 800);

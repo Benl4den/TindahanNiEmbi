@@ -87,7 +87,7 @@ class _State extends State<BackupScreen> {
           ),
           title: const Text('Restore this backup?'),
           content: const Text(
-            'This replaces the current store records and product images with the selected backup. Create a new backup first if you may need the current data later.',
+            'This replaces the current store records and product images. Backups that include a Tindahan photo restore it too. Create a new backup first if you may need the current data later.',
           ),
           actions: [
             TextButton(
@@ -188,6 +188,13 @@ class _State extends State<BackupScreen> {
                                 ),
                                 Text(
                                   'Product images: ${value.valid ? '${value.imageCount} included' : 'Not validated'}',
+                                ),
+                                Text(
+                                  'Tindahan photo: ${value.valid
+                                      ? value.storePhotoIncluded
+                                            ? 'Included'
+                                            : 'Not included'
+                                      : 'Not validated'}',
                                 ),
                                 Text(
                                   'Validation: ${value.valid ? 'Valid' : 'Needs Backup'}',

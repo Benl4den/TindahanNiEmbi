@@ -30,7 +30,7 @@ void main() {
         minimumStockLevel: 2,
       ),
     );
-    inventory = InventoryRepository(db);
+    inventory = InventoryRepository(db, actorRole: 'OWNER');
   });
   tearDown(() => app.close());
 
@@ -84,6 +84,21 @@ void main() {
       containsAll(['INITIAL_STOCK', 'STOCK_IN', 'ADJUSTMENT_OUT']),
     );
     expect(await inventory.inventoryValueCentavos(), 3500);
+  });
+
+  test('staff and missing roles cannot correct stock', () async {
+    for (final role in <String?>['STAFF', null]) {
+      expect(
+        () => InventoryRepository(db, actorRole: role).adjust(
+          productId: product.id,
+          quantityChange: -1,
+          reason: 'Physical Count Correction',
+        ),
+        throwsA(isA<StateError>()),
+      );
+    }
+    expect((await inventory.current()).single.currentQuantity, 5);
+    expect((await inventory.history()).length, 1);
   });
 
   test(

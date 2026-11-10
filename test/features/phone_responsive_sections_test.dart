@@ -246,7 +246,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: InventoryScreen(
-          repository: InventoryRepository(db),
+          repository: InventoryRepository(db, actorRole: 'OWNER'),
           access: FeatureAccessService(
             db,
             planController: AppPlanController(_FreePlanSource()),

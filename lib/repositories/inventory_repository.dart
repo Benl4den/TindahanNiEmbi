@@ -60,6 +60,7 @@ class InventoryRepository {
   final Database _database;
   Database get db => _database;
   final String? actorRole;
+  bool get canAdjustStock => actorRole == 'OWNER';
 
   Future<List<Product>> current({ProductStockStatus? status}) async {
     var where = 'is_archived = 0';
@@ -188,6 +189,7 @@ class InventoryRepository {
     required String reason,
     int? expectedCurrentQuantity,
   }) {
+    if (!canAdjustStock) throw StateError('Owner permission required.');
     if (reason.trim().isEmpty) {
       throw const InvalidInventoryOperation('Reason is required.');
     }

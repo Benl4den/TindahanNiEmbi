@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../../widgets/brand_logo.dart';
 
 import 'package:flutter/material.dart';
@@ -72,6 +74,7 @@ import '../../../database/app_database.dart';
 import '../../../models/category.dart';
 import '../../../models/product.dart';
 import '../../../widgets/app_state_view.dart';
+import '../app_destination.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -96,7 +99,7 @@ class AppShell extends StatefulWidget {
 class _State extends State<AppShell> {
   final _backController = SectionBackController();
   bool _handlingBack = false;
-  int selected = 0;
+  AppDestination selected = AppDestination.sales;
   bool _phoneLandingSet = false;
   bool _staffHomeSelected = false;
   bool _phoneOpenedFromMore = false;
@@ -106,6 +109,9 @@ class _State extends State<AppShell> {
   Future<List<Object>>? _salesFuture;
   int restockCount = 0;
   int productCount = 0;
+  String _sidebarStoreName = SettingsService.fallbackStoreName;
+  String _sidebarStorePhotoPath = '';
+  int _storeIdentityRequest = 0;
   int? pendingConsignorId;
   int? pendingConsignmentProductId;
   bool railExpanded = true;
@@ -332,6 +338,7 @@ class _State extends State<AppShell> {
     AppPlanController.instance.addListener(_planChanged);
     AppPlanController.instance.load();
     _refreshRestockCount();
+    _refreshStoreIdentity();
   }
 
   void _planChanged() {
@@ -342,6 +349,25 @@ class _State extends State<AppShell> {
     if (mounted) {
       setState(() {});
       _refreshRestockCount();
+      _refreshStoreIdentity();
+    }
+  }
+
+  Future<void> _refreshStoreIdentity() async {
+    final request = ++_storeIdentityRequest;
+    try {
+      final profile = await SettingsService(widget.database).storeProfile;
+      if (!mounted || request != _storeIdentityRequest) return;
+      if (profile.storeName == _sidebarStoreName &&
+          profile.storePhotoPath == _sidebarStorePhotoPath) {
+        return;
+      }
+      setState(() {
+        _sidebarStoreName = profile.storeName;
+        _sidebarStorePhotoPath = profile.storePhotoPath;
+      });
+    } catch (_) {
+      // Keep the last known identity if settings are temporarily unavailable.
     }
   }
 
@@ -380,11 +406,17 @@ class _State extends State<AppShell> {
     super.dispose();
   }
 
-  void _select(int destination) {
+  void _select(AppDestination destination) {
     setState(() {
-      if (selected == -1 && destination != -1) {
+      if (selected == AppDestination.more &&
+          destination != AppDestination.more) {
         _phoneOpenedFromMore = true;
-      } else if (destination == -1 || const {0, 6, 13}.contains(destination)) {
+      } else if (destination == AppDestination.more ||
+          const {
+            AppDestination.sales,
+            AppDestination.utang,
+            AppDestination.dashboard,
+          }.contains(destination)) {
         _phoneOpenedFromMore = false;
       }
       _staffHomeSelected = false;
@@ -392,9 +424,9 @@ class _State extends State<AppShell> {
       pendingConsignorId = null;
       pendingConsignmentProductId = null;
       selected = destination;
-      if (destination == 13) dashboardRevision++;
-      if (destination != 7) dashboardAddExpense = false;
-      if (destination == 0) {
+      if (destination == AppDestination.dashboard) dashboardRevision++;
+      if (destination != AppDestination.expenses) dashboardAddExpense = false;
+      if (destination == AppDestination.sales) {
         salesRevision++;
         _salesFuture = null;
       }
@@ -416,38 +448,40 @@ class _State extends State<AppShell> {
       _phoneLandingSet = true;
       if (MediaQuery.sizeOf(context).width < 900 &&
           widget.role == UserRole.owner) {
-        selected = 13;
+        selected = AppDestination.dashboard;
       }
     }
   }
 
   void _selectPhoneTab(int index) {
     if (widget.role != UserRole.owner &&
-        selected == 0 &&
+        selected == AppDestination.sales &&
         (index == 0 || index == 1)) {
       setState(() => _staffHomeSelected = index == 0);
       return;
     }
-    if ((index == 0 && selected == 13) ||
-        (index == 1 && selected == 0 && !_staffHomeSelected) ||
-        (index == 2 && selected == 6) ||
-        (index == 3 && selected == -1)) {
+    if ((index == 0 && selected == AppDestination.dashboard) ||
+        (index == 1 &&
+            selected == AppDestination.sales &&
+            !_staffHomeSelected) ||
+        (index == 2 && selected == AppDestination.utang) ||
+        (index == 3 && selected == AppDestination.more)) {
       return;
     }
     if (index == 0 && widget.role != UserRole.owner) {
-      if (selected == 0) {
+      if (selected == AppDestination.sales) {
         setState(() => _staffHomeSelected = true);
       } else {
-        _select(0);
+        _select(AppDestination.sales);
         _staffHomeSelected = true;
       }
       return;
     }
     _select(switch (index) {
-      0 => 13,
-      1 => 0,
-      2 => 6,
-      _ => -1,
+      0 => AppDestination.dashboard,
+      1 => AppDestination.sales,
+      2 => AppDestination.utang,
+      _ => AppDestination.more,
     });
   }
 
@@ -462,12 +496,12 @@ class _State extends State<AppShell> {
       if (await _backController.handleBack() || !mounted) return;
       if (_phoneOpenedFromMore &&
           MediaQuery.sizeOf(context).width < 900 &&
-          selected != -1) {
-        _select(-1);
+          selected != AppDestination.more) {
+        _select(AppDestination.more);
         return;
       }
-      if (selected != 0) {
-        _select(0);
+      if (selected != AppDestination.sales) {
+        _select(AppDestination.sales);
       } else {
         await SystemNavigator.pop();
       }
@@ -479,24 +513,40 @@ class _State extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final bodyDestinations = [
-      const NavigationDestination(
+    final navigation = <AppDestination, NavigationDestination>{
+      AppDestination.dashboard: const NavigationDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        label: 'Dashboard',
+      ),
+      AppDestination.sales: const NavigationDestination(
         icon: Icon(Icons.point_of_sale),
         label: 'Sales',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.sell_outlined),
-        label: 'Brands',
+      AppDestination.utang: const NavigationDestination(
+        icon: Icon(Icons.people_alt_outlined),
+        label: 'UTANG',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.handshake_outlined),
-        label: 'Consignment',
+      AppDestination.gcashServices: const NavigationDestination(
+        icon: WalletNavLogo(maya: false),
+        label: 'GCash Services',
       ),
-      const NavigationDestination(
+      AppDestination.mayaServices: const NavigationDestination(
+        icon: WalletNavLogo(maya: true),
+        label: 'Maya Services',
+      ),
+      AppDestination.products: const NavigationDestination(
+        icon: Icon(Icons.inventory),
+        label: 'Products',
+      ),
+      AppDestination.inventory: const NavigationDestination(
         icon: Icon(Icons.inventory_2_outlined),
         label: 'Inventory',
       ),
-      NavigationDestination(
+      AppDestination.categories: const NavigationDestination(
+        icon: Icon(Icons.category_outlined),
+        label: 'Categories',
+      ),
+      AppDestination.restock: NavigationDestination(
         icon: Badge(
           isLabelVisible: restockCount > 0,
           label: Text('$restockCount'),
@@ -504,113 +554,62 @@ class _State extends State<AppShell> {
         ),
         label: 'Restock',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.inventory),
-        label: 'Products',
+      AppDestination.managedBrands: const NavigationDestination(
+        icon: Icon(Icons.sell_outlined),
+        label: 'Brands',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.people_alt_outlined),
-        label: 'UTANG',
+      AppDestination.consignment: const NavigationDestination(
+        icon: Icon(Icons.handshake_outlined),
+        label: 'Consignment',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.receipt_long),
-        label: 'Expenses',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.today),
-        label: 'Daily Closing',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.assessment_outlined),
-        label: 'Reports',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        label: 'Settings',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.history),
-        label: 'Transaction History',
-      ),
-      const NavigationDestination(
-        icon: WalletNavLogo(maya: false),
-        label: 'GCash Services',
-      ),
-    ];
-    bodyDestinations.add(
-      const NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        label: 'Dashboard',
-      ),
-    );
-    bodyDestinations.addAll(const [
-      NavigationDestination(
+      AppDestination.supplierContacts: const NavigationDestination(
         icon: Icon(Icons.contact_phone_outlined),
         label: 'Supplier Contacts',
       ),
-      NavigationDestination(
-        icon: Icon(Icons.account_balance_outlined),
-        label: '5/6 Loan Management',
+      AppDestination.transactionHistory: const NavigationDestination(
+        icon: Icon(Icons.history),
+        label: 'Transaction History',
       ),
-    ]);
-    bodyDestinations.add(
-      const NavigationDestination(
-        icon: WalletNavLogo(maya: true),
-        label: 'Maya Services',
+      AppDestination.expenses: const NavigationDestination(
+        icon: Icon(Icons.receipt_long),
+        label: 'Expenses',
       ),
-    );
-    bodyDestinations.addAll(const [
-      NavigationDestination(
-        icon: Icon(Icons.category_outlined),
-        label: 'Categories',
+      AppDestination.dailyClosing: const NavigationDestination(
+        icon: Icon(Icons.today),
+        label: 'Daily Closing',
       ),
-      NavigationDestination(
+      AppDestination.reports: const NavigationDestination(
+        icon: Icon(Icons.assessment_outlined),
+        label: 'Reports',
+      ),
+      AppDestination.activityLogs: const NavigationDestination(
         icon: Icon(Icons.history_toggle_off_outlined),
         label: 'Activity Logs',
       ),
-      NavigationDestination(
+      AppDestination.staffActivity: const NavigationDestination(
         icon: Icon(Icons.groups_2_outlined),
         label: 'Staff Activity Summary',
       ),
-      NavigationDestination(
+      AppDestination.loanManagement: const NavigationDestination(
+        icon: Icon(Icons.account_balance_outlined),
+        label: '5/6 Loan Management',
+      ),
+      AppDestination.tindahanProfile: const NavigationDestination(
+        icon: Icon(Icons.storefront_outlined),
+        label: 'Tindahan Profile',
+      ),
+      AppDestination.settings: const NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        label: 'Settings',
+      ),
+      AppDestination.helpGuide: const NavigationDestination(
         icon: Icon(Icons.help_outline),
         label: 'Help & Guide',
       ),
-    ]);
-    const navTargets = [
-      13,
-      0,
-      6,
-      12,
-      16,
-      5,
-      3,
-      17,
-      4,
-      1,
-      2,
-      14,
-      11,
-      7,
-      8,
-      9,
-      18,
-      19,
-      15,
-      10,
-      20,
-    ];
-    final allowedTargets = widget.role == UserRole.owner
-        ? navTargets
-        : navTargets
-              .where(
-                (target) =>
-                    const {0, 3, 4, 6, 7, 10, 11, 12, 16, 20}.contains(target),
-              )
-              .toList();
-    final destinations = [
-      for (final target in allowedTargets) bodyDestinations[target],
-    ];
+    };
+    if (widget.role != UserRole.owner) {
+      navigation.removeWhere((target, _) => !target.staffAllowed);
+    }
     final body = _body();
     final scaffold = Scaffold(
       body: Row(
@@ -618,7 +617,7 @@ class _State extends State<AppShell> {
           if (wide)
             StatefulBuilder(
               builder: (_, updateSidebar) =>
-                  _sidebar(destinations, allowedTargets, updateSidebar),
+                  _sidebar(navigation, updateSidebar),
             ),
           if (wide) const VerticalDivider(width: 1),
           Expanded(
@@ -626,7 +625,7 @@ class _State extends State<AppShell> {
                 ? body
                 : Column(
                     children: [
-                      if (selected == 0)
+                      if (selected == AppDestination.sales)
                         ValueListenableBuilder<bool>(
                           valueListenable: _phoneSaleDetailVisible,
                           builder: (_, hidden, _) => hidden
@@ -648,11 +647,11 @@ class _State extends State<AppShell> {
                   : NavigationBar(
                       selectedIndex: _staffHomeSelected
                           ? 0
-                          : selected == 13
+                          : selected == AppDestination.dashboard
                           ? 0
-                          : selected == 0
+                          : selected == AppDestination.sales
                           ? 1
-                          : selected == 6
+                          : selected == AppDestination.utang
                           ? 2
                           : 3,
                       onDestinationSelected: _selectPhoneTab,
@@ -720,20 +719,20 @@ class _State extends State<AppShell> {
       );
 
   Widget _body() => switch (selected) {
-    -1 => _phoneMoreHub(),
-    13 =>
+    AppDestination.more => _phoneMoreHub(),
+    AppDestination.dashboard =>
       widget.role == UserRole.owner
           ? DashboardScreen(
               refreshRevision: dashboardRevision,
               database: widget.database,
               walletServicesAllowed: _walletServicesAllowed,
               navigate: (target) {
-                dashboardAddExpense = target == 7;
+                dashboardAddExpense = target == AppDestination.expenses;
                 _select(target);
               },
             )
           : _denied(),
-    0 => FutureBuilder<List<Object>>(
+    AppDestination.sales => FutureBuilder<List<Object>>(
       future: _loadSalesData(),
       builder: (_, s) {
         if (s.hasError) {
@@ -816,8 +815,9 @@ class _State extends State<AppShell> {
         );
       },
     ),
-    1 => widget.role == UserRole.owner ? _managedBrands() : _denied(),
-    2 =>
+    AppDestination.managedBrands =>
+      widget.role == UserRole.owner ? _managedBrands() : _denied(),
+    AppDestination.consignment =>
       widget.role == UserRole.owner
           ? ConsignmentScreen(
               repository: ConsignmentRepository(
@@ -831,20 +831,20 @@ class _State extends State<AppShell> {
               initialReceiveProductId: pendingConsignmentProductId,
             )
           : _denied(),
-    3 => InventoryScreen(
+    AppDestination.inventory => InventoryScreen(
       repository: InventoryRepository(widget.database, actorRole: role),
       access: FeatureAccessService(widget.database),
     ),
-    4 => RestockScreen(
+    AppDestination.restock => RestockScreen(
       operations: OperationsRepository(widget.database),
       inventory: InventoryRepository(widget.database, actorRole: role),
       openConsignment: (consignorId, productId) => setState(() {
         pendingConsignorId = consignorId;
         pendingConsignmentProductId = productId;
-        selected = 2;
+        selected = AppDestination.consignment;
       }),
     ),
-    5 =>
+    AppDestination.products =>
       widget.role == UserRole.owner
           ? ProductsScreen(
               repository: SqliteProductRepository(
@@ -856,7 +856,7 @@ class _State extends State<AppShell> {
               access: FeatureAccessService(widget.database),
             )
           : _denied(),
-    6 => UtangCustomerScreen(
+    AppDestination.utang => UtangCustomerScreen(
       customers: SqliteCustomerRepository(widget.database),
       products: SqliteProductRepository(widget.database),
       utang: UtangRepository(widget.database, actorRole: role),
@@ -865,71 +865,74 @@ class _State extends State<AppShell> {
           ? ReversalRepository(widget.database)
           : null,
     ),
-    7 => ExpensesScreen(
+    AppDestination.expenses => ExpensesScreen(
       openAdd: dashboardAddExpense,
       repository: ExpenseRepository(widget.database, actorRole: role),
       auth: AuthService(widget.database),
     ),
-    8 =>
+    AppDestination.dailyClosing =>
       widget.role == UserRole.owner
           ? DailyClosingScreen(
               repository: OperationsRepository(widget.database),
               walletServicesAllowed: _walletServicesAllowed,
             )
           : _denied(),
-    9 =>
+    AppDestination.reports =>
       widget.role == UserRole.owner
           ? ReportsScreen(
               repository: ReportsRepository(widget.database),
               walletServicesAllowed: _walletServicesAllowed,
             )
           : _denied(),
-    14 =>
+    AppDestination.supplierContacts =>
       widget.role == UserRole.owner
           ? SupplierContactsScreen(
               repository: SupplierContactsRepository(widget.database),
             )
           : _denied(),
-    15 =>
+    AppDestination.loanManagement =>
       widget.role == UserRole.owner
           ? LoanManagementScreen(
               repository: LoanRepository(widget.database, actorRole: role),
               access: FeatureAccessService(widget.database),
             )
           : _denied(),
-    11 => TransactionHistoryScreen(
+    AppDestination.transactionHistory => TransactionHistoryScreen(
       repository: TransactionHistoryRepository(widget.database),
       access: FeatureAccessService(widget.database),
     ),
-    12 => _walletScreen(PaymentMethod.gcash),
-    16 => _walletScreen(PaymentMethod.maya),
-    17 =>
+    AppDestination.gcashServices => _walletScreen(PaymentMethod.gcash),
+    AppDestination.mayaServices => _walletScreen(PaymentMethod.maya),
+    AppDestination.categories =>
       widget.role == UserRole.owner
           ? CategoriesScreen(
               repository: SqliteCategoryRepository(widget.database),
             )
           : _denied(),
-    18 =>
+    AppDestination.activityLogs =>
       widget.role == UserRole.owner
           ? ActivityLogsScreen(
               repository: ActivityLogRepository(widget.database),
               walletServicesAllowed: _walletServicesAllowed,
             )
           : _denied(),
-    19 =>
+    AppDestination.staffActivity =>
       widget.role == UserRole.owner
           ? StaffActivityScreen(
               repository: StaffActivityRepository(widget.database),
               walletServicesAllowed: _walletServicesAllowed,
             )
           : _denied(),
-    20 => const HelpGuideScreen(),
-    _ => _more(),
+    AppDestination.helpGuide => const HelpGuideScreen(),
+    AppDestination.tindahanProfile =>
+      widget.role == UserRole.owner
+          ? TindahanProfileScreen(settings: SettingsService(widget.database))
+          : _denied(),
+    AppDestination.settings => _more(),
   };
 
   Widget _sidebar(
-    List<NavigationDestination> destinations,
-    List<int> navTargets,
+    Map<AppDestination, NavigationDestination> navigation,
     StateSetter updateSidebar,
   ) {
     final colors = Theme.of(context).colorScheme;
@@ -970,20 +973,38 @@ class _State extends State<AppShell> {
             return Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 18, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
                   child: Row(
                     children: [
                       if (expanded) ...[
-                        const Expanded(
-                          child: BrandLogo(horizontal: true, size: 56),
+                        const BrandLogo(
+                          key: ValueKey('sidebar-brand-logo'),
+                          size: 34,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'TindaSari PH',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.primary,
+                                ),
+                          ),
                         ),
                         toggle(),
                       ] else
-                        const BrandLogo(size: 48),
+                        const BrandLogo(
+                          key: ValueKey('sidebar-brand-logo'),
+                          size: 38,
+                        ),
                     ],
                   ),
                 ),
                 if (!expanded) toggle(),
+                if (expanded) _storeIdentityCard(colors),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Divider(height: 20),
@@ -991,18 +1012,20 @@ class _State extends State<AppShell> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: destinations.length,
+                    itemCount: navigation.length,
                     itemBuilder: (_, i) {
-                      final destination = destinations[i];
-                      final target = navTargets[i];
+                      final entry = navigation.entries.elementAt(i);
+                      final destination = entry.value;
+                      final target = entry.key;
                       final active = selected == target;
                       final proLocked =
                           widget.role == UserRole.owner &&
                           AppPlanController.instance.plan == AppPlan.free &&
-                          const {1, 2, 12, 15, 16}.contains(target);
+                          target.proLocked;
                       final sectionStart =
                           i == 0 ||
-                          _navSection(navTargets[i - 1]) != _navSection(target);
+                          navigation.keys.elementAt(i - 1).section !=
+                              target.section;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -1012,7 +1035,7 @@ class _State extends State<AppShell> {
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(8, 3, 0, 9),
                                 child: Text(
-                                  _navSection(target).toUpperCase(),
+                                  target.section.toUpperCase(),
                                   style: TextStyle(
                                     fontSize: 12,
                                     letterSpacing: 1,
@@ -1027,7 +1050,7 @@ class _State extends State<AppShell> {
                             child: Tooltip(
                               message: expanded
                                   ? ''
-                                  : '${destination.label}${target == 5 && productCount > 0 ? ' • $productCount total' : ''}${proLocked ? ' • PRO' : ''}',
+                                  : '${destination.label}${target == AppDestination.products && productCount > 0 ? ' • $productCount total' : ''}${proLocked ? ' • PRO' : ''}',
                               decoration: BoxDecoration(
                                 color: colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(10),
@@ -1059,7 +1082,10 @@ class _State extends State<AppShell> {
                                                 ? colors.primary
                                                 : colors.onSurface,
                                           ),
-                                          child: !expanded && target == 5
+                                          child:
+                                              !expanded &&
+                                                  target ==
+                                                      AppDestination.products
                                               ? Badge(
                                                   isLabelVisible:
                                                       productCount > 0,
@@ -1104,7 +1130,9 @@ class _State extends State<AppShell> {
                                               ),
                                             ),
                                           ),
-                                          if (target == 5 && productCount > 0)
+                                          if (target ==
+                                                  AppDestination.products &&
+                                              productCount > 0)
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
@@ -1238,13 +1266,78 @@ class _State extends State<AppShell> {
     );
   }
 
-  String _navSection(int target) => switch (target) {
-    13 || 0 || 6 || 12 || 16 => 'Daily Selling',
-    5 || 3 || 17 || 4 => 'Stock & Products',
-    1 || 2 || 14 => 'Supplier Products',
-    11 || 7 || 8 || 9 || 18 || 19 || 15 => 'Store Records',
-    _ => 'Administration',
-  };
+  Widget _storeIdentityCard(ColorScheme colors) {
+    final fallback = Image.asset(
+      'assets/branding/tindasari_storefront_clean.png',
+      key: const ValueKey('sidebar-store-photo-fallback'),
+      fit: BoxFit.cover,
+      excludeFromSemantics: true,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        key: const ValueKey('sidebar-store-card'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: _sidebarStorePhotoPath.isEmpty
+                    ? fallback
+                    : Image.file(
+                        File(_sidebarStorePhotoPath),
+                        key: const ValueKey('sidebar-store-photo'),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) => fallback,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'YOUR STORE',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .7,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Tooltip(
+                    message: _sidebarStoreName,
+                    child: Text(
+                      _sidebarStoreName,
+                      key: const ValueKey('sidebar-store-name'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _denied() => const AppStateView(
     icon: Icons.lock_outline,
@@ -1266,7 +1359,7 @@ class _State extends State<AppShell> {
               children: [
                 IconButton(
                   tooltip: 'Open More',
-                  onPressed: () => _select(-1),
+                  onPressed: () => _select(AppDestination.more),
                   icon: const Icon(Icons.menu),
                 ),
                 const Expanded(child: BrandLogo(horizontal: true, size: 34)),
@@ -1305,7 +1398,7 @@ class _State extends State<AppShell> {
 
     Widget group(
       String title,
-      List<(String, IconData, VoidCallback, int?)> entries,
+      List<(String, IconData, VoidCallback, AppDestination?)> entries,
     ) {
       if (entries.isEmpty) return const SizedBox.shrink();
       return Padding(
@@ -1343,7 +1436,7 @@ class _State extends State<AppShell> {
                         color: colors.primary,
                         size: 23,
                       ),
-                      title: entries[i].$4 == 5
+                      title: entries[i].$4 == AppDestination.products
                           ? Text.rich(
                               TextSpan(
                                 children: [
@@ -1361,7 +1454,7 @@ class _State extends State<AppShell> {
                       trailing:
                           owner &&
                               AppPlanController.instance.plan == AppPlan.free &&
-                              const {1, 2, 12, 15, 16}.contains(entries[i].$4)
+                              entries[i].$4?.proLocked == true
                           ? const Chip(label: Text('PRO'))
                           : const Icon(Icons.chevron_right),
                       onTap: entries[i].$3,
@@ -1442,9 +1535,24 @@ class _State extends State<AppShell> {
                 ),
               group('STORE MANAGEMENT', [
                 if (owner)
-                  ('Products', Icons.inventory_2_outlined, () => _select(5), 5),
-                ('Inventory', Icons.inventory_outlined, () => _select(3), 3),
-                ('Restock', Icons.add_shopping_cart, () => _select(4), 4),
+                  (
+                    'Products',
+                    Icons.inventory_2_outlined,
+                    () => _select(AppDestination.products),
+                    AppDestination.products,
+                  ),
+                (
+                  'Inventory',
+                  Icons.inventory_outlined,
+                  () => _select(AppDestination.inventory),
+                  AppDestination.inventory,
+                ),
+                (
+                  'Restock',
+                  Icons.add_shopping_cart,
+                  () => _select(AppDestination.restock),
+                  AppDestination.restock,
+                ),
                 if (owner)
                   (
                     'Categories',
@@ -1460,38 +1568,58 @@ class _State extends State<AppShell> {
                   (
                     'Supplier Contacts',
                     Icons.contact_phone_outlined,
-                    () => _select(14),
-                    14,
+                    () => _select(AppDestination.supplierContacts),
+                    AppDestination.supplierContacts,
                   ),
               ]),
               group('MONEY', [
-                ('Expenses', Icons.receipt_long_outlined, () => _select(7), 7),
+                (
+                  'Expenses',
+                  Icons.receipt_long_outlined,
+                  () => _select(AppDestination.expenses),
+                  AppDestination.expenses,
+                ),
                 (
                   'GCash',
                   Icons.account_balance_wallet_outlined,
-                  () => _select(12),
-                  12,
+                  () => _select(AppDestination.gcashServices),
+                  AppDestination.gcashServices,
                 ),
                 (
                   'Maya',
                   Icons.account_balance_wallet_outlined,
-                  () => _select(16),
-                  16,
+                  () => _select(AppDestination.mayaServices),
+                  AppDestination.mayaServices,
                 ),
                 if (owner)
                   (
                     '5/6 Loan Management',
                     Icons.account_balance_outlined,
-                    () => _select(15),
-                    15,
+                    () => _select(AppDestination.loanManagement),
+                    AppDestination.loanManagement,
                   ),
               ]),
               group('RECORDS & INSIGHTS', [
-                ('Transaction History', Icons.history, () => _select(11), 11),
+                (
+                  'Transaction History',
+                  Icons.history,
+                  () => _select(AppDestination.transactionHistory),
+                  AppDestination.transactionHistory,
+                ),
                 if (owner)
-                  ('Daily Closing', Icons.today_outlined, () => _select(8), 8),
+                  (
+                    'Daily Closing',
+                    Icons.today_outlined,
+                    () => _select(AppDestination.dailyClosing),
+                    AppDestination.dailyClosing,
+                  ),
                 if (owner)
-                  ('Reports', Icons.assessment_outlined, () => _select(9), 9),
+                  (
+                    'Reports',
+                    Icons.assessment_outlined,
+                    () => _select(AppDestination.reports),
+                    AppDestination.reports,
+                  ),
                 if (owner)
                   (
                     'Activity Logs',
@@ -1519,17 +1647,27 @@ class _State extends State<AppShell> {
               ]),
               group('ADVANCED MANAGEMENT', [
                 if (owner)
-                  ('Managed Brands', Icons.sell_outlined, () => _select(1), 1),
+                  (
+                    'Managed Brands',
+                    Icons.sell_outlined,
+                    () => _select(AppDestination.managedBrands),
+                    AppDestination.managedBrands,
+                  ),
                 if (owner)
                   (
                     'Consignment',
                     Icons.handshake_outlined,
-                    () => _select(2),
-                    2,
+                    () => _select(AppDestination.consignment),
+                    AppDestination.consignment,
                   ),
               ]),
               group('SYSTEM', [
-                ('Settings', Icons.settings_outlined, () => _select(10), 10),
+                (
+                  'Settings',
+                  Icons.settings_outlined,
+                  () => _select(AppDestination.settings),
+                  AppDestination.settings,
+                ),
                 (
                   'Help & Guide',
                   Icons.help_outline,

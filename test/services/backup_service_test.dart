@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/services/backup_service.dart';
+import 'package:tindahan_ni_embi/services/settings_service.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -128,6 +129,133 @@ void main() {
         (await restored.query('products')).single['photo_path']! as String;
     expect(await File(restoredPath).readAsBytes(), [7, 8, 9]);
     expect(imageDir.existsSync(), isTrue);
+  });
+
+  test('store photo survives restore into a new documents directory', () async {
+    final sourceDocs = Directory('${temp.path}/source_docs')..createSync();
+    final targetDocs = Directory('${temp.path}/target_docs')..createSync();
+    final productPhoto = File('${sourceDocs.path}/product_images/product.jpg');
+    await productPhoto.parent.create(recursive: true);
+    await productPhoto.writeAsBytes([1, 2, 3]);
+    await seed(productPhoto);
+    final storePhoto = File('${sourceDocs.path}/store_images/store_1.jpg');
+    await storePhoto.parent.create(recursive: true);
+    await storePhoto.writeAsBytes([4, 5, 6]);
+    await SettingsService(await app.database).saveStoreProfile(
+      StoreProfile(storeName: 'Original', storePhotoPath: storePhoto.path),
+    );
+
+    final source = BackupService(app, documentsDirectory: sourceDocs);
+    final backup = await source.create(outputPath: '${temp.path}/transfer.zip');
+    final manifest = await source.validate(backup);
+    expect(manifest.formatVersion, 2);
+    expect(manifest.imageCount, 1);
+    expect(manifest.storePhotoFile, 'store_images/store_1.jpg');
+
+    final targetApp = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: '${temp.path}/target.db',
+    );
+    addTearDown(targetApp.close);
+    await targetApp.database;
+    final oldPhoto = File('${targetDocs.path}/store_images/old.jpg');
+    await oldPhoto.parent.create(recursive: true);
+    await oldPhoto.writeAsBytes([9]);
+    await BackupService(
+      targetApp,
+      documentsDirectory: targetDocs,
+    ).restore(backup);
+
+    final restoredDb = await targetApp.database;
+    final profile = await SettingsService(restoredDb).storeProfile;
+    expect(
+      profile.storePhotoPath,
+      '${targetDocs.path}/store_images/store_1.jpg',
+    );
+    expect(await File(profile.storePhotoPath).readAsBytes(), [4, 5, 6]);
+    expect(await oldPhoto.exists(), isFalse);
+    final productPath =
+        (await restoredDb.query('products')).single['photo_path'] as String;
+    expect(productPath, '${targetDocs.path}/product_images/product.jpg');
+    expect(await File(productPath).readAsBytes(), [1, 2, 3]);
+  });
+
+  test(
+    'older backup stays restorable and clears unavailable photo path',
+    () async {
+      final sourceDocs = Directory('${temp.path}/source_docs')..createSync();
+      final storePhoto = File('${sourceDocs.path}/store_images/store_1.jpg');
+      await storePhoto.parent.create(recursive: true);
+      await storePhoto.writeAsBytes([4, 5, 6]);
+      await SettingsService(await app.database).saveStoreProfile(
+        StoreProfile(storeName: 'Original', storePhotoPath: storePhoto.path),
+      );
+      final source = BackupService(app, documentsDirectory: sourceDocs);
+      final modern = await source.create(outputPath: '${temp.path}/modern.zip');
+      final archive = ZipDecoder().decodeBytes(
+        await File(modern).readAsBytes(),
+      );
+      final legacy = Archive();
+      for (final file in archive) {
+        if (file.name == 'store_images' ||
+            file.name.startsWith('store_images/')) {
+          continue;
+        }
+        if (file.name == 'manifest.json') {
+          final values = jsonDecode(
+            utf8.decode(file.content as List<int>),
+          ) as Map<String, dynamic>;
+          values['format_version'] = 1;
+          values.remove('store_photo');
+          final bytes = utf8.encode(jsonEncode(values));
+          legacy.add(ArchiveFile(file.name, bytes.length, bytes));
+        } else {
+          legacy.add(file);
+        }
+      }
+      final legacyFile = File('${temp.path}/legacy.zip');
+      await legacyFile.writeAsBytes(ZipEncoder().encode(legacy));
+
+      final targetDocs = Directory('${temp.path}/target_docs')..createSync();
+      final targetApp = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: '${temp.path}/target.db',
+      );
+      addTearDown(targetApp.close);
+      await targetApp.database;
+      final targetService = BackupService(
+        targetApp,
+        documentsDirectory: targetDocs,
+      );
+      expect((await targetService.validate(legacyFile.path)).formatVersion, 1);
+      await targetService.restore(legacyFile.path);
+      final profile = await SettingsService(await targetApp.database)
+          .storeProfile;
+      expect(profile.storePhotoPath, isEmpty);
+      expect(profile.storeName, 'Original');
+    },
+  );
+
+  test('rejects a backup that omits its declared store photo', () async {
+    final storePhoto = File('${temp.path}/store_images/store_1.jpg');
+    await storePhoto.parent.create(recursive: true);
+    await storePhoto.writeAsBytes([4, 5, 6]);
+    await SettingsService(await app.database).saveStoreProfile(
+      StoreProfile(storeName: 'Original', storePhotoPath: storePhoto.path),
+    );
+    final service = BackupService(app, documentsDirectory: temp);
+    final valid = await service.create(outputPath: '${temp.path}/valid.zip');
+    final archive = ZipDecoder().decodeBytes(await File(valid).readAsBytes());
+    final incomplete = Archive();
+    for (final file in archive) {
+      if (file.name != 'store_images/store_1.jpg') incomplete.add(file);
+    }
+    final damaged = File('${temp.path}/missing_store_photo.zip');
+    await damaged.writeAsBytes(ZipEncoder().encode(incomplete));
+    await expectLater(
+      service.validate(damaged.path),
+      throwsA(isA<InvalidBackupException>()),
+    );
   });
 
   test('rejects archive path traversal', () async {

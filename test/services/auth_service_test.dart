@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +51,83 @@ void main() {
     await auth.setStaffActive(id, false);
     expect(await auth.verify('2468', staffId: id), isNull);
   });
+
+  test(
+    'PIN lockout survives new services and reopening the database',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('pin_retry_');
+      final databasePath = '${directory.path}/store.db';
+      var store = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: databasePath,
+      );
+      try {
+        final storeDb = await store.database;
+        await AuthService(storeDb).setPin(UserRole.owner, '1234');
+        for (var attempt = 0; attempt < 5; attempt++) {
+          expect(await AuthService(storeDb).verify('9999'), isNull);
+          expect(await AuthService(storeDb).remainingAttempts, 4 - attempt);
+        }
+        await expectLater(
+          AuthService(storeDb).verify('1234'),
+          throwsStateError,
+        );
+
+        await store.close();
+        store = AppDatabase(
+          factory: databaseFactoryFfi,
+          databasePath: databasePath,
+        );
+        await expectLater(
+          AuthService(await store.database).verify('1234'),
+          throwsStateError,
+        );
+      } finally {
+        await store.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test('simultaneous PIN checks share one retry limit', () async {
+    await AuthService(db).setPin(UserRole.owner, '1234');
+    final attempts = await Future.wait(
+      List.generate(5, (_) => AuthService(db).verify('9999')),
+    );
+    expect(attempts, everyElement(isNull));
+    await expectLater(AuthService(db).verify('1234'), throwsStateError);
+  });
+
+  test('expired lockout and successful PIN reset retry count', () async {
+    await AuthService(db).setPin(UserRole.owner, '1234');
+    for (var attempt = 0; attempt < 5; attempt++) {
+      expect(await AuthService(db).verify('9999'), isNull);
+    }
+    await db.update(
+      'app_settings',
+      {
+        'value': jsonEncode({
+          'failed_attempts': 5,
+          'locked_until': DateTime.now()
+              .subtract(const Duration(seconds: 1))
+              .toUtc()
+              .toIso8601String(),
+        }),
+      },
+      where: 'key=?',
+      whereArgs: ['auth_pin_retry_state'],
+    );
+    expect(await AuthService(db).remainingAttempts, 5);
+    expect(await AuthService(db).verify('9999'), isNull);
+    expect(await AuthService(db).remainingAttempts, 4);
+    expect(await AuthService(db).verify('1234'), UserRole.owner);
+    expect(await AuthService(db).remainingAttempts, 5);
+    for (var attempt = 0; attempt < 4; attempt++) {
+      expect(await AuthService(db).verify('9999'), isNull);
+    }
+    expect(await AuthService(db).verify('1234'), UserRole.owner);
+  });
+
   test('central permissions block staff sensitive actions', () {
     const p = PermissionService();
     expect(p.allows(UserRole.staff, AppPermission.cashSale), isTrue);

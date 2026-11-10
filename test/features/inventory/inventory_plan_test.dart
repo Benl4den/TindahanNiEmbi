@@ -103,4 +103,58 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('staff inventory menu omits Correct Stock', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final app = AppDatabase(
+      factory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(app.close);
+    final db = (await tester.runAsync(() => app.database))!;
+    final category = (await tester.runAsync(
+      () => SqliteCategoryRepository(db).create('Test'),
+    ))!;
+    await tester.runAsync(
+      () => SqliteProductRepository(db).create(
+        ProductDraft(
+          categoryId: category.id,
+          name: 'Kape',
+          photoPath: '/missing.png',
+          purchasePriceCentavos: 100,
+          sellingPriceCentavos: 200,
+          startingQuantity: 5,
+          minimumStockLevel: 1,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InventoryScreen(
+          repository: InventoryRepository(db, actorRole: 'STAFF'),
+          access: FeatureAccessService(
+            db,
+            planController: AppPlanController(_TestPlanSource()),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    final actions = find.byTooltip('Inventory actions for Kape');
+    await tester.ensureVisible(actions);
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    expect(find.text('Stock In'), findsWidgets);
+    expect(find.text('Movement History'), findsOneWidget);
+    expect(find.text('Correct Stock'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

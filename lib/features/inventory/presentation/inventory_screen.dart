@@ -1392,7 +1392,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     },
     itemBuilder: (_) => [
       if (owned) const PopupMenuItem(value: 'stock', child: Text('Stock In')),
-      if (owned)
+      if (owned && widget.repository.canAdjustStock)
         const PopupMenuItem(value: 'adjust', child: Text('Correct Stock')),
       const PopupMenuItem(value: 'history', child: Text('Movement History')),
     ],

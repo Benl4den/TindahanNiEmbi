@@ -227,7 +227,7 @@ void main() {
         ),
       ),
     );
-    await InventoryRepository(db).adjust(
+    await InventoryRepository(db, actorRole: 'OWNER').adjust(
       productId: product.id,
       quantityChange: -6000,
       reason: 'Test 44 kg remaining',

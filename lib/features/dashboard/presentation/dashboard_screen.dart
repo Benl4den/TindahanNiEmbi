@@ -15,6 +15,7 @@ import '../../../widgets/store_overview_panel.dart';
 import '../../../widgets/brand_logo.dart';
 import '../../help/help_button.dart';
 import '../../help/help_content.dart';
+import '../../shell/app_destination.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -25,7 +26,7 @@ class DashboardScreen extends StatefulWidget {
     this.walletServicesAllowed = true,
   });
   final Database database;
-  final void Function(int) navigate;
+  final void Function(AppDestination) navigate;
   final int refreshRevision;
   final bool walletServicesAllowed;
   @override
@@ -465,7 +466,7 @@ class _DashboardState extends State<DashboardScreen> {
                         StoreOverviewPanel(
                           title: 'Top-Selling Products',
                           icon: Icons.bar_chart,
-                          action: viewAll(9),
+                          action: viewAll(AppDestination.reports),
                           children: [
                             if (x.topProducts.isEmpty)
                               const Text(
@@ -500,7 +501,7 @@ class _DashboardState extends State<DashboardScreen> {
                         StoreOverviewPanel(
                           title: 'Recent Activity',
                           icon: Icons.history,
-                          action: viewAll(11),
+                          action: viewAll(AppDestination.transactionHistory),
                           children: [
                             if (activity.isEmpty)
                               const Text(
@@ -938,28 +939,28 @@ class _DashboardState extends State<DashboardScreen> {
                           'Start Sale',
                           Icons.shopping_cart_checkout,
                           colors.primary,
-                          () => widget.navigate(0),
+                          () => widget.navigate(AppDestination.sales),
                         ),
                         actionCard(
                           'expense',
                           'Add Expense',
                           Icons.receipt_long_outlined,
                           const Color(0xFFB341A4),
-                          () => widget.navigate(7),
+                          () => widget.navigate(AppDestination.expenses),
                         ),
                         actionCard(
                           'consignment',
                           'Receive Consignment',
                           Icons.inventory_2_outlined,
                           const Color(0xFF6550BB),
-                          () => widget.navigate(2),
+                          () => widget.navigate(AppDestination.consignment),
                         ),
                         actionCard(
                           'reports',
                           'View Reports',
                           Icons.assessment_outlined,
                           const Color(0xFF1785C7),
-                          () => widget.navigate(9),
+                          () => widget.navigate(AppDestination.reports),
                         ),
                       ];
                       return GridView.count(
@@ -986,7 +987,8 @@ class _DashboardState extends State<DashboardScreen> {
                       ),
                       IconButton(
                         tooltip: 'Open Inventory',
-                        onPressed: () => widget.navigate(3),
+                        onPressed: () =>
+                            widget.navigate(AppDestination.inventory),
                         icon: const Icon(Icons.chevron_right),
                       ),
                     ],
@@ -1063,28 +1065,28 @@ class _DashboardState extends State<DashboardScreen> {
             children: [
               action(
                 FilledButton.icon(
-                  onPressed: () => widget.navigate(0),
+                  onPressed: () => widget.navigate(AppDestination.sales),
                   icon: const Icon(Icons.point_of_sale),
                   label: const Text('Start Sale'),
                 ),
               ),
               action(
                 OutlinedButton.icon(
-                  onPressed: () => widget.navigate(7),
+                  onPressed: () => widget.navigate(AppDestination.expenses),
                   icon: const Icon(Icons.add),
                   label: const Text('Add Expense'),
                 ),
               ),
               action(
                 OutlinedButton.icon(
-                  onPressed: () => widget.navigate(2),
+                  onPressed: () => widget.navigate(AppDestination.consignment),
                   icon: const Icon(Icons.handshake_outlined),
                   label: const Text('Receive Consignment'),
                 ),
               ),
               action(
                 OutlinedButton.icon(
-                  onPressed: () => widget.navigate(9),
+                  onPressed: () => widget.navigate(AppDestination.reports),
                   icon: const Icon(Icons.assessment_outlined),
                   label: const Text('View Reports'),
                 ),
@@ -1106,7 +1108,7 @@ class _DashboardState extends State<DashboardScreen> {
           ? Icons.check_circle_outline
           : Icons.warning_amber_outlined,
       accent: alerts.isEmpty ? Theme.of(context).colorScheme.primary : warning,
-      action: viewAll(4),
+      action: viewAll(AppDestination.restock),
       children: alerts.isEmpty
           ? [
               ListTile(
@@ -1137,13 +1139,13 @@ class _DashboardState extends State<DashboardScreen> {
                   '${out ? 'Out of Stock' : 'Low Stock'} • ${quantity(row)} remaining',
                   style: TextStyle(color: out ? accent('expense') : warning),
                 ),
-                onTap: () => widget.navigate(4),
+                onTap: () => widget.navigate(AppDestination.restock),
               );
             }).toList(),
     );
   }
 
-  Widget viewAll(int target) => TextButton(
+  Widget viewAll(AppDestination target) => TextButton(
     onPressed: () => widget.navigate(target),
     child: const Text('View All'),
   );

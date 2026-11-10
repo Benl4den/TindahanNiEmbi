@@ -5,6 +5,7 @@ import 'package:tindahan_ni_embi/core/formatters/number_format.dart';
 import 'package:tindahan_ni_embi/core/theme/app_theme.dart';
 import 'package:tindahan_ni_embi/database/app_database.dart';
 import 'package:tindahan_ni_embi/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:tindahan_ni_embi/features/shell/app_destination.dart';
 import 'package:tindahan_ni_embi/models/product.dart';
 import 'package:tindahan_ni_embi/models/utang_draft.dart';
 import 'package:tindahan_ni_embi/repositories/cash_sale_repository.dart';
@@ -113,7 +114,7 @@ void main() {
     final stock = await tester.runAsync(
       () => InventoryRepository(db).ownedHealth(),
     );
-    var destination = -1;
+    AppDestination? destination;
     for (final theme in [AppTheme.light, AppTheme.dark]) {
       for (final width in [280.0, 320.0, 360.0, 390.0]) {
         tester.view.physicalSize = Size(width, 760);
@@ -168,7 +169,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('phone-quick-sale')));
-        expect(destination, 0);
+        expect(destination, AppDestination.sales);
         expect(
           tester.takeException(),
           isNull,

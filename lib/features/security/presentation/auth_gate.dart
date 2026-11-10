@@ -93,13 +93,13 @@ class _State extends State<AuthGate> {
         pin.text,
         staffId: selectedStaff?.id,
       );
+      final remaining = found == null ? await widget.auth.remainingAttempts : 5;
       if (!mounted) return;
       final startup = await configured;
       if (!mounted) return;
       setState(() {
         if (found == null) {
-          failedAttempts++;
-          final remaining = (5 - failedAttempts).clamp(0, 5);
+          failedAttempts = 5 - remaining;
           error = remaining > 0
               ? 'Incorrect PIN • $remaining attempt${remaining == 1 ? '' : 's'} remaining'
               : 'Too many attempts. Please wait before trying again.';

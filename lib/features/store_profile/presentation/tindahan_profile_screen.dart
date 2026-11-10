@@ -8,6 +8,59 @@ import '../../../services/store_photo_service.dart';
 
 const _storefrontAsset = 'assets/branding/tindasari_storefront_clean.png';
 
+enum _StorePhotoSource { camera, gallery }
+
+Future<String?> _pickStorePhoto(
+  BuildContext context,
+  StorePhotoService photos,
+) async {
+  final source = await showModalBottomSheet<_StorePhotoSource>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      top: false,
+      child: Center(
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Store photo',
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Take photo'),
+                subtitle: const Text('Use this device’s camera'),
+                onTap: () =>
+                    Navigator.pop(sheetContext, _StorePhotoSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                subtitle: const Text('Use a photo already on this device'),
+                onTap: () =>
+                    Navigator.pop(sheetContext, _StorePhotoSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  if (source == null) return null;
+  return source == _StorePhotoSource.camera
+      ? await photos.capture()
+      : await photos.chooseFromGallery();
+}
+
 class TindahanProfileScreen extends StatefulWidget {
   const TindahanProfileScreen({super.key, required this.settings, this.photos});
 
@@ -20,6 +73,9 @@ class TindahanProfileScreen extends StatefulWidget {
 
 class _TindahanProfileScreenState extends State<TindahanProfileScreen> {
   late Future<StoreProfile> _profile;
+  late final StorePhotoService _photos =
+      widget.photos ?? LocalStorePhotoService();
+  bool _changingPhoto = false;
 
   @override
   void initState() {
@@ -33,7 +89,7 @@ class _TindahanProfileScreenState extends State<TindahanProfileScreen> {
         builder: (_) => EditTindahanProfileScreen(
           settings: widget.settings,
           initial: profile,
-          photos: widget.photos,
+          photos: _photos,
         ),
       ),
     );
@@ -41,6 +97,66 @@ class _TindahanProfileScreenState extends State<TindahanProfileScreen> {
       setState(() {
         _profile = Future.value(saved);
       });
+    }
+  }
+
+  Future<void> _deletePhotoQuietly(String photoPath) async {
+    try {
+      await _photos.delete(photoPath);
+    } catch (_) {
+      // A saved profile remains usable if photo cleanup fails.
+    }
+  }
+
+  Future<void> _changePhoto(StoreProfile profile) async {
+    if (_changingPhoto) return;
+    String? selected;
+    bool savedPhoto = false;
+    try {
+      selected = await _pickStorePhoto(context, _photos);
+      if (selected == null) return;
+      if (!mounted) {
+        if (selected != profile.storePhotoPath) {
+          await _deletePhotoQuietly(selected);
+        }
+        return;
+      }
+      setState(() => _changingPhoto = true);
+      final saved = await widget.settings.saveStoreProfile(
+        StoreProfile(
+          storeName: profile.storeName,
+          ownerName: profile.ownerName,
+          contactNumber: profile.contactNumber,
+          address: profile.address,
+          storePhotoPath: selected,
+        ),
+      );
+      savedPhoto = true;
+      AppRefreshController.instance.dataChanged();
+      if (mounted) {
+        setState(() {
+          _profile = Future.value(saved);
+        });
+      }
+      if (profile.storePhotoPath.isNotEmpty &&
+          profile.storePhotoPath != saved.storePhotoPath) {
+        await _deletePhotoQuietly(profile.storePhotoPath);
+      }
+    } catch (_) {
+      if (!savedPhoto &&
+          selected != null &&
+          selected != profile.storePhotoPath) {
+        await _deletePhotoQuietly(selected);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update store photo. Try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _changingPhoto = false);
     }
   }
 
@@ -73,7 +189,22 @@ class _TindahanProfileScreenState extends State<TindahanProfileScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 22, 16, 28),
                 children: [
-                  Center(child: _StorePhoto(path: profile.storePhotoPath)),
+                  Center(
+                    child: Tooltip(
+                      message: 'Change store photo',
+                      child: InkWell(
+                        key: const ValueKey('profile-photo-action'),
+                        onTap: _changingPhoto
+                            ? null
+                            : () => _changePhoto(profile),
+                        borderRadius: BorderRadius.circular(90),
+                        child: _StorePhoto(
+                          path: profile.storePhotoPath,
+                          busy: _changingPhoto,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 15),
                   Text(
                     profile.storeName,
@@ -125,7 +256,7 @@ class _TindahanProfileScreenState extends State<TindahanProfileScreen> {
                   ),
                   const SizedBox(height: 22),
                   FilledButton.icon(
-                    onPressed: () => _edit(profile),
+                    onPressed: _changingPhoto ? null : () => _edit(profile),
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit Tindahan Profile'),
                     style: FilledButton.styleFrom(
@@ -241,7 +372,7 @@ class _EditTindahanProfileScreenState extends State<EditTindahanProfileScreen> {
 
   Future<void> _choosePhoto() async {
     try {
-      final selected = await _photos.chooseFromGallery();
+      final selected = await _pickStorePhoto(context, _photos);
       if (selected == null) return;
       if (!mounted) {
         await _photos.delete(selected);
@@ -451,9 +582,10 @@ class _EditTindahanProfileScreenState extends State<EditTindahanProfileScreen> {
 }
 
 class _StorePhoto extends StatelessWidget {
-  const _StorePhoto({required this.path});
+  const _StorePhoto({required this.path, this.busy = false});
 
   final String path;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -493,11 +625,19 @@ class _StorePhoto extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: colors.surface, width: 2),
               ),
-              child: Icon(
-                Icons.camera_alt_outlined,
-                size: 21,
-                color: colors.onPrimary,
-              ),
+              child: busy
+                  ? Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colors.onPrimary,
+                      ),
+                    )
+                  : Icon(
+                      Icons.camera_alt_outlined,
+                      size: 21,
+                      color: colors.onPrimary,
+                    ),
             ),
           ),
         ],
